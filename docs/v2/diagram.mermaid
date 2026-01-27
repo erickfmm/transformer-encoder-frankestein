@@ -1,0 +1,115 @@
+graph TD
+    %% --- ESTILOS VISUALES ---
+    classDef bitnet fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px;
+    classDef ode fill:#E8EAF6,stroke:#3F51B5,stroke-width:2px;
+    classDef retnet fill:#E0F2F1,stroke:#009688,stroke-width:2px;
+    classDef moe fill:#FCE4EC,stroke:#C2185B,stroke-width:2px;
+    classDef core fill:#FAFAFA,stroke:#212121,stroke-width:2px;
+    classDef norm fill:#E1BEE7,stroke:#7B1FA2,stroke-dasharray: 5 5;
+
+    %% --- BLOQUE PRINCIPAL: TITAN-BERT-ULTRA ---
+    subgraph ARCHITECTURE ["🤖 TITAN-BERT-ULTRA (Frankenstein Model)"]
+        direction TB
+        
+        Input[("Tensor de Entrada<br/>(Batch, Seq_Len)")] --> Emb["Embedding Layer<br/>+ HOPE Embeddings"]
+        Emb --> Drop1["Dropout (0.1)"]
+        
+        %% --- MECANISMO DE BUCLE RECURSIVO ---
+        subgraph RECURSIVE_LOOP ["🔄 Recursive Loop Mechanism"]
+            direction TB
+            LoopStart{{"Loop x2<br/>(Profundidad Lógica = 24)"}}
+            
+            subgraph PHYSICAL_LAYERS ["Physical Layer Stack (12 Capas)"]
+                direction TB
+                note1["> Patrón Cíclico de Capas"]
+                
+                L_RetNet["Capa Tipo 1:<br/><b>RetNet Block</b>"]
+                L_ODE["Capa Tipo 2:<br/><b>Neural ODE Block</b>"]
+                L_Mamba["Capa Tipo 3:<br/><b>Titan Memory / Mamba</b>"]
+                L_Attn["Capa Tipo 4:<br/><b>Titan Attention</b>"]
+                
+                L_RetNet -.-> L_ODE -.-> L_Mamba -.-> L_Attn
+            end
+            
+            LoopStart --> L_RetNet
+            L_Attn -- "Siguiente Iteración" --> LoopStart
+        end
+        
+        Drop1 --> LoopStart
+        L_Attn -- "Fin del Bucle" --> FinalNorm["Dynamic Tanh Norm"]
+        FinalNorm --> Head["BitLinear Head<br/>(Hidden -> Vocab)"]
+        Head --> Logits[("Output Logits")]
+    end
+
+    %% --- DETALLE: HYBRID LAYER INTERNALS ---
+    subgraph LAYER_DETAIL ["🧠 Detalle de Capa Híbrida (HybridLayer)"]
+        direction LR
+        L_In(Input x) --> Norm1("Norm 1<br/>(Dynamic Tanh)")
+        
+        subgraph MIXER ["🎛️ Mixer Selector (Polimórfico)"]
+            direction TB
+            Opt1["<b>RetNet</b><br/>Multi-Scale Retention"]
+            Opt2["<b>ODE Attention</b><br/>Continuous Depth (RK4)"]
+            Opt3["<b>Mamba</b><br/>SSM Placeholder"]
+            Opt4["<b>Attention</b><br/>Standard"]
+        end
+        
+        Norm1 --> Mixer
+        Mixer --> Res1((+))
+        L_In --> Res1
+        
+        Res1 --> Norm2("Norm 2<br/>(Dynamic Tanh)")
+        
+        subgraph MOE ["⚡ Sparse MoE FFN (BitNet)"]
+            Router["Router (Gating)<br/>Top-2 Experts"]
+            
+            subgraph EXPERTS ["8 Experts (BitLinear MLP)"]
+                E1[Expert 1]
+                E2[Expert 2]
+                Ed[...]
+                E8[Expert 8]
+            end
+            
+            Norm2 --> Router
+            Router -- "Routing Weights" --> EXPERTS
+            EXPERTS -- "Weighted Sum" --> MoE_Out
+        end
+        
+        MoE_Out --> Res2((+))
+        Res1 --> Res2
+        Res2 --> L_Out(Output)
+    end
+
+    %% --- DETALLE: BITLINEAR Y ODE ---
+    subgraph MICRO_COMPONENTS ["🔬 Micro-Componentes Críticos"]
+        
+        subgraph BITNET ["⚖️ BitLinear (1.58 Bits)"]
+            BL_In(Input) --> LN_Pre[LayerNorm]
+            LN_Pre --> Q_W["Weight Quant<br/>{-1, 0, 1}"]
+            LN_Pre --> Q_A["Activation Quant<br/>8-bit"]
+            Q_W & Q_A --> MUL["Linear Op (Efficient)"]
+            MUL --> BL_Out(Output)
+        end
+        
+        subgraph ODE_RK4 ["∫ ODE Solver (RK4 Integrator)"]
+            Z0(z_t) --> K1["k1 = f(t, z)"]
+            K1 --> K2["k2 = f(t+dt/2, z + k1/2)"]
+            K2 --> K3["k3 = f(t+dt/2, z + k2/2)"]
+            K3 --> K4["k4 = f(t+dt, z + k3)"]
+            K4 --> Z_Next["z_{t+1} = z + (k1+2k2+2k3+k4)/6"]
+            
+            note2["> f(z,t) es una<br/>BitLinear Attention"]
+        end
+    end
+
+    %% --- CONEXIONES ENTRE SUBGRAFOS PARA CONTEXTO ---
+    L_RetNet -.-> LAYER_DETAIL
+    Opt2 -.-> ODE_RK4
+    E1 -.-> BITNET
+
+    %% --- CLASES ---
+    class Head,E1,E2,E8,Router,BITNET bitnet;
+    class L_ODE,Opt2,ODE_RK4 ode;
+    class L_RetNet,Opt1 retnet;
+    class MOE,EXPERTS moe;
+    class Norm1,Norm2,FinalNorm norm;

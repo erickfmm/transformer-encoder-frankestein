@@ -1,0 +1,107 @@
+graph TB
+    subgraph "Input Layer"
+        A[Input IDs] --> B[Word Embeddings<br/>Linear: vocab_size→1024]
+        A --> C[Position Embeddings<br/>Linear: 512→1024]
+        B --> D[Combined Embeddings]
+        C --> D
+    end
+    
+    subgraph "Transformer Layer x24"
+        D --> E[Dynamic Tanh Normalization]
+        
+        subgraph "Mixed Attention Block"
+            E --> F{Attention Type<br/>layer_idx % 3}
+            
+            F -->|0: GQA| G1[Q_proj: Linear<br/>1024→1024]
+            F -->|0: GQA| G2[KV_proj: Linear<br/>1024→512]
+            
+            F -->|1: Latent| H1[Q_proj: Linear<br/>1024→1024]
+            F -->|1: Latent| H2[K_proj: Linear<br/>1024→1024]
+            F -->|1: Latent| H3[V_proj: Linear<br/>1024→1024]
+            
+            F -->|2: Normal| I1[Q_proj: Linear<br/>1024→1024]
+            F -->|2: Normal| I2[K_proj: Linear<br/>1024→1024]
+            F -->|2: Normal| I3[V_proj: Linear<br/>1024→1024]
+            
+            G1 --> J[RoPE]
+            G2 --> J
+            H1 --> J
+            H2 --> J
+            H3 --> J
+            I1 --> J
+            I2 --> J
+            I3 --> J
+            
+            J --> K[Attention Scores<br/>Softmax]
+            K --> L[O_proj: Linear<br/>1024→1024]
+        end
+        
+        L --> M[Residual + Dropout]
+        M --> N[Post-Attention Norm<br/>Dynamic Tanh]
+        
+        subgraph "Sparse MoE Block"
+            N --> O[Router: Linear<br/>1024→32<br/>no bias]
+            O --> P[Top-K Selection<br/>k=4 experts]
+            
+            subgraph "Expert Processing"
+                P --> Q{Expert Type<br/>expert_idx % 4}
+                
+                Q -->|0: Linear Attn| R1[QKV: Linear<br/>1024→3072]
+                R1 --> R2[Linear Attention]
+                R2 --> R3[SwiGLU<br/>W: 1024→2048<br/>V: 1024→1024]
+                R3 --> R4[Projection: Linear<br/>1024→1024]
+                
+                Q -->|1-3: Std Attn| S1[QKV: Linear<br/>1024→3072]
+                S1 --> S2[Self-Attention<br/>4 heads]
+                S2 --> S3[SwiGLU<br/>W: 1024→2048<br/>V: 1024→1024]
+                S3 --> S4[Projection: Linear<br/>1024→1024]
+            end
+            
+            R4 --> T[Weighted Sum<br/>Top-K outputs]
+            S4 --> T
+        end
+        
+        T --> U[Residual + Dropout]
+        U --> V[Post-MoE Norm<br/>Dynamic Tanh]
+        V --> W[To Next Layer]
+    end
+    
+    subgraph "Output Heads"
+        W --> X[Final Hidden States<br/>batch×512×1024]
+        
+        X --> Y1[Pooler Path]
+        Y1 --> Y2[Linear: 1024→1024]
+        Y2 --> Y3[Tanh Activation]
+        Y3 --> Y4[Pooled Output<br/>CLS embedding]
+        
+        X --> Z1[MLM Head Path]
+        Z1 --> Z2[Linear: 1024→1024]
+        Z2 --> Z3[GELU Activation]
+        Z3 --> Z4[LayerNorm]
+        Z4 --> Z5[Linear: 1024→50000]
+        Z5 --> Z6[Logits]
+    end
+    
+    subgraph "Loss & Optimization"
+        Z6 --> AA[CrossEntropyLoss]
+        AA --> AB[AdamW<br/>lr=2e-4, wd=0.01]
+        AB --> AC[CosineAnnealingWarmRestarts<br/>T_0=1000]
+    end
+    
+    style G1 fill:#e1f5ff
+    style G2 fill:#e1f5ff
+    style H1 fill:#fff4e1
+    style H2 fill:#fff4e1
+    style H3 fill:#fff4e1
+    style I1 fill:#ffe1f5
+    style I2 fill:#ffe1f5
+    style I3 fill:#ffe1f5
+    style L fill:#e1ffe1
+    style O fill:#ffe1e1
+    style R1 fill:#f5e1ff
+    style R4 fill:#f5e1ff
+    style S1 fill:#e1f5ff
+    style S4 fill:#e1f5ff
+    style Y2 fill:#fff4e1
+    style Z2 fill:#ffe1f5
+    style Z5 fill:#ffe1f5
