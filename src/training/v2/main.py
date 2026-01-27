@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""
+TITAN-BERT-ULTRA Training Pipeline
+Spanish Transformer with:
+- BitNet b1.58 (Ternary Weights)
+- Neural ODE Attention
+- RetNet Multi-Scale Retention
+- Hybrid Architecture
+Dataset: erickfmm/red_pajama_es_hq_35
+Vocabulary: 50,000 tokens
+Storage limit: <300GB
+"""
+
+import os
+import logging
+import torch
+from torch.utils.data import DataLoader
+
+from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+from training.v1.streaming_mlm_dataset import StreamingMLMDataset
+from training.v2.trainer import TitanTrainer
+from model.v2.titan_bert_ultra import TitanBertUltra, UltraConfig
+
+# ==================== MAIN EXECUTION ====================
+def main():
+    """Main training pipeline for TITAN-BERT-ULTRA"""
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+    
+    logging.info("⚡ Starting TITAN-BERT-ULTRA training ⚡")
+    logging.info(f"Current directory: {os.getcwd()}")
+    
+    try:
+        import psutil
+        logging.info(f"Available storage: {psutil.disk_usage('.').free/1024**3:.2f}GB")
+    except ImportError:
+        logging.warning("psutil not installed, storage monitoring limited")
+    
+    # Step 1: Train/Load tokenizer
+    logging.info("\n" + "="*60)
+    logging.info("Step 1: Training/Loading SPM tokenizer (50k vocab)")
+    logging.info("="*60)
+    
+    tokenizer = SpanishSPMTokenizer(vocab_size=50000)
+    
+    # Check if tokenizer already exists
+    model_path = "es_redpajama_50k.model"
+    if os.path.exists(model_path):
+        logging.info("Loading existing tokenizer...")
+        import sentencepiece as spm
+        tokenizer.sp_model = spm.SentencePieceProcessor()
+        tokenizer.sp_model.load(model_path)
+        
+        # Build vocab
+        for i in range(tokenizer.sp_model.GetPieceSize()):
+            token = tokenizer.sp_model.IdToPiece(i)
+            tokenizer.vocab[token] = i
+            tokenizer.inverse_vocab[i] = token
+    else:
+        logging.info("Training new tokenizer...")
+        tokenizer.train(model_prefix="es_redpajama_50k")
+    
+    # Step 2: Create TITAN model
+    logging.info("\n" + "="*60)
+    logging.info("Step 2: Creating TITAN-BERT-ULTRA model")
+    logging.info("="*60)
+    
+    # Configure for available hardware (P40 24GB target)
+    config = UltraConfig(
+        vocab_size=50000,
+        hidden_size=1024,           # Reduced from 2048 for stability
+        num_layers=12,              # Physical layers
+        num_loops=2,                # Logical depth = 24
+        num_heads=16,
+        retention_heads=8,
+        num_experts=4,              # Reduced MoE experts
+        top_k_experts=2,
+        dropout=0.1,
+        ode_solver="rk4",
+        ode_steps=2,                # Low steps for speed
+        use_bitnet=True,            # Essential for memory efficiency
+        norm_type="dynamic_tanh"
+    )
+    
+    logging.info(f"Model Config:")
+    logging.info(f"  - Hidden Size: {config.hidden_size}")
+    logging.info(f"  - Layers: {config.num_layers} x {config.num_loops} = {config.num_layers * config.num_loops} logical")
+    logging.info(f"  - Layer Pattern: {config.layer_pattern}")
+    logging.info(f"  - BitNet: {config.use_bitnet}")
+    logging.info(f"  - ODE Solver: {config.ode_solver} ({config.ode_steps} steps)")
+    
+    model = TitanBertUltra(config)
+    
+    # Count parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logging.info(f"Total Parameters: {total_params/1e6:.2f}M")
+    logging.info(f"Trainable Parameters: {trainable_params/1e6:.2f}M")
+    
+    # Step 3: Prepare dataset
+    logging.info("\n" + "="*60)
+    logging.info("Step 3: Preparing MLM dataset")
+    logging.info("="*60)
+    
+    dataset = StreamingMLMDataset(
+        tokenizer=tokenizer,
+        max_length=512,             # Standard sequence length
+        mlm_probability=0.15,
+        max_samples=200000          # Increased for v2 training
+    )
+    
+    # Smaller batch size due to model complexity
+    batch_size = 2 if torch.cuda.is_available() else 1
+    
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=2,
+        pin_memory=torch.cuda.is_available(),
+        drop_last=True
+    )
+    
+    logging.info(f"Dataset size: {len(dataset)} examples")
+    logging.info(f"Batch size: {batch_size}")
+    logging.info(f"Steps per epoch: {len(dataloader)}")
+    
+    # Step 4: Train
+    logging.info("\n" + "="*60)
+    logging.info("Step 4: Training TITAN-BERT-ULTRA")
+    logging.info("="*60)
+    
+    trainer = TitanTrainer(model, config)
+    
+    num_epochs = 5  # Increased for better convergence
+    
+    for epoch in range(num_epochs):
+        logging.info(f"\n🚀 Starting Epoch {epoch+1}/{num_epochs}")
+        
+        try:
+            avg_loss = trainer.train_epoch(dataloader, epoch)
+            logging.info(f"✅ Epoch {epoch+1} completed - Average Loss: {avg_loss:.4f}")
+            
+            # Save checkpoint every epoch
+            checkpoint_path = trainer.save_checkpoint(epoch)
+            logging.info(f"💾 Checkpoint saved: {checkpoint_path}")
+            
+            # Memory and storage report
+            if torch.cuda.is_available():
+                memory_allocated = torch.cuda.memory_allocated() / 1024**3
+                memory_cached = torch.cuda.memory_reserved() / 1024**3
+                logging.info(f"GPU Memory - Allocated: {memory_allocated:.2f}GB, Cached: {memory_cached:.2f}GB")
+            
+            storage_used = trainer.storage_manager.used_bytes / 1024**3
+            logging.info(f"Storage used: {storage_used:.2f}GB / 300GB")
+            
+            # Early stopping on memory issues
+            if storage_used > 250:
+                logging.warning("Approaching storage limit, stopping training")
+                break
+                
+        except Exception as e:
+            logging.error(f"Error in epoch {epoch+1}: {e}")
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            # Try to save emergency checkpoint
+            try:
+                emergency_path = trainer.save_checkpoint(epoch, suffix="_emergency")
+                logging.info(f"Emergency checkpoint saved: {emergency_path}")
+            except:
+                logging.error("Failed to save emergency checkpoint")
+            
+            raise
+    
+    logging.info("\n" + "="*60)
+    logging.info("🎉 TITAN-BERT-ULTRA training completed successfully!")
+    logging.info("="*60)
+    
+    # Final model evaluation
+    model.eval()
+    with torch.no_grad():
+        # Test forward pass
+        test_input = torch.randint(0, 50000, (1, 512))
+        if torch.cuda.is_available():
+            test_input = test_input.cuda()
+        
+        logging.info("🔍 Testing final model...")
+        test_output = model(test_input)
+        logging.info(f"✅ Model output shape: {test_output.shape}")
+        logging.info(f"Output range: [{test_output.min().item():.3f}, {test_output.max().item():.3f}]")
+    
+    # Cleanup
+    logging.info("\n🧹 Cleaning up temporary files...")
+    tokenizer.storage_manager.cleanup()
+    dataset.storage_manager.cleanup()
+    trainer.storage_manager.cleanup()
+    
+    logging.info("✨ Training pipeline completed!")
+
+if __name__ == "__main__":
+    main()
