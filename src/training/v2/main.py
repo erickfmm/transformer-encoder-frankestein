@@ -9,6 +9,13 @@ Spanish Transformer with:
 Dataset: erickfmm/red_pajama_es_hq_35
 Vocabulary: 50,000 tokens
 Storage limit: <300GB
+
+STABLE CONFIGURATION NOTES (based on literature research):
+- Layer pattern prioritizes RetNet for stability (good with recurrent patterns)
+- Titan attention anchors the pattern (proven stable)
+- ODE layers need lower learning rates (continuous dynamics)
+- Mamba layers work best interspersed (not consecutive)
+- 6-layer pattern provides balance: 2x RetNet, 2x Titan, 1x ODE, 1x Mamba
 """
 
 import os
@@ -18,7 +25,7 @@ from torch.utils.data import DataLoader
 
 from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 from training.v1.streaming_mlm_dataset import StreamingMLMDataset
-from training.v2.trainer import TitanTrainer
+from training.v2.trainer import TitanTrainer, TrainingConfig
 from model.v2.titan_bert_ultra import TitanBertUltra, UltraConfig
 
 # ==================== MAIN EXECUTION ====================
@@ -68,11 +75,42 @@ def main():
     logging.info("Step 2: Creating TITAN-BERT-ULTRA model")
     logging.info("="*60)
     
+    # =========================================================================
+    # STABLE LAYER PATTERN CONFIGURATION
+    # =========================================================================
+    # Based on research from hybrid architectures (TransMamba, SST, etc.):
+    # 
+    # Key insights for stability:
+    # 1. RetNet: Most stable for long-range dependencies, use as anchors
+    # 2. Titan Attention: Standard attention, proven stable, good for local patterns
+    # 3. ODE: Continuous dynamics can be unstable, use sparingly, lower LR
+    # 4. Mamba: Good efficiency but can struggle with certain patterns
+    #
+    # STABLE 6-LAYER PATTERN (repeated to fill num_layers):
+    # [retnet -> titan_attn -> retnet -> mamba -> titan_attn -> ode]
+    #
+    # Rationale:
+    # - Start with RetNet for stable gradient flow initialization
+    # - Alternate RetNet/Titan for stability anchoring
+    # - Place ODE at the end where gradients are more stable
+    # - Mamba in middle position, sandwiched by stable layers
+    # - 2x RetNet, 2x Titan, 1x Mamba, 1x ODE per cycle
+    # =========================================================================
+    
+    stable_layer_pattern = [
+        "retnet",       # 1. Stable anchor, good gradient flow
+        "titan_attn",   # 2. Proven attention mechanism
+        "retnet",       # 3. Another stable anchor
+        "mamba",        # 4. Efficient SSM, sandwiched by stable layers
+        "titan_attn",   # 5. Attention for local patterns
+        "ode"           # 6. ODE at end, more stable gradients from above
+    ]
+    
     # Configure for available hardware (P40 24GB target)
     config = UltraConfig(
         vocab_size=50000,
         hidden_size=1024,           # Reduced from 2048 for stability
-        num_layers=12,              # Physical layers
+        num_layers=12,              # Physical layers (uses 2 cycles of 6-pattern)
         num_loops=2,                # Logical depth = 24
         num_heads=16,
         retention_heads=8,
@@ -82,7 +120,8 @@ def main():
         ode_solver="rk4",
         ode_steps=2,                # Low steps for speed
         use_bitnet=True,            # Essential for memory efficiency
-        norm_type="dynamic_tanh"
+        norm_type="dynamic_tanh",
+        layer_pattern=stable_layer_pattern  # Use stable pattern
     )
     
     logging.info(f"Model Config:")
@@ -133,65 +172,95 @@ def main():
     logging.info("Step 4: Training TITAN-BERT-ULTRA")
     logging.info("="*60)
     
-    trainer = TitanTrainer(model, config)
+    # Configure training behavior
+    training_config = TrainingConfig(
+        csv_log_path="training_metrics.csv",      # CSV file for all metrics
+        checkpoint_every_n_steps=500,             # Rolling checkpoint frequency
+        max_rolling_checkpoints=3,                # Keep only 3 rolling checkpoints
+        num_best_checkpoints=2,                   # Keep top 2 best models
+        nan_check_interval=10,                    # Check NaN every 10 steps
+        log_gradient_stats=True,
+        gradient_log_interval=100
+    )
+    
+    trainer = TitanTrainer(model, config, training_config=training_config)
     
     num_epochs = 5  # Increased for better convergence
+    nan_detected = False
     
-    for epoch in range(num_epochs):
-        logging.info(f"\n🚀 Starting Epoch {epoch+1}/{num_epochs}")
-        
-        try:
-            avg_loss = trainer.train_epoch(dataloader, epoch)
-            logging.info(f"✅ Epoch {epoch+1} completed - Average Loss: {avg_loss:.4f}")
+    try:
+        for epoch in range(num_epochs):
+            logging.info(f"\n🚀 Starting Epoch {epoch+1}/{num_epochs}")
             
-            # Save checkpoint every epoch
-            checkpoint_path = trainer.save_checkpoint(epoch)
-            logging.info(f"💾 Checkpoint saved: {checkpoint_path}")
-            
-            # Memory and storage report
-            if torch.cuda.is_available():
-                memory_allocated = torch.cuda.memory_allocated() / 1024**3
-                memory_cached = torch.cuda.memory_reserved() / 1024**3
-                logging.info(f"GPU Memory - Allocated: {memory_allocated:.2f}GB, Cached: {memory_cached:.2f}GB")
-            
-            storage_used = trainer.storage_manager.used_bytes / 1024**3
-            logging.info(f"Storage used: {storage_used:.2f}GB / 300GB")
-            
-            # Early stopping on memory issues
-            if storage_used > 250:
-                logging.warning("Approaching storage limit, stopping training")
-                break
-                
-        except Exception as e:
-            logging.error(f"Error in epoch {epoch+1}: {e}")
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            
-            # Try to save emergency checkpoint
             try:
-                emergency_path = trainer.save_checkpoint(epoch, suffix="_emergency")
-                logging.info(f"Emergency checkpoint saved: {emergency_path}")
-            except:
-                logging.error("Failed to save emergency checkpoint")
-            
-            raise
+                avg_loss, should_stop = trainer.train_epoch(dataloader, epoch)
+                
+                # Check if NaN was detected
+                if should_stop:
+                    logging.error(f"❌ Training stopped due to NaN at epoch {epoch+1}")
+                    nan_detected = True
+                    break
+                
+                logging.info(f"✅ Epoch {epoch+1} completed - Average Loss: {avg_loss:.4f}")
+                
+                # Save epoch checkpoint (in addition to rolling checkpoints)
+                checkpoint_path = trainer.save_checkpoint(epoch, suffix="_epoch_end")
+                logging.info(f"💾 Epoch checkpoint saved: {checkpoint_path}")
+                
+                # Memory and storage report
+                if torch.cuda.is_available():
+                    memory_allocated = torch.cuda.memory_allocated() / 1024**3
+                    memory_cached = torch.cuda.memory_reserved() / 1024**3
+                    logging.info(f"GPU Memory - Allocated: {memory_allocated:.2f}GB, Cached: {memory_cached:.2f}GB")
+                
+                storage_used = trainer.storage_manager.used_bytes / 1024**3
+                logging.info(f"Storage used: {storage_used:.2f}GB / 300GB")
+                
+                # Early stopping on memory issues
+                if storage_used > 250:
+                    logging.warning("Approaching storage limit, stopping training")
+                    break
+                    
+            except Exception as e:
+                logging.error(f"Error in epoch {epoch+1}: {e}")
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                
+                # Try to save emergency checkpoint
+                try:
+                    emergency_path = trainer.save_checkpoint(epoch, suffix="_emergency")
+                    logging.info(f"Emergency checkpoint saved: {emergency_path}")
+                except:
+                    logging.error("Failed to save emergency checkpoint")
+                
+                raise
+    finally:
+        # Always close the CSV logger
+        trainer.close()
     
-    logging.info("\n" + "="*60)
-    logging.info("🎉 TITAN-BERT-ULTRA training completed successfully!")
-    logging.info("="*60)
-    
-    # Final model evaluation
-    model.eval()
-    with torch.no_grad():
-        # Test forward pass
-        test_input = torch.randint(0, 50000, (1, 512))
-        if torch.cuda.is_available():
-            test_input = test_input.cuda()
+    if nan_detected:
+        logging.error("\n" + "="*60)
+        logging.error("🚨 TRAINING TERMINATED DUE TO NaN")
+        logging.error("Check training_metrics.csv for the progression leading to NaN")
+        logging.error("Review the debug logs above for root cause analysis")
+        logging.error("="*60)
+    else:
+        logging.info("\n" + "="*60)
+        logging.info("🎉 TITAN-BERT-ULTRA training completed successfully!")
+        logging.info("="*60)
         
-        logging.info("🔍 Testing final model...")
-        test_output = model(test_input)
-        logging.info(f"✅ Model output shape: {test_output.shape}")
-        logging.info(f"Output range: [{test_output.min().item():.3f}, {test_output.max().item():.3f}]")
+        # Final model evaluation
+        model.eval()
+        with torch.no_grad():
+            # Test forward pass
+            test_input = torch.randint(0, 50000, (1, 512))
+            if torch.cuda.is_available():
+                test_input = test_input.cuda()
+            
+            logging.info("🔍 Testing final model...")
+            test_output = model(test_input)
+            logging.info(f"✅ Model output shape: {test_output.shape}")
+            logging.info(f"Output range: [{test_output.min().item():.3f}, {test_output.max().item():.3f}]")
     
     # Cleanup
     logging.info("\n🧹 Cleaning up temporary files...")
@@ -199,6 +268,16 @@ def main():
     dataset.storage_manager.cleanup()
     trainer.storage_manager.cleanup()
     
+    # Log summary of saved checkpoints
+    logging.info("\n📁 Checkpoint Summary:")
+    logging.info(f"  Rolling checkpoints kept: {len(trainer.rolling_checkpoints)}")
+    for cp in trainer.rolling_checkpoints:
+        logging.info(f"    - {cp}")
+    logging.info(f"  Best model checkpoints: {len(trainer.best_checkpoints)}")
+    for neg_loss, cp in sorted(trainer.best_checkpoints, reverse=True):
+        logging.info(f"    - {cp} (loss={-neg_loss:.6f})")
+    
+    logging.info(f"\n📊 Training metrics saved to: {training_config.csv_log_path}")
     logging.info("✨ Training pipeline completed!")
 
 if __name__ == "__main__":

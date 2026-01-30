@@ -1,23 +1,53 @@
 import os
+import csv
 import torch
 import logging
 import math
+import heapq
+from datetime import datetime
+from dataclasses import dataclass, field
+from typing import List, Tuple, Optional
 from tqdm import tqdm
 import torch.optim as optim
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
 
 from utils.storage_manager import StorageManager
 from model.v2.titan_bert_ultra import TitanBertUltra, UltraConfig
 
+
+# ==================== TRAINING CONFIGURATION ====================
+@dataclass
+class TrainingConfig:
+    """Configuration for training behavior and checkpointing"""
+    # CSV Logging
+    csv_log_path: str = "training_metrics.csv"
+    
+    # Rolling Checkpoints
+    checkpoint_every_n_steps: int = 500  # Save every N steps
+    max_rolling_checkpoints: int = 3     # Keep only last N rolling checkpoints
+    
+    # Best Model Checkpoints
+    num_best_checkpoints: int = 2        # Keep top K best models
+    
+    # NaN Detection
+    nan_check_interval: int = 10         # Check for NaN every N steps
+    
+    # Gradient monitoring
+    log_gradient_stats: bool = True
+    gradient_log_interval: int = 100
+
 # ==================== TITAN TRAINER ====================
 class TitanTrainer:
     """Advanced trainer for TITAN-BERT-ULTRA with specialized optimizations"""
     
-    def __init__(self, model: TitanBertUltra, config: UltraConfig, device: torch.device = None):
+    def __init__(self, model: TitanBertUltra, config: UltraConfig, 
+                 training_config: TrainingConfig = None,
+                 device: torch.device = None):
         self.model = model
         self.config = config
+        self.training_config = training_config or TrainingConfig()
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         
@@ -26,6 +56,7 @@ class TitanTrainer:
         
         # Mixed precision with aggressive scaling for BitNet
         self.scaler = GradScaler(
+            self.device,
             init_scale=2.**10,  # Lower initial scale for BitNet stability
             growth_factor=1.5,  # Conservative growth
             backoff_factor=0.8,
@@ -45,7 +76,163 @@ class TitanTrainer:
         # Gradient accumulation for effective larger batches
         self.gradient_accumulation_steps = 4
         
+        # === NEW: CSV Logger ===
+        self.csv_file = None
+        self.csv_writer = None
+        self._init_csv_logger()
+        
+        # === NEW: Rolling checkpoint tracking ===
+        self.rolling_checkpoints: List[str] = []  # FIFO queue of checkpoint paths
+        
+        # === NEW: Best checkpoints tracking (min-heap by negative loss for max extraction) ===
+        # Format: [(-loss, checkpoint_path), ...]
+        self.best_checkpoints: List[Tuple[float, str]] = []
+        
+        # === NEW: NaN detection state ===
+        self.nan_detected = False
+        self.last_valid_state = None  # For debugging
+        
         self._log_setup()
+    
+    def _init_csv_logger(self):
+        """Initialize CSV file for metrics logging"""
+        csv_path = self.training_config.csv_log_path
+        file_exists = os.path.exists(csv_path)
+        
+        self.csv_file = open(csv_path, 'a', newline='', encoding='utf-8')
+        self.csv_writer = csv.writer(self.csv_file)
+        
+        # Write header if new file
+        if not file_exists:
+            self.csv_writer.writerow([
+                'timestamp', 'epoch', 'step', 'global_step', 
+                'loss', 'accuracy', 'learning_rate', 'grad_norm',
+                'scaler_scale', 'gpu_memory_gb', 'gpu_cached_gb'
+            ])
+            self.csv_file.flush()
+    
+    def _log_step_to_csv(self, epoch: int, step: int, loss: float, accuracy: float, 
+                          lr: float, grad_norm: float = 0.0):
+        """Log a single training step to CSV"""
+        gpu_memory = 0.0
+        gpu_cached = 0.0
+        if torch.cuda.is_available():
+            gpu_memory = torch.cuda.memory_allocated() / 1024**3
+            gpu_cached = torch.cuda.memory_reserved() / 1024**3
+        
+        self.csv_writer.writerow([
+            datetime.now().isoformat(),
+            epoch,
+            step,
+            self.global_step,
+            f'{loss:.6f}',
+            f'{accuracy:.6f}',
+            f'{lr:.8e}',
+            f'{grad_norm:.6f}',
+            f'{self.scaler.get_scale():.2f}',
+            f'{gpu_memory:.4f}',
+            f'{gpu_cached:.4f}'
+        ])
+        self.csv_file.flush()
+    
+    def _check_for_nan(self, loss: torch.Tensor, step: int, batch: dict) -> bool:
+        """Check if loss is NaN and log debug information if detected"""
+        if not torch.isnan(loss) and not torch.isinf(loss):
+            # Save last valid state for debugging
+            if step % 50 == 0:  # Don't save every step for memory efficiency
+                self.last_valid_state = {
+                    'step': step,
+                    'loss': loss.item(),
+                    'scaler_scale': self.scaler.get_scale()
+                }
+            return False
+        
+        # NaN detected! Log comprehensive debug information
+        self.nan_detected = True
+        logging.error("=" * 80)
+        logging.error("🚨 NaN/Inf DETECTED IN LOSS - STOPPING TRAINING 🚨")
+        logging.error("=" * 80)
+        
+        logging.error(f"Step: {self.global_step}, Batch index: {step}")
+        logging.error(f"Loss value: {loss.item()}")
+        logging.error(f"Scaler scale: {self.scaler.get_scale()}")
+        
+        # Log last valid state
+        if self.last_valid_state:
+            logging.error(f"Last valid state: step={self.last_valid_state['step']}, "
+                         f"loss={self.last_valid_state['loss']:.6f}, "
+                         f"scale={self.last_valid_state['scaler_scale']}")
+        
+        # Log learning rates for each param group
+        logging.error("Learning rates by parameter group:")
+        for i, group in enumerate(self.optimizer.param_groups):
+            name = group.get('name', f'group_{i}')
+            logging.error(f"  {name}: lr={group['lr']:.8e}")
+        
+        # Check gradients
+        logging.error("Gradient statistics by parameter:")
+        nan_params = []
+        inf_params = []
+        large_grad_params = []
+        
+        for name, param in self.model.named_parameters():
+            if param.grad is not None:
+                grad = param.grad
+                if torch.isnan(grad).any():
+                    nan_params.append(name)
+                elif torch.isinf(grad).any():
+                    inf_params.append(name)
+                else:
+                    grad_max = grad.abs().max().item()
+                    if grad_max > 1000:
+                        large_grad_params.append((name, grad_max))
+        
+        if nan_params:
+            logging.error(f"Parameters with NaN gradients ({len(nan_params)}):")
+            for p in nan_params[:10]:  # Limit output
+                logging.error(f"  - {p}")
+        
+        if inf_params:
+            logging.error(f"Parameters with Inf gradients ({len(inf_params)}):")
+            for p in inf_params[:10]:
+                logging.error(f"  - {p}")
+        
+        if large_grad_params:
+            logging.error(f"Parameters with large gradients (>1000) ({len(large_grad_params)}):")
+            for name, val in sorted(large_grad_params, key=lambda x: -x[1])[:10]:
+                logging.error(f"  - {name}: {val:.2f}")
+        
+        # Check model weights
+        logging.error("Model weight statistics:")
+        for name, param in self.model.named_parameters():
+            if torch.isnan(param).any():
+                logging.error(f"  NaN weights in: {name}")
+            elif torch.isinf(param).any():
+                logging.error(f"  Inf weights in: {name}")
+        
+        # Log input batch statistics
+        logging.error("Input batch statistics:")
+        for key, val in batch.items():
+            if isinstance(val, torch.Tensor):
+                logging.error(f"  {key}: shape={val.shape}, dtype={val.dtype}, "
+                            f"min={val.min().item()}, max={val.max().item()}")
+        
+        # GPU memory state
+        if torch.cuda.is_available():
+            logging.error(f"GPU Memory - Allocated: {torch.cuda.memory_allocated()/1024**3:.2f}GB, "
+                         f"Cached: {torch.cuda.memory_reserved()/1024**3:.2f}GB")
+        
+        # Log config that might affect stability
+        logging.error("Model configuration (stability-relevant):")
+        logging.error(f"  - BitNet enabled: {self.config.use_bitnet}")
+        logging.error(f"  - ODE solver: {self.config.ode_solver}, steps: {self.config.ode_steps}")
+        logging.error(f"  - Layer pattern: {self.config.layer_pattern}")
+        logging.error(f"  - Num loops: {self.config.num_loops}")
+        logging.error(f"  - Dropout: {self.config.dropout}")
+        
+        logging.error("=" * 80)
+        
+        return True
     
     def _setup_optimizer(self) -> optim.Optimizer:
         """Setup optimizer with parameter groups for different components"""
@@ -165,12 +352,19 @@ class TitanTrainer:
         
         return loss, accuracy
     
-    def train_epoch(self, dataloader: DataLoader, epoch: int) -> float:
-        """Train for one epoch with advanced monitoring"""
+    def train_epoch(self, dataloader: DataLoader, epoch: int) -> Tuple[float, bool]:
+        """
+        Train for one epoch with advanced monitoring.
+        
+        Returns:
+            Tuple[float, bool]: (average_loss, should_stop)
+            should_stop is True if NaN was detected
+        """
         self.model.train()
         total_loss = 0.0
         total_accuracy = 0.0
         num_batches = 0
+        grad_norm = 0.0
         
         # Progress bar with detailed metrics
         progress_bar = tqdm(
@@ -188,12 +382,22 @@ class TitanTrainer:
                 batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
                 
                 # Forward pass with mixed precision
-                with autocast():
+                with autocast(self.device):
                     loss, accuracy = self.compute_mlm_loss(
                         batch['input_ids'],
                         batch['attention_mask'], 
                         batch['labels']
                     )
+                    
+                    # === NEW: Check for NaN before scaling ===
+                    if self._check_for_nan(loss * self.gradient_accumulation_steps, batch_idx, batch):
+                        # Save emergency checkpoint before stopping
+                        try:
+                            emergency_path = self.save_checkpoint(epoch, suffix="_nan_emergency")
+                            logging.error(f"Emergency checkpoint saved: {emergency_path}")
+                        except Exception as e:
+                            logging.error(f"Failed to save emergency checkpoint: {e}")
+                        return total_loss / max(num_batches, 1), True  # Signal to stop
                     
                     # Scale loss for gradient accumulation
                     loss = loss / self.gradient_accumulation_steps
@@ -207,6 +411,12 @@ class TitanTrainer:
                     self.scaler.unscale_(self.optimizer)
                     grad_norm = clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                     
+                    # === NEW: Check for NaN in gradients ===
+                    if torch.isnan(grad_norm) or torch.isinf(grad_norm):
+                        logging.warning(f"⚠️ Invalid grad_norm at step {self.global_step}, skipping update")
+                        self.optimizer.zero_grad()
+                        continue
+                    
                     # Optimizer step
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
@@ -214,6 +424,25 @@ class TitanTrainer:
                     self.optimizer.zero_grad()
                     
                     self.global_step += 1
+                    
+                    # === NEW: CSV Logging for every step ===
+                    current_lr = self.scheduler.get_last_lr()[0]
+                    step_loss = loss.item() * self.gradient_accumulation_steps
+                    self._log_step_to_csv(
+                        epoch=epoch,
+                        step=batch_idx,
+                        loss=step_loss,
+                        accuracy=accuracy.item(),
+                        lr=current_lr,
+                        grad_norm=grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
+                    )
+                    
+                    # === NEW: Rolling checkpoint every N steps ===
+                    if self.global_step % self.training_config.checkpoint_every_n_steps == 0:
+                        self._save_rolling_checkpoint(epoch)
+                    
+                    # === NEW: Track best checkpoints ===
+                    self._maybe_save_best_checkpoint(epoch, step_loss)
                 
                 # Accumulate metrics
                 total_loss += loss.item() * self.gradient_accumulation_steps
@@ -271,7 +500,95 @@ class TitanTrainer:
             f"Best Loss={self.best_loss:.4f}"
         )
         
-        return avg_loss
+        return avg_loss, False  # No NaN detected
+    
+    def _save_rolling_checkpoint(self, epoch: int, path: str = "checkpoints"):
+        """Save a rolling checkpoint and manage the queue"""
+        os.makedirs(path, exist_ok=True)
+        
+        filename = f"titan_rolling_step_{self.global_step}.pt"
+        checkpoint_path = os.path.join(path, filename)
+        
+        checkpoint = {
+            'epoch': epoch,
+            'global_step': self.global_step,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
+            'scaler_state_dict': self.scaler.state_dict(),
+            'config': self.config,
+            'best_loss': self.best_loss,
+            'model_class': 'TitanBertUltra'
+        }
+        
+        torch.save(checkpoint, checkpoint_path)
+        logging.info(f"💾 Rolling checkpoint saved: {checkpoint_path}")
+        
+        # Add to queue
+        self.rolling_checkpoints.append(checkpoint_path)
+        
+        # Remove old checkpoints if exceeding max
+        while len(self.rolling_checkpoints) > self.training_config.max_rolling_checkpoints:
+            old_checkpoint = self.rolling_checkpoints.pop(0)
+            try:
+                if os.path.exists(old_checkpoint):
+                    os.remove(old_checkpoint)
+                    logging.info(f"🗑️ Removed old rolling checkpoint: {old_checkpoint}")
+            except Exception as e:
+                logging.warning(f"Failed to remove old checkpoint {old_checkpoint}: {e}")
+    
+    def _maybe_save_best_checkpoint(self, epoch: int, current_loss: float, path: str = "checkpoints"):
+        """Save checkpoint if it's among the top K best models"""
+        os.makedirs(path, exist_ok=True)
+        
+        k = self.training_config.num_best_checkpoints
+        
+        # Use negative loss because heapq is a min-heap
+        # We want to keep the K smallest losses (best models)
+        should_save = False
+        
+        if len(self.best_checkpoints) < k:
+            should_save = True
+        elif current_loss < -self.best_checkpoints[0][0]:  # Compare with worst of the best
+            should_save = True
+        
+        if should_save:
+            filename = f"titan_best_loss_{current_loss:.6f}_step_{self.global_step}.pt"
+            checkpoint_path = os.path.join(path, filename)
+            
+            checkpoint = {
+                'epoch': epoch,
+                'global_step': self.global_step,
+                'model_state_dict': self.model.state_dict(),
+                'optimizer_state_dict': self.optimizer.state_dict(),
+                'scheduler_state_dict': self.scheduler.state_dict(),
+                'scaler_state_dict': self.scaler.state_dict(),
+                'config': self.config,
+                'best_loss': current_loss,
+                'model_class': 'TitanBertUltra'
+            }
+            
+            torch.save(checkpoint, checkpoint_path)
+            logging.info(f"⭐ Best model checkpoint saved: {checkpoint_path} (loss={current_loss:.6f})")
+            
+            # Add to heap (using negative loss for min-heap to act as max-heap)
+            heapq.heappush(self.best_checkpoints, (-current_loss, checkpoint_path))
+            
+            # Remove worst of the best if exceeding K
+            if len(self.best_checkpoints) > k:
+                _, removed_path = heapq.heappop(self.best_checkpoints)
+                try:
+                    if os.path.exists(removed_path):
+                        os.remove(removed_path)
+                        logging.info(f"🗑️ Removed replaced best checkpoint: {removed_path}")
+                except Exception as e:
+                    logging.warning(f"Failed to remove old best checkpoint {removed_path}: {e}")
+    
+    def close(self):
+        """Cleanup resources"""
+        if self.csv_file:
+            self.csv_file.close()
+            logging.info(f"📊 CSV log closed: {self.training_config.csv_log_path}")
     
     def save_checkpoint(self, epoch: int, suffix: str = "", path: str = "checkpoints") -> str:
         """Save comprehensive checkpoint"""
