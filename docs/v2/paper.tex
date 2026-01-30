@@ -16,6 +16,10 @@
 \usepackage{subcaption}
 \usepackage{tabularx}
 \usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning, fit, calc, decorations.pathreplacing, backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 
 % Theorem environments
 \newtheorem{theorem}{Theorem}[section]
@@ -37,9 +41,9 @@
 \title{TITAN-BERT-ULTRA: A Hybrid Transformer Architecture \\ Integrating Ternary Quantization, Neural Ordinary Differential Equations, \\ Retention Mechanisms, and Sparse Mixture-of-Experts}
 
 \author{
-Erick F. Merino \\
-Ministerio de Educación, Perú \\
-\texttt{erick.merino@minedu.gob.pe}
+Erick F. Merino M. \\
+Ministerio de Educación, Chile (This work is not affiliated) \\
+\texttt{erickfmm@gmail.com}
 }
 
 \date{January 2026}
@@ -253,34 +257,98 @@ With $K$ recursive loops over $N/K$ physical layers, the total logical depth is 
 
 TITAN-BERT-ULTRA processes input sequences through the following pipeline:
 \begin{equation}
-    \mathbf{X} \xrightarrow{\text{Embed}} \mathbf{E} \xrightarrow{\text{HOPE}} \mathbf{H}_0 \xrightarrow{\text{Recursive}^K} \mathbf{H}_L \xrightarrow{\text{DyTNorm}} \hat{\mathbf{H}} \xrightarrow{\text{BitLinear}} \mathbf{Y}
+    \mathbf{X} \xrightarrow{\text{Embed}} \mathbf{E} \xrightarrow{\text{Dropout}} \mathbf{H}_0 \xrightarrow{\text{Recursive}^K} \mathbf{H}_L \xrightarrow{\text{DyTNorm}} \hat{\mathbf{H}} \xrightarrow{\text{BitLinear}} \mathbf{Y}
 \end{equation}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.8cm,
+    block/.style={rectangle, draw, rounded corners, minimum width=2.8cm, minimum height=0.7cm, font=\footnotesize, align=center},
+    embed/.style={block, fill=yellow!20},
+    norm/.style={block, fill=purple!15},
+    mixer/.style={block, fill=green!15},
+    moe/.style={block, fill=orange!15},
+    output/.style={block, fill=blue!15},
+    arrow/.style={->, thick, >=stealth},
+    loop/.style={dashed, thick, rounded corners}
+]
+    % Input
+    \node[embed] (input) {Input IDs\\$\mathbf{X} \in \mathbb{Z}^{B \times L}$};
+    \node[embed, below=of input] (emb) {Word Embedding\\$50000 \to 1024$};
+    \node[block, below=of emb] (drop) {Dropout (0.1)};
+    
+    % Recursive loop box
+    \node[below=0.6cm of drop] (loop_start) {};
+    
+    % Layer block
+    \node[norm, below=1.2cm of drop] (norm1) {DyTNorm};
+    \node[mixer, below=of norm1] (mixer) {Mixer Block\\(Pattern-based)};
+    \node[block, below=of mixer] (res1) {Residual Add};
+    \node[norm, below=of res1] (norm2) {DyTNorm};
+    \node[moe, below=of norm2] (moe) {Sparse MoE\\(4 experts, top-2)};
+    \node[block, below=of moe] (res2) {Residual Add};
+    
+    % Output
+    \node[norm, below=1.2cm of res2] (final_norm) {Final DyTNorm};
+    \node[output, below=of final_norm] (head) {BitLinear Head\\$1024 \to 50000$};
+    \node[output, below=of head] (out) {Output Logits\\$\mathbf{Y} \in \mathbb{R}^{B \times L \times V}$};
+    
+    % Arrows
+    \draw[arrow] (input) -- (emb);
+    \draw[arrow] (emb) -- (drop);
+    \draw[arrow] (drop) -- (norm1);
+    \draw[arrow] (norm1) -- (mixer);
+    \draw[arrow] (mixer) -- (res1);
+    \draw[arrow] (res1) -- (norm2);
+    \draw[arrow] (norm2) -- (moe);
+    \draw[arrow] (moe) -- (res2);
+    \draw[arrow] (res2) -- (final_norm);
+    \draw[arrow] (final_norm) -- (head);
+    \draw[arrow] (head) -- (out);
+    
+    % Loop annotations
+    \draw[loop, ->] (res2.east) -- ++(1.2,0) |- node[right, font=\scriptsize, pos=0.25] {$\times 12$ layers} (norm1.east);
+    \draw[loop, ->, blue] ([xshift=1.5cm]res2.east) -- ++(0.8,0) |- node[right, font=\scriptsize, blue, pos=0.25] {$\times 2$ loops} ([xshift=1.5cm]norm1.east);
+    
+    % Brace for hybrid layer
+    \draw[decorate, decoration={brace, amplitude=8pt}] 
+        ([xshift=-3.5cm]norm1.north) -- ([xshift=-3.5cm]res2.south) 
+        node[midway, left=10pt, font=\footnotesize, align=right] {Hybrid\\Layer\\$\times 12$};
+\end{tikzpicture}
+\caption{TITAN-BERT-ULTRA global architecture. Input tokens pass through embedding, 12 hybrid layers (processed in 2 recursive loops for 24 logical layers), and a BitLinear output head.}
+\label{fig:architecture}
+\end{figure}
 
 \begin{table}[H]
 \centering
-\caption{TITAN-BERT-ULTRA Configuration}
+\caption{TITAN-BERT-ULTRA Configuration (Updated for Stability)}
 \label{tab:config}
 \begin{tabular}{@{}ll@{}}
 \toprule
 \textbf{Component} & \textbf{Specification} \\
 \midrule
-Hidden dimension ($d$) & 2048 \\
+Hidden dimension ($d$) & 1024 \\
 Physical layers ($N_{\text{phys}}$) & 12 \\
 Recursive loops ($K$) & 2 \\
 Logical depth & $12 \times 2 = 24$ \\
 Attention heads ($h$) & 16 \\
-Head dimension ($d_k$) & $2048 / 16 = 128$ \\
-FFN intermediate dimension & $4 \times 2048 = 8192$ \\
-MoE experts ($E$) & 8 \\
+Retention heads & 8 \\
+Head dimension ($d_k$) & $1024 / 16 = 64$ \\
+FFN intermediate dimension & $2 \times 1024 = 2048$ \\
+MoE experts ($E$) & 4 \\
 Active experts (top-$k$) & 2 \\
 Vocabulary size ($V$) & 50,000 \\
 Maximum sequence length ($L$) & 512 \\
 Quantization & BitNet b1.58 (ternary) \\
 Normalization & Dynamic Tanh \\
-Positional encoding & HOPE (Hyperspherical Orbit PE) \\
+ODE Solver & RK4 (2 steps) \\
+Layer Pattern & Stable 6-layer (Table~\ref{tab:stable_pattern}) \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\textbf{Note}: A detailed Mermaid diagram of the complete architecture is available in \texttt{docs/v2/diagram.mermaid} and can be rendered to \texttt{diagram.png} using any Mermaid-compatible tool.
 
 \subsection{Embedding Layer}
 
@@ -318,33 +386,82 @@ Each hybrid layer $\mathcal{L}_i$ follows a pre-normalization residual design wi
     \mathbf{z}_2 &= \mathbf{z}_1 + \text{MoE}_i(\text{DyTNorm}(\mathbf{z}_1))
 \end{align}
 
-The mixer type alternates cyclically across layers to leverage diverse computational mechanisms.
+The mixer type follows a \textbf{stable 6-layer pattern} designed for training stability, rather than simple cyclic assignment.
 
 \subsection{Polymorphic Mixer Selection}
 
-Layers are assigned one of four mixer types based on their index modulo 4:
+Layers are assigned one of four mixer types based on a \textbf{stable 6-layer pattern} optimized for training stability. Unlike simple cyclic assignment (modulo 4), our pattern prioritizes stability through strategic layer ordering:
 
 \begin{table}[H]
 \centering
-\caption{Mixer Type Assignment}
-\begin{tabular}{@{}ccl@{}}
+\caption{Stable 6-Layer Pattern Assignment}
+\label{tab:stable_pattern}
+\begin{tabular}{@{}cclp{6cm}@{}}
 \toprule
-\textbf{Layer $i \mod 4$} & \textbf{Mixer Type} & \textbf{Computational Mechanism} \\
+\textbf{Position} & \textbf{Mixer Type} & \textbf{Role} & \textbf{Stability Rationale} \\
 \midrule
-0 & RetNet & Multi-scale retention with exponential decay \\
-1 & Neural ODE & Continuous dynamics via RK4 integration \\
-2 & Mamba/SSM & Selective state space processing \\
-3 & Standard Attention & Scaled dot-product softmax attention \\
+1 & RetNet & Anchor & Stable gradient flow at initialization \\
+2 & Titan Attention & Bridge & Proven stable attention mechanism \\
+3 & RetNet & Anchor & Reinforces stability before Mamba \\
+4 & Mamba/SSM & Processing & Sandwiched between stable layers \\
+5 & Titan Attention & Bridge & Local pattern capture \\
+6 & Neural ODE & Dynamics & End position for stable gradients \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-This polymorphic design allows the model to:
+This 6-layer pattern repeats twice to fill 12 physical layers, yielding the sequence:
+\begin{equation}
+\text{Pattern} = [\underbrace{\text{RetNet} \to \text{Titan} \to \text{RetNet} \to \text{Mamba} \to \text{Titan} \to \text{ODE}}_{\text{Cycle 1}}]_{\times 2}
+\end{equation}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    layer/.style={rectangle, draw, rounded corners, minimum width=1.8cm, minimum height=0.7cm, font=\footnotesize},
+    retnet/.style={layer, fill=green!20},
+    titan/.style={layer, fill=pink!30},
+    mamba/.style={layer, fill=orange!20},
+    ode/.style={layer, fill=blue!15},
+    arrow/.style={->, thick, >=stealth}
+]
+    % First cycle
+    \node[retnet] (r1) at (0, 0) {RetNet};
+    \node[titan] (t1) at (2.2, 0) {Titan};
+    \node[retnet] (r2) at (4.4, 0) {RetNet};
+    \node[mamba] (m1) at (6.6, 0) {Mamba};
+    \node[titan] (t2) at (8.8, 0) {Titan};
+    \node[ode] (o1) at (11, 0) {ODE};
+    
+    % Arrows
+    \draw[arrow] (r1) -- (t1);
+    \draw[arrow] (t1) -- (r2);
+    \draw[arrow] (r2) -- (m1);
+    \draw[arrow] (m1) -- (t2);
+    \draw[arrow] (t2) -- (o1);
+    
+    % Labels
+    \node[above=0.2cm of r1, font=\scriptsize] {L1};
+    \node[above=0.2cm of t1, font=\scriptsize] {L2};
+    \node[above=0.2cm of r2, font=\scriptsize] {L3};
+    \node[above=0.2cm of m1, font=\scriptsize] {L4};
+    \node[above=0.2cm of t2, font=\scriptsize] {L5};
+    \node[above=0.2cm of o1, font=\scriptsize] {L6};
+    
+    % Cycle indicator
+    \draw[decorate, decoration={brace, amplitude=8pt, mirror}] 
+        (-0.7, -0.6) -- (11.7, -0.6) node[midway, below=10pt, font=\footnotesize] {Cycle 1 (repeats for Layers 7--12)};
+\end{tikzpicture}
+\caption{Stable 6-Layer Pattern: RetNet anchors at positions 1,3 provide stability; Mamba is sandwiched between stable layers; ODE at position 6 benefits from stable gradients from above.}
+\label{fig:layer_pattern}
+\end{figure}
+
+The design rationale is based on research from hybrid architectures (TransMamba, SST, Jamba):
 \begin{itemize}[leftmargin=*]
-    \item Capture local dependencies efficiently (RetNet)
-    \item Model smooth, continuous transformations (Neural ODE)
-    \item Process sequences with linear complexity (Mamba)
-    \item Leverage global attention when beneficial (Standard)
+    \item \textbf{RetNet anchors (2$\times$)}: Most stable for gradient flow and long-range dependencies
+    \item \textbf{Titan Attention (2$\times$)}: Proven stable standard attention mechanism  
+    \item \textbf{Mamba (1$\times$)}: Efficient but can struggle with certain patterns; sandwiched for safety
+    \item \textbf{ODE (1$\times$)}: Continuous dynamics placed at pattern end where gradients are more stable
 \end{itemize}
 
 \subsection{RetNet Multi-Scale Retention}
@@ -535,11 +652,71 @@ We replace the standard dense feed-forward network with a Sparse Mixture-of-Expe
 
 \subsection{Architecture}
 
-The MoE layer consists of $N_E = 8$ expert networks and a trainable gating function $g: \R^d \to \R^{N_E}$:
+The MoE layer consists of $N_E = 4$ expert networks (reduced from 8 for stability) and a trainable gating function $g: \R^d \to \R^{N_E}$:
 \begin{equation}
-    g(\mathbf{x}) = \softmax(\mathbf{W}_g \mathbf{x} + \mathbf{b}_g)
+    g(\mathbf{x}) = \softmax(\mathbf{W}_g \mathbf{x})
 \end{equation}
-where $\mathbf{W}_g \in \R^{N_E \times d}$ is the gating weight matrix.
+where $\mathbf{W}_g \in \R^{N_E \times d}$ is the gating weight matrix (no bias for simplicity).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.6cm,
+    block/.style={rectangle, draw, rounded corners, minimum width=1.8cm, minimum height=0.6cm, font=\scriptsize, align=center},
+    expert/.style={block, fill=orange!20},
+    gate/.style={block, fill=red!15},
+    arrow/.style={->, thick, >=stealth},
+    darrow/.style={->, dashed, >=stealth}
+]
+    % Input
+    \node[block] (input) {Input $\mathbf{x}$};
+    
+    % Router
+    \node[gate, right=1.5cm of input] (router) {Router\\$\mathbf{W}_g$};
+    \node[block, right=of router] (softmax) {Softmax};
+    \node[block, right=of softmax] (topk) {Top-$K$\\($K=2$)};
+    
+    % Experts (below)
+    \node[expert, below=1.5cm of input] (e1) {Expert 1\\BitLinear};
+    \node[expert, right=0.4cm of e1] (e2) {Expert 2\\BitLinear};
+    \node[expert, right=0.4cm of e2] (e3) {Expert 3\\BitLinear};
+    \node[expert, right=0.4cm of e3] (e4) {Expert 4\\BitLinear};
+    
+    % Weighted sum
+    \node[block, below=0.8cm of e2, xshift=0.5cm] (sum) {Weighted Sum};
+    
+    % Output
+    \node[block, below=0.6cm of sum] (output) {Output};
+    
+    % Arrows from input
+    \draw[arrow] (input) -- (router);
+    \draw[arrow] (router) -- (softmax);
+    \draw[arrow] (softmax) -- (topk);
+    
+    % Arrows to experts (only active ones)
+    \draw[arrow] (input.south) -- ++(0,-0.5) -| (e1.north);
+    \draw[arrow] (input.south) -- ++(0,-0.5) -| (e2.north);
+    \draw[darrow, gray] (input.south) -- ++(0,-0.5) -| (e3.north);
+    \draw[darrow, gray] (input.south) -- ++(0,-0.5) -| (e4.north);
+    
+    % Weights from topk
+    \draw[arrow, blue] (topk.south) -- ++(0,-0.3) -| node[pos=0.8, right, font=\tiny, blue] {$w_1$} (e1.east);
+    \draw[arrow, blue] (topk.south) -- ++(0,-0.3) -| node[pos=0.8, left, font=\tiny, blue] {$w_2$} (e2.west);
+    
+    % Experts to sum
+    \draw[arrow] (e1.south) -- (sum.north west);
+    \draw[arrow] (e2.south) -- (sum.north);
+    \draw[darrow, gray] (e3.south) -- (sum.north);
+    \draw[darrow, gray] (e4.south) -- (sum.north east);
+    
+    \draw[arrow] (sum) -- (output);
+    
+    % Labels
+    \node[right=0.3cm of topk, font=\tiny, align=left] {Select top-2\\experts};
+\end{tikzpicture}
+\caption{Sparse MoE with top-2 routing. Only 2 of 4 experts are activated per token (solid arrows), reducing computation while maintaining model capacity.}
+\label{fig:moe}
+\end{figure}
 
 \subsection{Top-K Expert Selection}
 
@@ -670,25 +847,148 @@ We penalize large ODE derivatives to ensure stable integration:
 
 \subsection{Optimization}
 
-We use AdamW \citep{loshchilov2017decoupled} with the following hyperparameters:
+We use AdamW \citep{loshchilov2017decoupled} with component-specific learning rates for the hybrid architecture:
+
 \begin{table}[H]
 \centering
-\caption{Training Hyperparameters}
+\caption{Training Hyperparameters with Component-Specific Learning Rates}
+\label{tab:hyperparams}
 \begin{tabular}{@{}ll@{}}
 \toprule
 \textbf{Parameter} & \textbf{Value} \\
 \midrule
-Learning rate & $2 \times 10^{-4}$ \\
-Weight decay & $0.01$ \\
+\multicolumn{2}{l}{\textit{Component-Specific Learning Rates}} \\
+Embeddings & $1 \times 10^{-4}$ \\
+Normalization layers & $2 \times 10^{-4}$ \\
+ODE components & $5 \times 10^{-5}$ (lower for stability) \\
+RetNet components & $1.5 \times 10^{-4}$ \\
+Mamba components & $1 \times 10^{-4}$ \\
+Attention components & $1 \times 10^{-4}$ \\
+\midrule
+\multicolumn{2}{l}{\textit{Global Settings}} \\
+Weight decay & $0.01$ (norms: $0.001$) \\
 $\beta_1, \beta_2$ & $0.9, 0.95$ \\
-Warmup steps & 2000 \\
+Warmup ratio & 10\% of total steps \\
 LR schedule & Cosine decay \\
-Batch size & 256 sequences \\
+Batch size & 2 sequences (with gradient accumulation $\times 4$) \\
+Effective batch size & 8 sequences \\
 Sequence length & 512 tokens \\
 Gradient clipping & 1.0 \\
+Mixed precision & FP16 with GradScaler \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\subsection{Training Infrastructure}
+
+We implement a robust training infrastructure with comprehensive monitoring and checkpointing:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    block/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.8cm, font=\footnotesize, align=center},
+    decision/.style={diamond, draw, aspect=2, minimum width=1.5cm, font=\footnotesize, align=center},
+    arrow/.style={->, thick, >=stealth},
+    checkpoint/.style={block, fill=blue!15},
+    monitor/.style={block, fill=green!15},
+    error/.style={block, fill=red!20},
+]
+    % Training loop
+    \node[block, fill=yellow!20] (batch) {Load Batch};
+    \node[block, below=0.8cm of batch] (forward) {Forward Pass\\(Mixed Precision)};
+    \node[decision, below=0.8cm of forward] (nancheck) {NaN?};
+    \node[block, below left=0.6cm and 1.5cm of nancheck] (backward) {Backward +\\Grad Clip};
+    \node[error, below right=0.6cm and 1.5cm of nancheck] (emergency) {Emergency Stop\\+ Debug Logs};
+    
+    % Logging
+    \node[monitor, below=0.8cm of backward] (csv) {CSV Logger\\(loss, lr, acc)};
+    
+    % Checkpoints
+    \node[decision, below=0.8cm of csv] (stepcheck) {Step \%\\500 = 0?};
+    \node[checkpoint, right=1.5cm of stepcheck] (rolling) {Rolling\\Checkpoint};
+    
+    \node[decision, below=0.8cm of stepcheck] (bestcheck) {New Best\\Loss?};
+    \node[checkpoint, right=1.5cm of bestcheck] (best) {Best Model\\Checkpoint};
+    
+    \node[block, below=0.8cm of bestcheck] (next) {Next Batch};
+    
+    % Arrows
+    \draw[arrow] (batch) -- (forward);
+    \draw[arrow] (forward) -- (nancheck);
+    \draw[arrow] (nancheck) -- node[left, font=\scriptsize] {No} (backward);
+    \draw[arrow] (nancheck) -- node[above, font=\scriptsize] {Yes} (emergency);
+    \draw[arrow] (backward) -- (csv);
+    \draw[arrow] (csv) -- (stepcheck);
+    \draw[arrow] (stepcheck) -- node[above, font=\scriptsize] {Yes} (rolling);
+    \draw[arrow] (stepcheck) -- node[left, font=\scriptsize] {No} (bestcheck);
+    \draw[arrow] (rolling) |- (bestcheck);
+    \draw[arrow] (bestcheck) -- node[above, font=\scriptsize] {Yes} (best);
+    \draw[arrow] (bestcheck) -- node[left, font=\scriptsize] {No} (next);
+    \draw[arrow] (best) |- (next);
+    \draw[arrow] (next.west) -- ++(-2.5,0) |- (batch.west);
+\end{tikzpicture}
+\caption{Training loop with NaN detection, CSV logging, and multi-tier checkpointing.}
+\label{fig:training_loop}
+\end{figure}
+
+\subsubsection{Checkpointing Strategy}
+
+We implement a three-tier checkpointing strategy to balance storage efficiency with training robustness:
+
+\begin{table}[H]
+\centering
+\caption{Checkpointing Strategy}
+\label{tab:checkpoints}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Type} & \textbf{Frequency} & \textbf{Retention} & \textbf{Purpose} \\
+\midrule
+Rolling & Every 500 steps & Keep last 3 & Regular progress backup \\
+Best Model & On loss improvement & Keep top $K=2$ & Preserve best performing models \\
+Epoch End & Each epoch & Keep all & Milestone checkpoints \\
+Emergency & On NaN/error & Single & Debugging and recovery \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{CSV Metrics Logging}
+
+Every training step logs comprehensive metrics to a CSV file for analysis:
+
+\begin{table}[H]
+\centering
+\caption{CSV Log Fields}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+\texttt{timestamp} & ISO 8601 timestamp \\
+\texttt{epoch}, \texttt{step}, \texttt{global\_step} & Training progress indices \\
+\texttt{loss} & Current batch loss \\
+\texttt{accuracy} & MLM prediction accuracy \\
+\texttt{learning\_rate} & Current learning rate \\
+\texttt{grad\_norm} & Gradient L2 norm after clipping \\
+\texttt{scaler\_scale} & GradScaler scale factor \\
+\texttt{gpu\_memory\_gb} & Allocated GPU memory \\
+\texttt{gpu\_cached\_gb} & Cached GPU memory \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{NaN Detection and Debugging}
+
+When NaN is detected in the loss, training stops immediately with comprehensive debugging output:
+
+\begin{itemize}[leftmargin=*]
+    \item Learning rates for each parameter group
+    \item Parameters with NaN/Inf gradients (identifying problematic layers)
+    \item Parameters with unusually large gradients ($>1000$)
+    \item Model weights with NaN/Inf values
+    \item Input batch statistics (shape, dtype, min/max values)
+    \item GPU memory state
+    \item Configuration values affecting stability (BitNet, ODE, layer pattern)
+\end{itemize}
 
 \subsection{Gradient Challenges}
 
@@ -722,18 +1022,18 @@ Let $d$ denote the hidden dimension, $d_{\text{ff}} = 4d$ the feed-forward inter
 \textbf{Component} & \textbf{Parameters per Layer} & \textbf{Formula} \\
 \midrule
 Mixer (averaged) & $\approx 4d^2$ & $\mathbf{W}^Q, \mathbf{W}^K, \mathbf{W}^V, \mathbf{W}^O$ \\
-MoE (all experts) & $N_E \cdot 2 d \cdot d_{\text{ff}} = 64 d^2$ & $8 \times$ (up + down projections) \\
-Gating & $N_E \cdot d = 8d$ & Router weights \\
+MoE (4 experts) & $N_E \cdot 2 d \cdot d_{\text{ff}} = 16 d^2$ & $4 \times$ (up + down projections) \\
+Gating & $N_E \cdot d = 4d$ & Router weights \\
 DyT normalization & $3d$ & $\alpha, \gamma, \beta$ \\
 \midrule
-\textbf{Per layer total} & $\approx 68 d^2 + 11d$ & \\
+\textbf{Per layer total} & $\approx 20 d^2 + 7d$ & \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-For $d = 2048$:
+For the stable configuration with $d = 1024$:
 \begin{equation}
-    \text{Params}_{\text{total}} = 12 \times (68 \times 2048^2 + 11 \times 2048) \approx 3.4 \text{B parameters}
+    \text{Params}_{\text{total}} = 12 \times (20 \times 1024^2 + 7 \times 1024) + \text{Embeddings} \approx 303\text{M parameters}
 \end{equation}
 
 \subsection{BitNet Memory Reduction}
@@ -855,20 +1155,41 @@ All experiments are conducted on a single NVIDIA Tesla P40 GPU (24GB VRAM, Pasca
 
 \begin{table}[H]
 \centering
-\caption{TITAN-BERT-ULTRA Configuration}
+\caption{TITAN-BERT-ULTRA Experimental Configuration}
+\label{tab:exp_config}
 \begin{tabular}{@{}ll@{}}
 \toprule
 \textbf{Hyperparameter} & \textbf{Value} \\
 \midrule
-Hidden dimension ($d$) & 2048 \\
+\multicolumn{2}{l}{\textit{Model Architecture}} \\
+Hidden dimension ($d$) & 1024 \\
 Physical layers & 12 \\
 Recursive loops & 2 \\
 Effective depth & 24 \\
 Attention heads & 16 \\
-MoE experts & 8 \\
+Retention heads & 8 \\
+MoE experts & 4 \\
 Top-K routing & 2 \\
-SSM state dimension ($N$) & 16 \\
-RK4 integration steps & 4 \\
+RK4 integration steps & 2 \\
+Layer pattern & Stable 6-layer (Table~\ref{tab:stable_pattern}) \\
+\midrule
+\multicolumn{2}{l}{\textit{Training Configuration}} \\
+Batch size & 2 (effective 8 with accumulation) \\
+Gradient accumulation & 4 steps \\
+Sequence length & 512 \\
+Learning rate (base) & $1 \times 10^{-4}$ \\
+Learning rate (ODE) & $5 \times 10^{-5}$ \\
+Warmup ratio & 10\% \\
+LR schedule & Cosine decay \\
+Weight decay & 0.01 \\
+Gradient clipping & 1.0 \\
+Mixed precision & FP16 (GradScaler) \\
+\midrule
+\multicolumn{2}{l}{\textit{Checkpointing}} \\
+Rolling checkpoints & Every 500 steps, keep 3 \\
+Best model checkpoints & Top $K=2$ by loss \\
+CSV logging & Every training step \\
+NaN detection & Enabled with debug logs \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -917,12 +1238,50 @@ The combination of diverse components yields potential synergies:
     
     \item \textbf{Hyperparameter sensitivity}: Multiple component types introduce numerous hyperparameters requiring joint optimization.
     
-    \item \textbf{ODE computational overhead}: RK4 integration with $K=4$ steps increases attention cost by $4\times$ for those layers.
+    \item \textbf{ODE computational overhead}: RK4 integration with $K=2$ steps increases attention cost by $2\times$ for those layers.
     
-    \item \textbf{Training instability}: Combining aggressive quantization with recursive depth and ODE dynamics presents stability challenges.
+    \item \textbf{Training instability}: Combining aggressive quantization with recursive depth and ODE dynamics presents stability challenges. We mitigate this through the stable 6-layer pattern (Section~\ref{tab:stable_pattern}), component-specific learning rates, and comprehensive NaN detection.
     
     \item \textbf{Limited empirical validation}: Full-scale training and evaluation remain ongoing.
 \end{enumerate}
+
+\subsection{Stability Considerations}
+
+The stable 6-layer pattern addresses key instability sources:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.4cm,
+    issue/.style={rectangle, draw, rounded corners, fill=red!10, minimum width=3cm, minimum height=0.6cm, font=\footnotesize, align=center},
+    solution/.style={rectangle, draw, rounded corners, fill=green!10, minimum width=3cm, minimum height=0.6cm, font=\footnotesize, align=center},
+    arrow/.style={->, thick, >=stealth}
+]
+    % Issues
+    \node[issue] (i1) {ODE gradient\\explosion};
+    \node[issue, below=0.6cm of i1] (i2) {Mamba pattern\\struggles};
+    \node[issue, below=0.6cm of i2] (i3) {Quantization\\noise accumulation};
+    \node[issue, below=0.6cm of i3] (i4) {Deep network\\vanishing gradients};
+    
+    % Solutions
+    \node[solution, right=2cm of i1] (s1) {Place ODE at pattern end\\+ lower LR ($5\times10^{-5}$)};
+    \node[solution, right=2cm of i2] (s2) {Sandwich Mamba between\\RetNet anchors};
+    \node[solution, right=2cm of i3] (s3) {DyT bounded activations\\+ careful initialization};
+    \node[solution, right=2cm of i4] (s4) {RetNet anchors +\\stable gradient flow};
+    
+    % Arrows
+    \draw[arrow] (i1) -- (s1);
+    \draw[arrow] (i2) -- (s2);
+    \draw[arrow] (i3) -- (s3);
+    \draw[arrow] (i4) -- (s4);
+    
+    % Labels
+    \node[above=0.3cm of i1, font=\small\bfseries] {Stability Issues};
+    \node[above=0.3cm of s1, font=\small\bfseries] {Mitigations};
+\end{tikzpicture}
+\caption{Stability issues and their mitigations in the TITAN-BERT-ULTRA architecture.}
+\label{fig:stability}
+\end{figure}
 
 \subsection{Ablation Study Design}
 
