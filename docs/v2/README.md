@@ -47,39 +47,51 @@ This code is specifically tuned for a server with:
 2. **CPU Prefetching:** The training script utilizes the massive thread count (112 threads) to pre-process data into the 128GB RAM, minimizing NVMe bottlenecks.  
 3. **Dynamic Tanh Norm:** Used instead of LayerNorm to avoid variance calculations that can be unstable with ternary weights.
 
-## **📊 Architecture Diagram**
+## **� Training Infrastructure**
 
-graph TB  
-    subgraph "Input (1.58-bit)"  
-        A\[Input Tokens\] \--\> B\[BitLinear Embedding\]  
-        B \--\> C\[HOPE: Hyperspherical Pos Emb\]  
-    end
+### **Stable Layer Pattern**
 
-    subgraph "Recursive Hybrid Block (Loop N times)"  
-        C \--\> D{Layer Dispatcher}  
-          
-        subgraph "Path A: Continuous Dynamics"  
-            D \--\> ODE\[Neural ODE Attention\<br/\>Solver: RK4\]  
-        end
+The training pipeline uses a research-backed stable 6-layer pattern optimized for hybrid architectures:
 
-        subgraph "Path B: Retention"  
-            D \--\> RET\[RetNet: Multi-Scale Retention\]  
-        end
+```
+["retnet", "titan_attn", "retnet", "mamba", "titan_attn", "ode"]
+```
 
-        subgraph "Path C: State Space"  
-            D \--\> SSM\[Mamba-2 SSM Block\]  
-        end  
-          
-        ODE & RET & SSM \--\> N1\[Dynamic Tanh Norm\]  
-          
-        subgraph "Memory & Experts"  
-            N1 \--\> MEM\[Titan Neural Memory\]  
-            MEM \--\> MOE\[Sparse MoE FFN\<br/\>Top-K BitLinear Experts\]  
-        end  
-    end
+* **RetNet anchors:** Placed at positions 0 and 2 for gradient stability
+* **Mamba sandwiched:** SSM block buffered by retention layers
+* **ODE at end:** Continuous dynamics placed last to avoid early instability
 
-    MOE \--\>|Loop Feedback| D  
-    MOE \--\>|Final Output| F\[Head\]
+### **Advanced Monitoring & Logging**
+
+| Feature | Description |
+|---------|-------------|
+| **CSV Metrics Logging** | Per-step logging of loss, accuracy, learning rate, and GPU memory |
+| **NaN Detection** | Automatic training halt with comprehensive debug output |
+| **Gradient Monitoring** | Logs gradient norms per component type for debugging |
+| **Emergency Checkpoints** | Saves model state when NaN detected for analysis |
+
+### **Checkpoint Management**
+
+* **Rolling Checkpoints:** Saves every N steps, keeping only the last K checkpoints
+* **Best Model Tracking:** Maintains top-K checkpoints by validation loss using a min-heap
+* **Configurable Strategy:** All parameters controlled via `TrainingConfig` dataclass
+
+```python
+@dataclass
+class TrainingConfig:
+    log_csv: bool = True
+    csv_log_path: str = "training_metrics.csv"
+    rolling_checkpoint_every: int = 500
+    keep_rolling_checkpoints: int = 3
+    keep_best_checkpoints: int = 2
+    detect_nan: bool = True
+```
+
+## **�📊 Architecture Diagram**
+
+![Diagram](./diagram.png)
+
+*For detailed technical documentation, see: [Technical Specification (PDF)](./tital_bert_ultra.pdf)*
 
 ## **🚀 Usage**
 
@@ -90,15 +102,43 @@ pip install torch sentencepiece datasets
 
 ### **Configuration (UltraConfig)**
 
-Edit titan\_bert\_ultra\_ode\_retnet.py to adjust risk levels:
+Edit `main.py` to adjust the model configuration:
 
-@dataclass  
-class UltraConfig:  
-    hidden\_size: int \= 2048      \# Massive size allowed by BitNet  
-    num\_layers: int \= 12         \# Physical layers  
-    num\_loops: int \= 2           \# Logical depth \= 24  
-    ode\_solver: str \= "rk4"      \# "euler" for speed, "rk4" for precision  
-    use\_bitnet: bool \= True      \# REQUIRED for P40 24GB
+```python
+config = UltraConfig(
+    vocab_size=50000,
+    hidden_size=1024,           # Reduced from 2048 for stability
+    num_layers=12,              # Physical layers (uses 2 cycles of 6-pattern)
+    num_loops=2,                # Logical depth = 24
+    num_heads=16,
+    retention_heads=8,
+    num_experts=4,              # Reduced MoE experts
+    top_k_experts=2,
+    dropout=0.1,
+    ode_solver="rk4",
+    ode_steps=2,                # Low steps for speed
+    use_bitnet=True,            # Essential for memory efficiency
+    norm_type="dynamic_tanh",
+    layer_pattern=stable_layer_pattern  # Use stable pattern
+)
+
+# Stable 6-layer pattern optimized for hybrid architectures:
+stable_layer_pattern = [
+    "retnet",       # Stable anchor, good gradient flow
+    "titan_attn",   # Proven attention mechanism
+    "retnet",       # Another stable anchor
+    "mamba",        # Efficient SSM, sandwiched by stable layers
+    "titan_attn",   # Attention for local patterns
+    "ode"           # ODE at end, more stable gradients
+]
+```
+
+**Key Configuration Notes:**
+- **hidden_size=1024**: Reduced from 2048 for better stability on P40 hardware
+- **num_loops=2**: Creates 24 logical layers from 12 physical layers
+- **use_bitnet=True**: Essential for fitting large models in 24GB VRAM
+- **ode_steps=2**: Low step count balances precision with speed
+- **layer_pattern**: Research-backed stable pattern with RetNet anchors
 
 ### **Training**
 

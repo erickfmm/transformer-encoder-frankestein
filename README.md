@@ -141,6 +141,12 @@ An **audacious 1.58-bit** Transformer combining Neural ODEs, RetNet, and Titan M
 - 🧠 **Titan Memory**: Dynamic context storage without massive KV caches
 - ♻️ **Recursive Looping**: Physical layers reused for deeper logical models
 
+**Training Infrastructure (v2.1):**
+- 📈 **CSV Metrics Logging**: Per-step loss, accuracy, LR, and GPU memory tracking
+- 🛡️ **NaN Detection**: Automatic halt with debug logs and emergency checkpoints
+- 💾 **Smart Checkpointing**: Rolling checkpoints + top-K best model tracking
+- 🧬 **Stable Layer Pattern**: Research-backed `[retnet, titan_attn, retnet, mamba, titan_attn, ode]`
+
 👉 **[Read the full v2 documentation →](docs/v2/README.md)**
 
 ---
