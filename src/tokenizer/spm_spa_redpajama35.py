@@ -20,42 +20,37 @@ class SpanishSPMTokenizer:
     def prepare_training_data(self, max_samples: int = 500000) -> str:
         """
         Prepare training data from erickfmm/red_pajama_es_hq_35
-        Using streaming to avoid downloading full dataset
+        Loading full dataset (non-streaming)
         """
-        logging.info("Loading Spanish RedPajama dataset (streaming mode)...")
+        logging.info("Loading Spanish RedPajama dataset (non-streaming mode)...")
         
         # Create temp file for training data
         temp_file = self.storage_manager.create_temp_file(suffix=".txt")
         
         try:
-            # Load dataset in streaming mode
+            # Load dataset without streaming
             dataset = load_dataset(
                 "erickfmm/red_pajama_es_hq_35",
-                split="train",
-                streaming=True
+                split="train"
             )
             
             count = 0
             with open(temp_file, 'w', encoding='utf-8') as f:
-                iterator = iter(dataset)
-                
-                while count < max_samples:
-                    try:
-                        example = next(iterator)
-                        if 'text' in example:
-                            text = example['text'].strip()
-                            if len(text) > 100:  # Skip very short texts
-                                f.write(text + '\n')
-                                count += 1
-                                
-                                if count % 10000 == 0:
-                                    logging.info(f"Collected {count} samples...")
-                                    # Check storage
-                                    if not self.storage_manager.register_file(temp_file):
-                                        logging.warning("Storage limit approached, stopping collection")
-                                        break
-                    except StopIteration:
+                for example in dataset:
+                    if count >= max_samples:
                         break
+                    if 'text' in example:
+                        text = example['text'].strip()
+                        if len(text) > 100:  # Skip very short texts
+                            f.write(text + '\n')
+                            count += 1
+                            
+                            if count % 10000 == 0:
+                                logging.info(f"Collected {count} samples...")
+                                # Check storage
+                                if not self.storage_manager.register_file(temp_file):
+                                    logging.warning("Storage limit approached, stopping collection")
+                                    break
                 
             logging.info(f"Created training file with {count} samples")
             return temp_file
