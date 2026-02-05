@@ -31,14 +31,13 @@ class SpanishSPMTokenizer:
             # Load dataset without streaming
             dataset = load_dataset(
                 "erickfmm/red_pajama_es_hq_35",
-                split="train"
+                split="train",
+                streaming=True
             )
             
             count = 0
             with open(temp_file, 'w', encoding='utf-8') as f:
                 for example in dataset:
-                    if count >= max_samples:
-                        break
                     if 'text' in example:
                         text = example['text'].strip()
                         if len(text) > 100:  # Skip very short texts
@@ -46,6 +45,7 @@ class SpanishSPMTokenizer:
                             count += 1
                             
                             if count % 10000 == 0:
+                                f.flush()
                                 logging.info(f"Collected {count} samples...")
                                 # Check storage
                                 if not self.storage_manager.register_file(temp_file):
