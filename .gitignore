@@ -3,3 +3,9 @@ uv.lock
 **/__pycache__/
 **/*.pyc
 **/temp_data/
+
+**/checkpoints
+**/es_redpajama_50k.model
+**/es_redpajama_50k.vocab
+**/nohup.out**
+**/training_metrics.csv
