@@ -3,9 +3,9 @@ name = "spanish_moe_bert"
 version = "0.1.0"
 description = "Spanish MoE-BERT model with SPM tokenizer"
 readme = "README.md"
-requires-python = ">=3.9, <4.0"
+requires-python = ">=3.9, <3.13"  # Changed: Avoid Python 3.13 for now
 dependencies = [
-    "torch>=2.0.0",
+    "torch==2.5.1",  # Changed: Fixed version instead of range
     "sentencepiece>=0.1.99",
     "sacremoses>=0.0.53",
     "datasets>=2.14.0",
@@ -22,6 +22,12 @@ dependencies = [
 train = [
     "wandb>=0.15.0",
     "tensorboard>=2.14.0",
+]
+cuda = [
+    "torch==2.5.1+cu118",  # CUDA 11.8 variant
+]
+cpu = [
+    "torch==2.5.1+cpu",  # CPU-only variant
 ]
 
 [build-system]

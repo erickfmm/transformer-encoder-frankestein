@@ -44,11 +44,11 @@ class TitanTrainer:
     
     def __init__(self, model: TitanBertUltra, config: UltraConfig, 
                  training_config: TrainingConfig = None,
-                 device: torch.device = None):
+                 device: str = None): #torch.device = None):
         self.model = model
         self.config = config
         self.training_config = training_config or TrainingConfig()
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device or "cuda" if torch.cuda.is_available() else "cpu" # device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         
         # Specialized optimizer for hybrid architecture

@@ -4,6 +4,7 @@ import logging
 from datasets import load_dataset
 import random
 from torch.utils.data import Dataset as TorchDataset
+import torch
 
 from utils.storage_manager import StorageManager
 from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
@@ -32,7 +33,7 @@ class StreamingMLMDataset(TorchDataset):
             dataset = load_dataset(
                 "erickfmm/red_pajama_es_hq_35",
                 split="train",
-                streaming=True
+                streaming=False
             )
             
             logging.info("Preparing MLM examples...")
@@ -44,7 +45,7 @@ class StreamingMLMDataset(TorchDataset):
                 
                 if 'text' in example:
                     text = example['text'].strip()
-                    if len(text) > 100:  # Skip very short texts
+                    if len(text) > 10:  # Skip very short texts
                         encoded = self.tokenizer.encode(text, self.max_length)
                         mlm_input, mlm_labels = self._apply_mlm_mask(
                             encoded['input_ids']
