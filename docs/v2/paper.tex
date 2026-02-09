@@ -38,7 +38,7 @@
 \DeclareMathOperator{\sign}{sign}
 \DeclareMathOperator{\Var}{Var}
 
-\title{TITAN-BERT-ULTRA: A Hybrid Transformer Architecture \\ Integrating Ternary Quantization, Neural Ordinary Differential Equations, \\ Retention Mechanisms, and Sparse Mixture-of-Experts}
+\title{TORMENTED-BERT-Frankenstein: A Hybrid Transformer Architecture \\ Integrating Ternary Quantization, Neural Ordinary Differential Equations, \\ Retention Mechanisms, and Sparse Mixture-of-Experts}
 
 \author{
 Erick F. Merino M. \\
@@ -53,7 +53,7 @@ Ministerio de Educación, Chile (This work is not affiliated) \\
 \maketitle
 
 \begin{abstract}
-We introduce \textbf{TITAN-BERT-ULTRA}, a novel transformer encoder architecture that synthesizes multiple state-of-the-art techniques into a unified framework optimized for memory-constrained hardware. Our architecture integrates five key innovations: (1) \textbf{BitNet b1.58 quantization} \citep{ma2024era} constraining weights to ternary values $\{-1, 0, +1\}$, achieving approximately 3.5$\times$ memory reduction compared to FP16; (2) \textbf{Neural ODE-based attention} \citep{chen2018neural} modeling hidden state dynamics as continuous-time differential equations solved via 4th-order Runge-Kutta integration; (3) \textbf{Multi-Scale Retention mechanisms} from RetNet \citep{sun2023retentive} enabling $\mathcal{O}(1)$ inference complexity with parallel training; (4) \textbf{Recursive layer processing} where 12 physical layers are traversed twice to achieve 24 layers of logical depth with shared parameters; and (5) \textbf{Sparse Mixture-of-Experts} (MoE) \citep{fedus2022switch} feed-forward networks with top-2 routing among 8 experts. We further incorporate \textbf{Dynamic Tanh normalization} \citep{zhu2025transformers} as a drop-in replacement for LayerNorm, providing bounded activations and improved gradient stability in quantized networks. Through extensive mathematical formulation and implementation analysis, we demonstrate that this ``Frankenstein'' combination of techniques enables training a 2048-dimensional hidden state model on a single 24GB GPU (NVIDIA Tesla P40), where equivalent standard transformers would exceed memory constraints. Our work provides detailed theoretical foundations, algorithmic specifications, and practical considerations for deploying hybrid architectures on resource-constrained hardware.
+We introduce \textbf{TORMENTED-BERT-Frankenstein} (\textbf{T}ernary \textbf{O}DE \textbf{R}etention \textbf{M}amba \textbf{E}xperts \textbf{N}eural \textbf{T}anh \textbf{E}ncoder \textbf{D}epth), a novel transformer encoder architecture that synthesizes multiple state-of-the-art techniques into a unified framework optimized for memory-constrained hardware. Our architecture integrates five key innovations: (1) \textbf{BitNet b1.58 quantization} \citep{ma2024era} constraining weights to ternary values $\{-1, 0, +1\}$, achieving approximately 3.5$\times$ memory reduction compared to FP16; (2) \textbf{Neural ODE-based attention} \citep{chen2018neural} modeling hidden state dynamics as continuous-time differential equations solved via 4th-order Runge-Kutta integration; (3) \textbf{Multi-Scale Retention mechanisms} from RetNet \citep{sun2023retentive} enabling $\mathcal{O}(1)$ inference complexity with parallel training; (4) \textbf{Recursive layer processing} where 12 physical layers are traversed twice to achieve 24 layers of logical depth with shared parameters; and (5) \textbf{Sparse Mixture-of-Experts} (MoE) \citep{fedus2022switch} feed-forward networks with top-2 routing among 8 experts. We further incorporate \textbf{Dynamic Tanh normalization} \citep{zhu2025transformers} as a drop-in replacement for LayerNorm, providing bounded activations and improved gradient stability in quantized networks. Through extensive mathematical formulation and implementation analysis, we demonstrate that this ``Frankenstein'' combination of techniques enables training a 2048-dimensional hidden state model on a single 24GB GPU (NVIDIA Tesla P40), where equivalent standard transformers would exceed memory constraints. Our work provides detailed theoretical foundations, algorithmic specifications, and practical considerations for deploying hybrid architectures on resource-constrained hardware.
 \end{abstract}
 
 \section{Introduction}
@@ -62,7 +62,7 @@ The Transformer architecture \citep{vaswani2017attention} has fundamentally tran
 
 Recent research has introduced several promising directions for addressing these limitations. \textbf{Quantization} approaches, exemplified by BitNet \citep{wang2023bitnet} and its successor BitNet b1.58 \citep{ma2024era}, demonstrate that large language models can achieve competitive performance with ternary weights $\{-1, 0, +1\}$, dramatically reducing memory requirements and enabling efficient integer arithmetic. \textbf{Retention mechanisms} \citep{sun2023retentive} from RetNet provide an alternative to softmax attention that combines the parallelizability of Transformers with the $\mathcal{O}(1)$ inference complexity of recurrent networks. \textbf{State Space Models} (SSMs), particularly the Mamba architecture \citep{gu2023mamba}, offer linear-time sequence modeling with selective state spaces. \textbf{Neural Ordinary Differential Equations} \citep{chen2018neural} model layer transformations as continuous dynamics, enabling parameter-efficient depth modeling. Finally, \textbf{Mixture-of-Experts} (MoE) architectures \citep{fedus2022switch, shazeer2017outrageously} achieve conditional computation by activating only a subset of parameters for each input.
 
-While each technique has been studied in isolation, their combination presents unique challenges and opportunities. In this work, we propose TITAN-BERT-ULTRA, an architecture that synthesizes these disparate innovations into a cohesive framework specifically designed for memory-constrained training on legacy or consumer-grade GPUs.
+While each technique has been studied in isolation, their combination presents unique challenges and opportunities. In this work, we propose TORMENTED-BERT-Frankenstein, an architecture that synthesizes these disparate innovations into a cohesive framework specifically designed for memory-constrained training on legacy or consumer-grade GPUs.
 
 \subsection{Motivation and Design Philosophy}
 
@@ -94,12 +94,12 @@ Our main contributions are as follows:
 
 \subsection{Paper Organization}
 
-The remainder of this paper is organized as follows. Section~\ref{sec:background} provides comprehensive background on each component technique. Section~\ref{sec:architecture} presents the full TITAN-BERT-ULTRA architecture. Sections~\ref{sec:bitnet}--\ref{sec:normalization} provide detailed mathematical formulations for BitNet quantization, hybrid attention mechanisms, MoE feed-forward networks, and normalization strategies. Section~\ref{sec:training} discusses training considerations and optimization challenges. Section~\ref{sec:complexity} analyzes computational and memory complexity. Section~\ref{sec:related} surveys related work. Section~\ref{sec:experiments} outlines experimental methodology. Section~\ref{sec:discussion} discusses implications and limitations, and Section~\ref{sec:conclusion} concludes.
+The remainder of this paper is organized as follows. Section~\ref{sec:background} provides comprehensive background on each component technique. Section~\ref{sec:architecture} presents the full TORMENTED-BERT-Frankenstein architecture. Sections~\ref{sec:bitnet}--\ref{sec:normalization} provide detailed mathematical formulations for BitNet quantization, hybrid attention mechanisms, MoE feed-forward networks, and normalization strategies. Section~\ref{sec:training} discusses training considerations and optimization challenges. Section~\ref{sec:complexity} analyzes computational and memory complexity. Section~\ref{sec:related} surveys related work. Section~\ref{sec:experiments} outlines experimental methodology. Section~\ref{sec:discussion} discusses implications and limitations, and Section~\ref{sec:conclusion} concludes.
 
 \section{Background and Preliminaries}
 \label{sec:background}
 
-This section provides comprehensive background on the foundational techniques integrated into TITAN-BERT-ULTRA.
+This section provides comprehensive background on the foundational techniques integrated into TORMENTED-BERT-Frankenstein.
 
 \subsection{Transformer Architecture}
 
@@ -250,15 +250,21 @@ For a model with $P$ parameters per layer and $N$ total logical layers, recursiv
 With $K$ recursive loops over $N/K$ physical layers, the total logical depth is $(N/K) \cdot K = N$. The parameter count is $(N/K) \cdot P$, while a non-recursive model with depth $N$ requires $N \cdot P$ parameters. The ratio is $(N \cdot P) / ((N/K) \cdot P) = K$.
 \end{proof}
 
-\section{TITAN-BERT-ULTRA Architecture}
+\section{TORMENTED-BERT-Frankenstein Architecture}
 \label{sec:architecture}
 
 \subsection{Global Structure}
 
-TITAN-BERT-ULTRA processes input sequences through the following pipeline:
+TORMENTED-BERT-Frankenstein processes input sequences through the following pipeline:
 \begin{equation}
     \mathbf{X} \xrightarrow{\text{Embed}} \mathbf{E} \xrightarrow{\text{Dropout}} \mathbf{H}_0 \xrightarrow{\text{Recursive}^K} \mathbf{H}_L \xrightarrow{\text{DyTNorm}} \hat{\mathbf{H}} \xrightarrow{\text{BitLinear}} \mathbf{Y}
 \end{equation}
+
+The complete architecture is illustrated in Figure~\ref{fig:architecture_detailed}, which shows the flow through the recursive loop structure with the stable 6-layer pattern. A comprehensive flowchart diagram (including training pipeline, checkpointing strategy, and safety monitoring) is available in the \texttt{diagram.mermaid} file in the repository, which can be rendered using:
+
+\begin{center}
+\texttt{mmdc -i diagram.mermaid -o diagram.pdf -t neutral -b transparent}
+\end{center}
 
 \begin{figure}[H]
 \centering
@@ -316,13 +322,22 @@ TITAN-BERT-ULTRA processes input sequences through the following pipeline:
         ([xshift=-3.5cm]norm1.north) -- ([xshift=-3.5cm]res2.south) 
         node[midway, left=10pt, font=\footnotesize, align=right] {Hybrid\\Layer\\$\times 12$};
 \end{tikzpicture}
-\caption{TITAN-BERT-ULTRA global architecture. Input tokens pass through embedding, 12 hybrid layers (processed in 2 recursive loops for 24 logical layers), and a BitLinear output head.}
-\label{fig:architecture}
+\caption{TORMENTED-BERT-Frankenstein (\textbf{T}ernary \textbf{O}DE \textbf{R}etention \textbf{M}amba \textbf{E}xperts \textbf{N}eural \textbf{T}anh \textbf{E}ncoder \textbf{D}epth) global architecture. Input tokens pass through embedding, 12 hybrid layers (processed in 2 recursive loops for 24 logical layers), and a BitLinear output head. Each hybrid layer cycles through RetNet, Titan Attention, Mamba, and ODE blocks with sparse MoE feed-forward networks.}
+\label{fig:architecture_detailed}
 \end{figure}
+
+% Complete flowchart diagram including training pipeline
+% To include the rendered Mermaid diagram (after converting diagram.mermaid to PDF):
+% \begin{figure}[H]
+% \centering
+% \includegraphics[width=\textwidth,keepaspectratio]{diagram.pdf}
+% \caption{Complete TORMENTED-BERT-Frankenstein training pipeline including recursive loop structure, stable 6-layer pattern, checkpointing strategy, NaN detection, and safety monitoring. The diagram shows the full data flow from input through the hybrid architecture to output, along with the training infrastructure components.}
+% \label{fig:complete_pipeline}
+% \end{figure}
 
 \begin{table}[H]
 \centering
-\caption{TITAN-BERT-ULTRA Configuration (Updated for Stability)}
+\caption{TORMENTED-BERT-Frankenstein Configuration (Updated for Stability)}
 \label{tab:config}
 \begin{tabular}{@{}ll@{}}
 \toprule
@@ -1155,7 +1170,7 @@ All experiments are conducted on a single NVIDIA Tesla P40 GPU (24GB VRAM, Pasca
 
 \begin{table}[H]
 \centering
-\caption{TITAN-BERT-ULTRA Experimental Configuration}
+\caption{TORMENTED-BERT-Frankenstein Experimental Configuration}
 \label{tab:exp_config}
 \begin{tabular}{@{}ll@{}}
 \toprule
@@ -1279,7 +1294,7 @@ The stable 6-layer pattern addresses key instability sources:
     \node[above=0.3cm of i1, font=\small\bfseries] {Stability Issues};
     \node[above=0.3cm of s1, font=\small\bfseries] {Mitigations};
 \end{tikzpicture}
-\caption{Stability issues and their mitigations in the TITAN-BERT-ULTRA architecture.}
+\caption{Stability issues and their mitigations in the TORMENTED-BERT-Frankenstein architecture.}
 \label{fig:stability}
 \end{figure}
 
@@ -1320,7 +1335,7 @@ Non-recursive & Hybrid & \checkmark & \checkmark & $\times$ \\
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented TITAN-BERT-ULTRA, an experimental transformer encoder architecture that synthesizes recent advances in efficient sequence modeling. By combining BitNet b1.58 quantization \citep{ma2024era}, recursive depth processing, polymorphic attention mechanisms (RetNet \citep{sun2023retentive}, Neural ODEs \citep{chen2018neural}, Mamba \citep{gu2023mamba}, and standard attention), sparse Mixture-of-Experts \citep{fedus2022switch}, and Dynamic Tanh normalization \citep{zhu2025transformers}, we explore the frontiers of what is possible within constrained hardware budgets.
+We presented TORMENTED-BERT-Frankenstein (\textbf{T}ernary \textbf{O}DE \textbf{R}etention \textbf{M}amba \textbf{E}xperts \textbf{N}eural \textbf{T}anh \textbf{E}ncoder \textbf{D}epth), an experimental transformer encoder architecture that synthesizes recent advances in efficient sequence modeling. By combining BitNet b1.58 quantization \citep{ma2024era}, recursive depth processing, polymorphic attention mechanisms (RetNet \citep{sun2023retentive}, Neural ODEs \citep{chen2018neural}, Mamba \citep{gu2023mamba}, and standard attention), sparse Mixture-of-Experts \citep{fedus2022switch}, and Dynamic Tanh normalization \citep{zhu2025transformers}, we explore the frontiers of what is possible within constrained hardware budgets.
 
 While this ``Frankenstein'' approach to architecture design is admittedly unconventional, it serves as a testbed for understanding how cutting-edge techniques interact and whether their benefits compose. Our preliminary analysis suggests that careful integration can yield memory-efficient models with diverse computational capabilities.
 

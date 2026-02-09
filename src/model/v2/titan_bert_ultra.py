@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-TITAN-BERT-ULTRA: The Frankenstein of Transformers (SOTA 2026 Preview)
+TORMENTED-BERT-Frankenstein: The Ultimate Hybrid Transformer (SOTA 2026)
+TORMENTED = Ternary ODE Retention Mamba Experts Neural Tanh Encoder Depth
+
 Integrates:
 - BitNet b1.58 (Ternary Weights everywhere)
 - Neural ODE Attention (Continuous depth dynamics)
 - RetNet (Multi-Scale Retention)
-- Titan Memory & Mamba-2
+- Mamba-2 (State Space Models)
+- Sparse Mixture-of-Experts
 - Dynamic Tanh Normalization
-- HOPE Embeddings
+- Recursive Depth via Loops
 
 Hardware Target: Dual Xeon E5-2680v4 + Nvidia Tesla P40 (24GB)
 """
@@ -316,7 +319,8 @@ class HybridLayer(nn.Module):
         return x
 
 # ==================== MAIN MODEL ====================
-class TitanBertUltra(nn.Module):
+class TormentedBertFrankenstein(nn.Module):
+    """TORMENTED-BERT-Frankenstein: Hybrid Transformer Architecture"""
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -357,8 +361,8 @@ if __name__ == "__main__":
         ode_steps=2             # Poca precisión, alta velocidad
     )
     
-    print("\n⚡ TITAN-BERT-ULTRA INITIALIZING ⚡")
-    model = TitanBertUltra(config).cuda()
+    print("\n⚡ TORMENTED-BERT-Frankenstein INITIALIZING ⚡")
+    model = TormentedBertFrankenstein(config).cuda()
     
     # Contar parámetros y ahorros
     params = sum(p.numel() for p in model.parameters())

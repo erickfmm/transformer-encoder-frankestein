@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """
-TITAN-BERT-ULTRA Training Pipeline
+TORMENTED-BERT-Frankenstein Training Pipeline
+
+TORMENTED = Ternary ODE Retention Mamba Experts Neural Tanh Encoder Depth
+
 Spanish Transformer with:
 - BitNet b1.58 (Ternary Weights)
 - Neural ODE Attention
 - RetNet Multi-Scale Retention
-- Hybrid Architecture
+- Mamba State Space Models
+- Sparse Mixture-of-Experts
+- Dynamic Tanh Normalization
+- Recursive Loop Architecture
+
 Dataset: erickfmm/red_pajama_es_hq_35
 Vocabulary: 50,000 tokens
 Storage limit: <300GB
@@ -26,18 +33,18 @@ from torch.utils.data import DataLoader
 from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 from training.v1.streaming_mlm_dataset import StreamingMLMDataset
 from training.v2.trainer import TitanTrainer, TrainingConfig
-from model.v2.titan_bert_ultra import TitanBertUltra, UltraConfig
+from model.v2.titan_bert_ultra import TormentedBertFrankenstein, UltraConfig
 
 # ==================== MAIN EXECUTION ====================
 def main():
-    """Main training pipeline for TITAN-BERT-ULTRA"""
+    """Main training pipeline for TORMENTED-BERT-Frankenstein"""
     # Setup logging
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
     
-    logging.info("⚡ Starting TITAN-BERT-ULTRA training ⚡")
+    logging.info("⚡ Starting TORMENTED-BERT-Frankenstein training ⚡")
     logging.info(f"Current directory: {os.getcwd()}")
     
     try:
@@ -68,9 +75,9 @@ def main():
     logging.info(f"Tokenizer loaded with {len(tokenizer.vocab)} tokens")
     logging.info(f"Tokenizer model path: {tokenizer.model_path}")
     
-    # Step 2: Create TITAN model
+    # Step 2: Create TORMENTED model
     logging.info("\n" + "="*60)
-    logging.info("Step 2: Creating TITAN-BERT-ULTRA model")
+    logging.info("Step 2: Creating TORMENTED-BERT-Frankenstein model")
     logging.info("="*60)
     
     # =========================================================================
@@ -129,7 +136,7 @@ def main():
     logging.info(f"  - BitNet: {config.use_bitnet}")
     logging.info(f"  - ODE Solver: {config.ode_solver} ({config.ode_steps} steps)")
     
-    model = TitanBertUltra(config)
+    model = TormentedBertFrankenstein(config)
     
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
@@ -180,7 +187,7 @@ def main():
     
     # Step 4: Train
     logging.info("\n" + "="*60)
-    logging.info("Step 4: Training TITAN-BERT-ULTRA")
+    logging.info("Step 4: Training TORMENTED-BERT-Frankenstein")
     logging.info("="*60)
     
     # Configure training behavior
@@ -257,7 +264,7 @@ def main():
         logging.error("="*60)
     else:
         logging.info("\n" + "="*60)
-        logging.info("🎉 TITAN-BERT-ULTRA training completed successfully!")
+        logging.info("🎉 TORMENTED-BERT-Frankenstein training completed successfully!")
         logging.info("="*60)
         
         # Final model evaluation

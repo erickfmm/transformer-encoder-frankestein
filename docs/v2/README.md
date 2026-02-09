@@ -1,8 +1,21 @@
-# **⚡ Titan-BERT-Ultra: The 1.58-bit Neural ODE Transformer**
+# **⚡ TORMENTED-BERT-Frankenstein: The Ultimate Hybrid Transformer**
 
-**Titan-BERT-Ultra** is an audacious, "Frankenstein" architecture designed to push the limits of efficiency and logical depth on constrained hardware (specifically the **Nvidia Tesla P40 24GB**).
+**TORMENTED-BERT-Frankenstein** is an audacious, "Frankenstein" architecture designed to push the limits of efficiency and logical depth on constrained hardware (specifically the **Nvidia Tesla P40 24GB**).
 
-It abandons standard FP16 Transformers in favor of **BitNet b1.58** ternary weights, **Neural ODE** continuous dynamics, **RetNet** retention mechanisms, and **Titan** neural memory blocks.
+## **📛 The TORMENTED Acronym**
+
+**TORMENTED** stands for:
+- **T**ernary (BitNet b1.58 quantization)
+- **O**DE (Neural Ordinary Differential Equations)
+- **R**etention (RetNet multi-scale retention)
+- **M**amba (State Space Models)
+- **E**xperts (Mixture-of-Experts)
+- **N**eural (Neural architecture)
+- **T**anh (Dynamic Tanh normalization)
+- **E**ncoder (Transformer encoder)
+- **D**epth (Recursive loop architecture)
+
+It abandons standard FP16 Transformers in favor of **BitNet b1.58** ternary weights, **Neural ODE** continuous dynamics, **RetNet** retention mechanisms, **Mamba** state space models, and **sparse MoE** for conditional computation.
 
 ## **🧠 Key Architectural Innovations**
 
@@ -25,13 +38,19 @@ Instead of discrete layers, the attention mechanism models the derivative of the
 
 Replaces standard Softmax attention in specific layers.
 
-* **Mechanism:** Uses a decay matrix ![][image3] to enforce locality and causal priors.  
+* **Mechanism:** Uses a decay matrix to enforce locality and causal priors.  
 * **Benefit:** Training parallelism of Transformers with the inference efficiency of RNNs.
 
-### **4\. Recursive Looping & Titan Memory**
+### **4\. Recursive Looping Architecture**
 
 * **Looping:** The input passes through the physical layers multiple times (num\_loops). A 12-layer physical model acts as a 24+ layer logical model.  
-* **Titan Memory:** A neural memory module based on "Fast Weights" that stores context dynamically, reducing reliance on massive KV caches.
+* **Parameter Efficiency:** Achieves deep logical depth without proportional parameter growth.
+
+### **5\. Sparse Mixture-of-Experts**
+
+* **Conditional Computation:** Routes each token to top-k experts among N total experts.
+* **Benefit:** Increases model capacity without proportional computational cost.
+* **Implementation:** All expert networks use BitLinear layers for memory efficiency.
 
 ## **🛠️ Hardware Optimization (The "P40 Rig")**
 
@@ -144,38 +163,64 @@ stable_layer_pattern = [
 
 Run the high-throughput trainer optimized for Xeon CPUs:
 
-python3 train\_titan\_bert.py
+```bash
+python3 src/training/v2/main.py
+```
 
 *Note: Ensure you have mounted a RAM disk if your NVMe is slow:*
 
-sudo mount \-t tmpfs \-o size=64G tmpfs /mnt/ramdisk
+```bash
+sudo mount -t tmpfs -o size=64G tmpfs /mnt/ramdisk
+```
+
+### **🎨 Rendering the Architecture Diagram**
+
+The complete architecture diagram is available in `diagram.mermaid`. To render it to PDF for inclusion in the LaTeX paper:
+
+**Option 1: Using Mermaid CLI (recommended)**
+```bash
+# Install mermaid-cli if not already installed
+npm install -g @mermaid-js/mermaid-cli
+
+# Render diagram to PDF
+mmdc -i diagram.mermaid -o diagram.pdf -t neutral -b transparent
+```
+
+**Option 2: Using online tools**
+- Visit [https://mermaid.live](https://mermaid.live)
+- Paste the contents of `diagram.mermaid`
+- Export as PDF or PNG
+
+Once generated, the diagram can be included in the LaTeX paper by uncommenting the figure block in `paper.tex`.
 
 ## **📚 References & Research Sources**
 
 This model implements concepts from the following papers:
 
 1. **BitNet b1.58 (The 1-bit Era)**  
-   * *Wang et al. (Microsoft Research, 2024\)*  
+   * *Wang et al. (Microsoft Research, 2024)*  
    * "The Era of 1-bit LLMs: All Large Language Models are on 1.58 Bits"  
    * [arXiv:2402.17764](https://arxiv.org/abs/2402.17764)  
 2. **Neural Ordinary Differential Equations**  
-   * *Chen et al. (NeurIPS 2018\)*  
+   * *Chen et al. (NeurIPS 2018)*  
    * "Neural Ordinary Differential Equations"  
    * [arXiv:1806.07366](https://arxiv.org/abs/1806.07366)  
 3. **RetNet (Retention Networks)**  
-   * *Sun et al. (Microsoft Research, 2023\)*  
+   * *Sun et al. (Microsoft Research, 2023)*  
    * "Retentive Network: A Successor to Transformer for Large Language Models"  
    * [arXiv:2307.08621](https://arxiv.org/abs/2307.08621)  
-4. **Titan (Memory as Context)**  
-   * *Behrouz et al. (Google DeepMind, 2025\)*  
-   * "Titan: Memory as Context for Large Language Models"  
-   * *Note: Refers to the concept of Neural Memory modules for context extension.*  
-5. **Mamba (State Space Models)**  
+4. **Mamba (State Space Models)**  
    * *Gu & Dao (2023)*  
    * "Mamba: Linear-Time Sequence Modeling with Selective State Spaces"  
    * [arXiv:2312.00752](https://arxiv.org/abs/2312.00752)  
-6. **HOPE (Hyperspherical Orbit Positional Embeddings)**  
-   * *Concept derived from RoPE (Su et al.) extended to high-dimensional manifold projections for better extrapolation.*
+5. **Dynamic Tanh Normalization**
+   * *Zhu et al. (2025)*
+   * "Transformers Can Do Arithmetic with the Right Embeddings"
+6. **Sparse Mixture-of-Experts**
+   * *Fedus et al. (Google, 2022)*
+   * "Switch Transformers: Scaling to Trillion Parameter Models"
+
+**Note:** "titan_attn" in the layer pattern refers to standard scaled dot-product attention, named for clarity in hybrid architectures.
 
 ## **⚠️ Disclaimer**
 
