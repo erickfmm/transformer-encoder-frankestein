@@ -51,24 +51,22 @@ def main():
     logging.info("Step 1: Training/Loading SPM tokenizer (50k vocab)")
     logging.info("="*60)
     
-    tokenizer = SpanishSPMTokenizer(vocab_size=50000)
-    
     # Check if tokenizer already exists
     model_path = "es_redpajama_50k.model"
     if os.path.exists(model_path):
         logging.info("Loading existing tokenizer...")
-        import sentencepiece as spm
-        tokenizer.sp_model = spm.SentencePieceProcessor()
-        tokenizer.sp_model.load(model_path)
-        
-        # Build vocab
-        for i in range(tokenizer.sp_model.GetPieceSize()):
-            token = tokenizer.sp_model.IdToPiece(i)
-            tokenizer.vocab[token] = i
-            tokenizer.inverse_vocab[i] = token
+        tokenizer = SpanishSPMTokenizer(vocab_size=50000, model_path=model_path)
     else:
-        logging.info("Training new tokenizer...")
-        tokenizer.train(model_prefix="es_redpajama_50k")
+        logging.info("Training new tokenizer with maximum data (100GB RAM target)...")
+        tokenizer = SpanishSPMTokenizer(vocab_size=50000)
+        tokenizer.train(
+            model_prefix="es_redpajama_50k",
+            max_training_samples=50_000_000,  # Up to 50M samples
+            target_ram_gb=100.0  # Use up to 100GB RAM for quality tokenizer
+        )
+    
+    logging.info(f"Tokenizer loaded with {len(tokenizer.vocab)} tokens")
+    logging.info(f"Tokenizer model path: {tokenizer.model_path}")
     
     # Step 2: Create TITAN model
     logging.info("\n" + "="*60)
@@ -118,7 +116,7 @@ def main():
         top_k_experts=2,
         dropout=0.1,
         ode_solver="rk4",
-        ode_steps=2,                # Low steps for speed
+        ode_steps=4,                # Low steps for speed
         use_bitnet=True,            # Essential for memory efficiency
         norm_type="dynamic_tanh",
         layer_pattern=stable_layer_pattern  # Use stable pattern
@@ -139,17 +137,30 @@ def main():
     logging.info(f"Total Parameters: {total_params/1e6:.2f}M")
     logging.info(f"Trainable Parameters: {trainable_params/1e6:.2f}M")
     
-    # Step 3: Prepare dataset
+    # Step 3: Prepare dataset with fault-tolerant parallel processing
     logging.info("\n" + "="*60)
-    logging.info("Step 3: Preparing MLM dataset")
+    logging.info("Step 3: Preparing MLM dataset with resilient caching")
     logging.info("="*60)
     
     dataset = StreamingMLMDataset(
         tokenizer=tokenizer,
         max_length=512,             # Standard sequence length
         mlm_probability=0.15,
-        max_samples=200000          # Increased for v2 training
+        max_samples=20_000_000,         # Increased for v2 training
+        batch_size=25000,            # Process 25000 examples per batch
+        num_workers=56,             # Use all 56 cores for parallel processing
+        cache_dir="./temp_data/v2_dataset_cache"  # Separate cache for v2
     )
+    
+    # Show dataset statistics
+    stats = dataset.get_stats()
+    logging.info(f"Dataset Statistics:")
+    logging.info(f"  - Total examples: {stats['total_examples']}")
+    logging.info(f"  - Completed batches: {stats['completed_batches']}")
+    logging.info(f"  - Samples processed: {stats['total_samples_processed']}")
+    logging.info(f"  - Parallel workers: {stats['num_workers']}")
+    logging.info(f"  - Cache directory: {stats['cache_dir']}")
+    logging.info(f"  - Recovery enabled: Cache will be reused on restart")
     
     # Smaller batch size due to model complexity
     batch_size = 2 if torch.cuda.is_available() else 1
@@ -180,7 +191,7 @@ def main():
         num_best_checkpoints=2,                   # Keep top 2 best models
         nan_check_interval=10,                    # Check NaN every 10 steps
         log_gradient_stats=True,
-        gradient_log_interval=100
+        gradient_log_interval=10
     )
     
     trainer = TitanTrainer(model, config, training_config=training_config)
@@ -265,8 +276,12 @@ def main():
     # Cleanup
     logging.info("\n🧹 Cleaning up temporary files...")
     tokenizer.storage_manager.cleanup()
-    dataset.storage_manager.cleanup()
+    # Note: NOT cleaning dataset cache to allow recovery on restart
+    # To clean manually: dataset.cleanup_cache()
     trainer.storage_manager.cleanup()
+    
+    logging.info("💡 Dataset cache preserved for fault recovery")
+    logging.info(f"   Location: {stats['cache_dir']}")
     
     # Log summary of saved checkpoints
     logging.info("\n📁 Checkpoint Summary:")

@@ -10,25 +10,38 @@ from utils.storage_manager import StorageManager
 class SpanishSPMTokenizer:
     """Spanish SentencePiece Tokenizer trained on RedPajama"""
     
-    def __init__(self, vocab_size: int = 50000):
+    def __init__(self, vocab_size: int = 50000, model_path: str = None):
         self.vocab_size = vocab_size
+        self.model_path = model_path
         self.sp_model = None
         self.vocab = {}
         self.inverse_vocab = {}
         self.storage_manager = StorageManager()
         
-    def prepare_training_data(self, max_samples: int = 500000) -> str:
+        # If model_path provided, load the model
+        if model_path and os.path.exists(model_path):
+            self.load(model_path)
+        
+    def prepare_training_data(self, max_samples: int = 50_000_000, 
+                              target_ram_gb: float = 100.0) -> str:
         """
         Prepare training data from erickfmm/red_pajama_es_hq_35
-        Loading full dataset (non-streaming)
+        
+        Args:
+            max_samples: Maximum number of text samples to collect (default: 50M)
+            target_ram_gb: Target RAM usage in GB (default: 100GB)
+        
+        The actual limit will be determined by whichever comes first:
+        max_samples or estimated RAM usage approaching target_ram_gb
         """
-        logging.info("Loading Spanish RedPajama dataset (non-streaming mode)...")
+        logging.info(f"Preparing tokenizer training data (target: {target_ram_gb}GB RAM)")
+        logging.info(f"Max samples limit: {max_samples:,}")
         
         # Create temp file for training data
         temp_file = self.storage_manager.create_temp_file(suffix=".txt")
         
         try:
-            # Load dataset without streaming
+            # Load dataset with streaming to avoid loading everything at once
             dataset = load_dataset(
                 "erickfmm/red_pajama_es_hq_35",
                 split="train",
@@ -36,40 +49,97 @@ class SpanishSPMTokenizer:
             )
             
             count = 0
+            total_chars = 0
+            estimated_ram_gb = 0
+            
             with open(temp_file, 'w', encoding='utf-8') as f:
                 for example in dataset:
+                    if count >= max_samples:
+                        logging.info(f"Reached max_samples limit: {max_samples:,}")
+                        break
+                    
                     if 'text' in example:
                         text = example['text'].strip()
                         if len(text) > 100:  # Skip very short texts
                             f.write(text + '\n')
                             count += 1
+                            total_chars += len(text)
                             
-                            if count % 10000 == 0:
-                                f.flush()
-                                logging.info(f"Collected {count} samples...")
-                                # Check storage
-                                if not self.storage_manager.register_file(temp_file):
-                                    logging.warning("Storage limit approached, stopping collection")
-                                    break
+                            # More frequent logging for first million, then every 100k
+                            if count <= 1_000_000 and count % 100_000 == 0:
+                                estimated_ram_gb = (total_chars * 2) / (1024**3)  # rough estimate
+                                logging.info(
+                                    f"Collected {count:,} samples "
+                                    f"({total_chars/1e9:.2f}B chars, "
+                                    f"~{estimated_ram_gb:.1f}GB estimated RAM)"
+                                )
+                            elif count > 1_000_000 and count % 1_000_000 == 0:
+                                estimated_ram_gb = (total_chars * 2) / (1024**3)
+                                logging.info(
+                                    f"Collected {count:,} samples "
+                                    f"({total_chars/1e9:.2f}B chars, "
+                                    f"~{estimated_ram_gb:.1f}GB estimated RAM)"
+                                )
+                                f.flush()  # Flush less frequently
+                            
+                            # Conservative check: stop if estimated RAM approaches target
+                            if estimated_ram_gb > target_ram_gb * 0.9:  # 90% of target
+                                logging.warning(
+                                    f"Approaching RAM limit (~{estimated_ram_gb:.1f}GB), "
+                                    f"stopping at {count:,} samples"
+                                )
+                                break
                 
-            logging.info(f"Created training file with {count} samples")
+            final_ram_estimate = (total_chars * 2) / (1024**3)
+            logging.info(f"✅ Created training file with {count:,} samples")
+            logging.info(f"   Total characters: {total_chars:,} ({total_chars/1e9:.2f}B)")
+            logging.info(f"   Estimated RAM usage: ~{final_ram_estimate:.1f}GB")
             return temp_file
             
         except Exception as e:
-            logging.error(f"Error loading dataset: {e}")
-            # Create fallback training data
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                for i in range(10000):
-                    f.write(f"Texto de ejemplo en español número {i}. ")
-                    f.write("Este es un texto para entrenar el tokenizador. ")
-                    f.write("El aprendizaje automático requiere datos de calidad.\n")
-            return temp_file
+            logging.error("="*60)
+            logging.error("🚨 CRITICAL ERROR: Failed to load real dataset")
+            logging.error("="*60)
+            logging.error(f"Error type: {type(e).__name__}")
+            logging.error(f"Error message: {e}")
+            logging.error(f"Dataset: erickfmm/red_pajama_es_hq_35")
+            logging.error(f"Samples collected before failure: {count:,}")
+            logging.error(f"Characters collected: {total_chars:,}")
+            logging.error("\nAttempted parameters:")
+            logging.error(f"  - max_samples: {max_samples:,}")
+            logging.error(f"  - target_ram_gb: {target_ram_gb}")
+            logging.error("\n⛔ SYSTEM HALTED - No synthetic data fallback allowed")
+            logging.error("="*60)
+            import traceback
+            logging.error("\nFull traceback:")
+            logging.error(traceback.format_exc())
+            raise RuntimeError(
+                f"Failed to prepare tokenizer training data from real dataset. "
+                f"Error: {e}. Check logs for details."
+            ) from e
     
-    def train(self, model_prefix: str = "es_spm_50k"):
-        """Train SentencePiece tokenizer with 50k vocabulary"""
-        train_file = self.prepare_training_data()
+    def train(self, model_prefix: str = "es_spm_50k", max_training_samples: int = 50_000_000,
+              target_ram_gb: float = 100.0):
+        """
+        Train SentencePiece tokenizer with maximum data utilization
         
-        # SPM training arguments
+        Args:
+            model_prefix: Prefix for output model files
+            max_training_samples: Maximum samples to collect from dataset
+            target_ram_gb: Target RAM usage (default: 100GB)
+        """
+        logging.info(f"Starting tokenizer training with up to {target_ram_gb}GB RAM")
+        
+        train_file = self.prepare_training_data(
+            max_samples=max_training_samples,
+            target_ram_gb=target_ram_gb
+        )
+        
+        # Get available cores
+        num_cores = os.cpu_count() or 1
+        logging.info(f"Using {num_cores} CPU cores for training")
+        
+        # SPM training arguments - optimized for large data
         spm_args = [
             f'--input={train_file}',
             f'--model_prefix={model_prefix}',
@@ -87,9 +157,10 @@ class SpanishSPMTokenizer:
             '--add_dummy_prefix=true',
             '--byte_fallback=true',
             '--split_digits=true',
-            f'--num_threads={os.cpu_count()//2}',  # Use half the cores
-            '--input_sentence_size=1000000',
+            f'--num_threads={num_cores}',  # Use ALL cores for maximum speed
+            '--input_sentence_size=100000000',  # 100M sentences max (increased from 1M)
             '--shuffle_input_sentence=true',
+            '--train_extremely_large_corpus=true',  # SentencePiece flag for large data
         ]
         
         logging.info("Training SentencePiece tokenizer...")
@@ -97,6 +168,7 @@ class SpanishSPMTokenizer:
         
         # Load trained model
         model_path = f"{model_prefix}.model"
+        self.model_path = model_path  # Store model path for later use
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.load(model_path)
         
@@ -106,11 +178,39 @@ class SpanishSPMTokenizer:
             self.vocab[token] = i
             self.inverse_vocab[i] = token
         
+        # Update vocab_size to match trained model
+        self.vocab_size = self.sp_model.GetPieceSize()
+        
         logging.info(f"Tokenizer trained with {len(self.vocab)} tokens")
         return model_path
     
+    def load(self, model_path: str):
+        """Load an existing SentencePiece model"""
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+        
+        self.model_path = model_path
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.load(model_path)
+        
+        # Build vocab
+        self.vocab = {}
+        self.inverse_vocab = {}
+        for i in range(self.sp_model.GetPieceSize()):
+            token = self.sp_model.IdToPiece(i)
+            self.vocab[token] = i
+            self.inverse_vocab[i] = token
+        
+        # Update vocab_size to match loaded model
+        self.vocab_size = self.sp_model.GetPieceSize()
+        
+        logging.info(f"Loaded tokenizer from {model_path} with {len(self.vocab)} tokens")
+    
     def encode(self, text: str, max_length: int = 512) -> Dict[str, List[int]]:
         """Encode text with special tokens"""
+        if self.sp_model is None:
+            raise RuntimeError("Tokenizer not initialized. Call train() or load() first.")
+        
         tokens = self.sp_model.encode_as_ids(text)
         
         # Add special tokens
