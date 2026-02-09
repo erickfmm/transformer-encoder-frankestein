@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
 
 from utils.storage_manager import StorageManager
-from model.v2.titan_bert_ultra import TitanBertUltra, UltraConfig
+from src.model.v2.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 
 
 # ==================== TRAINING CONFIGURATION ====================
@@ -42,7 +42,7 @@ class TrainingConfig:
 class TitanTrainer:
     """Advanced trainer for TITAN-BERT-ULTRA with specialized optimizations"""
     
-    def __init__(self, model: TitanBertUltra, config: UltraConfig, 
+    def __init__(self, model: TormentedBertFrankenstein, config: UltraConfig, 
                  training_config: TrainingConfig = None,
                  device: str = None): #torch.device = None):
         self.model = model
@@ -518,7 +518,7 @@ class TitanTrainer:
             'scaler_state_dict': self.scaler.state_dict(),
             'config': self.config,
             'best_loss': self.best_loss,
-            'model_class': 'TitanBertUltra'
+            'model_class': 'TormentedBertFrankenstein'
         }
         
         torch.save(checkpoint, checkpoint_path)
@@ -565,7 +565,7 @@ class TitanTrainer:
                 'scaler_state_dict': self.scaler.state_dict(),
                 'config': self.config,
                 'best_loss': current_loss,
-                'model_class': 'TitanBertUltra'
+                'model_class': 'TormentedBertFrankenstein'
             }
             
             torch.save(checkpoint, checkpoint_path)
@@ -603,7 +603,7 @@ class TitanTrainer:
             'scaler_state_dict': self.scaler.state_dict(),
             'config': self.config,
             'best_loss': self.best_loss,
-            'model_class': 'TitanBertUltra'
+            'model_class': 'TormentedBertFrankenstein'
         }
         
         filename = f"titan_checkpoint_epoch_{epoch}{suffix}.pt"
