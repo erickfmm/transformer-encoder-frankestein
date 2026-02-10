@@ -82,7 +82,8 @@ class StreamingMLMDataset(TorchDataset):
                  max_batch_in_memory: Optional[int] = None,
                  parallel_chunksize: int = 32,
                  local_parquet_dir: Optional[str] = None,
-                 prefer_local_cache: bool = True):
+                 prefer_local_cache: bool = True,
+                 stream_local_parquet: bool = True):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.mlm_probability = mlm_probability
@@ -96,6 +97,7 @@ class StreamingMLMDataset(TorchDataset):
         self.processing_batch_size = min(self.batch_size, self.max_batch_in_memory)
         self.storage_manager = StorageManager()
         self.prefer_local_cache = prefer_local_cache
+        self.stream_local_parquet = stream_local_parquet
         self.local_parquet_dir = Path(local_parquet_dir) if local_parquet_dir else None
         self.data_source = "unknown"
         
@@ -383,15 +385,19 @@ class StreamingMLMDataset(TorchDataset):
         """Load dataset from local parquet cache when available, fallback to streaming."""
         parquet_files = self._resolve_local_parquet_files() if self.prefer_local_cache else []
         if parquet_files:
-            self.data_source = f"local_parquet:{len(parquet_files)}"
+            mode = "stream" if self.stream_local_parquet else "in_memory"
+            self.data_source = f"local_parquet:{len(parquet_files)}:{mode}"
             logging.info(
-                "Using local parquet cache with %s files (no streaming download).",
+                "Using local parquet cache with %s files (no streaming download), mode=%s.",
                 len(parquet_files)
+                ,
+                mode
             )
             return load_dataset(
                 "parquet",
                 data_files=parquet_files,
-                split="train"
+                split="train",
+                streaming=self.stream_local_parquet
             )
 
         self.data_source = "streaming_remote"
@@ -460,6 +466,7 @@ class StreamingMLMDataset(TorchDataset):
             'data_source': self.data_source,
             'prefer_local_cache': self.prefer_local_cache,
             'local_parquet_dir': str(self.local_parquet_dir) if self.local_parquet_dir else None,
+            'stream_local_parquet': self.stream_local_parquet,
         }
     
     def cleanup_cache(self):

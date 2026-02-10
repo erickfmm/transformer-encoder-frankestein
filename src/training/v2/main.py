@@ -156,7 +156,13 @@ def main():
         max_samples=20_000_000,         # Increased for v2 training
         batch_size=25000,            # Process 25000 examples per batch
         num_workers=8,             # Use all 56 cores for parallel processing
-        cache_dir="./temp_data/v2_dataset_cache"  # Separate cache for v2
+        cache_dir="./temp_data/v2_dataset_cache",  # Separate cache for v2
+        local_parquet_dir="/home/erickfmm/.cache/huggingface/hub/"
+                          "datasets--erickfmm--red_pajama_es_hq_35/"
+                          "snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/"
+                          "train/",
+        prefer_local_cache=True,
+        stream_local_parquet=True
     )
     
     # Show dataset statistics
