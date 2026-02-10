@@ -155,7 +155,7 @@ def main():
         mlm_probability=0.15,
         max_samples=20_000_000,         # Increased for v2 training
         batch_size=25000,            # Process 25000 examples per batch
-        num_workers=56,             # Use all 56 cores for parallel processing
+        num_workers=8,             # Use all 56 cores for parallel processing
         cache_dir="./temp_data/v2_dataset_cache"  # Separate cache for v2
     )
     

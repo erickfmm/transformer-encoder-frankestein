@@ -1,5 +1,6 @@
 
 from typing import Tuple, List, Dict, Optional
+from bisect import bisect_right
 import logging
 from datasets import load_dataset
 import random
@@ -8,8 +9,7 @@ import torch
 import json
 import pickle
 from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from functools import partial
+from concurrent.futures import ProcessPoolExecutor
 import multiprocessing as mp
 
 from utils.storage_manager import StorageManager
@@ -77,13 +77,20 @@ class StreamingMLMDataset(TorchDataset):
     def __init__(self, tokenizer: SpanishSPMTokenizer, max_length: int = 512,
                  mlm_probability: float = 0.15, max_samples: int = 1000000,
                  batch_size: int = 5000, num_workers: Optional[int] = None,
-                 cache_dir: Optional[str] = None):
+                 cache_dir: Optional[str] = None,
+                 max_batch_in_memory: Optional[int] = None,
+                 parallel_chunksize: int = 32):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.mlm_probability = mlm_probability
         self.max_samples = max_samples
         self.batch_size = batch_size
-        self.num_workers = num_workers or min(56, mp.cpu_count() - 2)  # Leave 2 cores free
+        requested_workers = num_workers or min(8, max(1, mp.cpu_count() // 2))
+        self.num_workers = max(1, min(requested_workers, mp.cpu_count()))
+        self.parallel_chunksize = max(1, parallel_chunksize)
+        default_max_batch = min(self.batch_size, 2000)
+        self.max_batch_in_memory = max_batch_in_memory or default_max_batch
+        self.processing_batch_size = min(self.batch_size, self.max_batch_in_memory)
         self.storage_manager = StorageManager()
         
         # Setup cache directory structure
@@ -99,8 +106,15 @@ class StreamingMLMDataset(TorchDataset):
         # Load or initialize metadata
         self.metadata = self._load_metadata()
         
-        # Prepare or load examples
-        self.examples = self._prepare_examples()
+        # Lazy batch index (keeps RAM low)
+        self.batch_meta: List[Dict[str, int]] = []
+        self.cumulative_sizes: List[int] = []
+        self.total_examples = 0
+        self._batch_cache_id: Optional[int] = None
+        self._batch_cache: Optional[List[Dict]] = None
+
+        # Prepare or load examples (lazy indexing)
+        self._prepare_examples()
     
     def _load_metadata(self) -> Dict:
         """Load or initialize metadata"""
@@ -158,35 +172,48 @@ class StreamingMLMDataset(TorchDataset):
             logging.error(f"Error saving batch {batch_id}: {e}")
             return False
     
-    def _load_existing_batches(self) -> List[Dict]:
-        """Load all existing completed batches"""
-        examples = []
+    def _append_batch_meta(self, batch_id: int, batch_size: int):
+        if batch_size <= 0:
+            return
+        self.batch_meta.append({'batch_id': batch_id, 'size': batch_size})
+        self.total_examples += batch_size
+        self.cumulative_sizes.append(self.total_examples)
+
+    def _load_existing_batches(self) -> None:
+        """Load metadata for all existing completed batches (lazy indexing)"""
         completed_batches = sorted(self.metadata.get('completed_batches', []))
-        
-        logging.info(f"Loading {len(completed_batches)} existing batches...")
+
+        logging.info(f"Indexing {len(completed_batches)} existing batches...")
         for batch_id in completed_batches:
             batch_examples = self._load_batch(batch_id)
-            examples.extend(batch_examples)
-            
-            if len(examples) % 50000 == 0:
-                logging.info(f"Loaded {len(examples)} examples so far...")
-        
-        logging.info(f"Loaded {len(examples)} examples from {len(completed_batches)} batches")
-        return examples
+            batch_size = len(batch_examples)
+            self._append_batch_meta(batch_id, batch_size)
+
+            if self.total_examples % 50000 == 0 and self.total_examples > 0:
+                logging.info(f"Indexed {self.total_examples} examples so far...")
+
+        logging.info(
+            f"Indexed {self.total_examples} examples from {len(completed_batches)} batches"
+        )
     
-    def _prepare_examples(self) -> List[Dict]:
-        """Prepare examples with fault-tolerant parallel processing"""
-        # Load existing batches
-        examples = self._load_existing_batches()
-        samples_processed = len(examples)
+    def _prepare_examples(self) -> None:
+        """Prepare examples with fault-tolerant parallel processing (lazy)"""
+        # Load existing batch metadata
+        self._load_existing_batches()
+        samples_processed = self.total_examples
         
         # Check if we already have enough samples
         if samples_processed >= self.max_samples:
             logging.info(f"Already have {samples_processed} samples, skipping data preparation")
-            return examples[:self.max_samples]
+            return
         
         logging.info(f"Starting data preparation from {samples_processed} samples...")
         logging.info(f"Using {self.num_workers} parallel workers")
+        if self.processing_batch_size < self.batch_size:
+            logging.info(
+                f"Reducing in-memory batch size to {self.processing_batch_size} "
+                f"(configured batch_size={self.batch_size})"
+            )
         
         try:
             dataset = load_dataset(
@@ -204,7 +231,7 @@ class StreamingMLMDataset(TorchDataset):
                         next(dataset_iter)
                     except StopIteration:
                         logging.warning("Dataset exhausted during skip")
-                        return examples
+                        return
             
             # Process in batches with parallel workers
             current_batch_id = self.metadata.get('last_batch_id', -1) + 1
@@ -220,14 +247,14 @@ class StreamingMLMDataset(TorchDataset):
                             batch_texts.append(text)
                             
                             # Process batch when full
-                            if len(batch_texts) >= self.batch_size:
+                            if len(batch_texts) >= self.processing_batch_size:
                                 new_examples = self._process_batch_parallel(
                                     batch_texts, current_batch_id
                                 )
                                 
                                 if new_examples:
-                                    examples.extend(new_examples)
-                                    samples_processed += len(new_examples)
+                                    batch_size = len(new_examples)
+                                    samples_processed += batch_size
                                     
                                     # Save batch and update metadata
                                     if self._save_batch(current_batch_id, new_examples):
@@ -235,10 +262,11 @@ class StreamingMLMDataset(TorchDataset):
                                         self.metadata['last_batch_id'] = current_batch_id
                                         self.metadata['total_samples_processed'] = samples_processed
                                         self._save_metadata()
+                                        self._append_batch_meta(current_batch_id, batch_size)
                                         
                                         logging.info(
                                             f"Batch {current_batch_id} completed: "
-                                            f"{len(new_examples)} examples, "
+                                            f"{batch_size} examples, "
                                             f"total: {samples_processed}/{self.max_samples}"
                                         )
                                     
@@ -262,18 +290,19 @@ class StreamingMLMDataset(TorchDataset):
             if batch_texts and samples_processed < self.max_samples:
                 new_examples = self._process_batch_parallel(batch_texts, current_batch_id)
                 if new_examples:
-                    examples.extend(new_examples)
-                    samples_processed += len(new_examples)
+                    batch_size = len(new_examples)
+                    samples_processed += batch_size
                     
                     if self._save_batch(current_batch_id, new_examples):
                         self.metadata['completed_batches'].append(current_batch_id)
                         self.metadata['last_batch_id'] = current_batch_id
                         self.metadata['total_samples_processed'] = samples_processed
                         self._save_metadata()
+                        self._append_batch_meta(current_batch_id, batch_size)
                         
                         logging.info(
                             f"Final batch {current_batch_id} completed: "
-                            f"{len(new_examples)} examples, total: {samples_processed}"
+                            f"{batch_size} examples, total: {samples_processed}"
                         )
             
             logging.info(f"Data preparation completed: {samples_processed} total examples")
@@ -286,7 +315,7 @@ class StreamingMLMDataset(TorchDataset):
             logging.error(f"Error message: {e}")
             logging.error(f"Dataset: erickfmm/red_pajama_es_hq_35")
             logging.error(f"Samples processed before failure: {samples_processed}")
-            logging.error(f"Examples collected: {len(examples)}")
+            logging.error(f"Examples indexed: {self.total_examples}")
             logging.error(f"\nAttempted configuration:")
             logging.error(f"  - max_samples: {self.max_samples:,}")
             logging.error(f"  - batch_size: {self.batch_size:,}")
@@ -294,11 +323,11 @@ class StreamingMLMDataset(TorchDataset):
             logging.error(f"  - cache_dir: {self.cache_dir}")
             
             # If we have some examples from cache, that's acceptable
-            if examples:
-                logging.error(f"\n⚠️  {len(examples)} examples available from cache")
+            if self.total_examples:
+                logging.error(f"\n⚠️  {self.total_examples} examples available from cache")
                 logging.error("Continuing with cached data only (no synthetic fallback)")
                 logging.error("="*60)
-                return examples[:self.max_samples]
+                return
             else:
                 logging.error("\n⛔ SYSTEM HALTED - No cached data and no synthetic fallback allowed")
                 logging.error("="*60)
@@ -310,43 +339,40 @@ class StreamingMLMDataset(TorchDataset):
                     f"Error: {e}. Check logs for details."
                 ) from e
         
-        return examples[:self.max_samples]
+        return
     
     def _process_batch_parallel(self, texts: List[str], batch_id: int) -> List[Dict]:
         """Process a batch of texts in parallel"""
         if not texts:
             return []
         
-        # Prepare arguments for parallel processing
-        args_list = [
-            (text, self.tokenizer.model_path, self.max_length, 
-             self.mlm_probability, self.tokenizer.vocab_size)
-            for text in texts
-        ]
-        
         results = []
         try:
             with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
-                futures = {
-                    executor.submit(_process_single_example, args): idx 
-                    for idx, args in enumerate(args_list)
-                }
-                
-                for future in as_completed(futures):
-                    try:
-                        result = future.result()
-                        if result is not None:
-                            results.append(result)
-                    except Exception as e:
-                        logging.warning(f"Error processing example in batch {batch_id}: {e}")
+                args_iter = (
+                    (text, self.tokenizer.model_path, self.max_length,
+                     self.mlm_probability, self.tokenizer.vocab_size)
+                    for text in texts
+                )
+
+                for result in executor.map(
+                    _process_single_example,
+                    args_iter,
+                    chunksize=self.parallel_chunksize
+                ):
+                    if result is not None:
+                        results.append(result)
         
         except Exception as e:
             logging.error(f"Error in parallel processing for batch {batch_id}: {e}")
             # Fallback to sequential processing
             logging.info("Falling back to sequential processing...")
-            for args in args_list:
+            for text in texts:
                 try:
-                    result = _process_single_example(args)
+                    result = _process_single_example(
+                        (text, self.tokenizer.model_path, self.max_length,
+                         self.mlm_probability, self.tokenizer.vocab_size)
+                    )
                     if result is not None:
                         results.append(result)
                 except Exception as ex:
@@ -362,7 +388,7 @@ class StreamingMLMDataset(TorchDataset):
     def get_stats(self) -> Dict:
         """Get dataset statistics"""
         return {
-            'total_examples': len(self.examples),
+            'total_examples': self.total_examples,
             'completed_batches': len(self.metadata.get('completed_batches', [])),
             'total_samples_processed': self.metadata.get('total_samples_processed', 0),
             'batch_size': self.batch_size,
@@ -381,10 +407,23 @@ class StreamingMLMDataset(TorchDataset):
                 logging.error(f"Error cleaning up cache: {e}")
     
     def __len__(self):
-        return len(self.examples)
+        return self.total_examples
     
     def __getitem__(self, idx):
-        example = self.examples[idx]
+        if idx < 0 or idx >= self.total_examples:
+            raise IndexError("Index out of range")
+
+        batch_pos = bisect_right(self.cumulative_sizes, idx)
+        batch_meta = self.batch_meta[batch_pos]
+        batch_id = batch_meta['batch_id']
+
+        if self._batch_cache_id != batch_id:
+            self._batch_cache = self._load_batch(batch_id)
+            self._batch_cache_id = batch_id
+
+        batch_start = 0 if batch_pos == 0 else self.cumulative_sizes[batch_pos - 1]
+        local_idx = idx - batch_start
+        example = self._batch_cache[local_idx]
         return {
             'input_ids': torch.tensor(example['input_ids'], dtype=torch.long),
             'attention_mask': torch.tensor(example['attention_mask'], dtype=torch.long),

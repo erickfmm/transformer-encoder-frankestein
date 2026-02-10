@@ -5,9 +5,9 @@ from pathlib import Path
 
 # ==================== STORAGE MANAGER ====================
 class StorageManager:
-    """Manages disk usage to stay under 300GB limit"""
+    """Manages disk usage to stay under 500GB limit"""
     
-    def __init__(self, limit_gb: float = 300.0):
+    def __init__(self, limit_gb: float = 500.0):
         self.limit_bytes = limit_gb * 1024**3
         self.used_bytes = 0
         self.temp_files = []
