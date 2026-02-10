@@ -11,6 +11,7 @@ import pickle
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing as mp
+import os
 
 from utils.storage_manager import StorageManager
 from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
@@ -79,7 +80,9 @@ class StreamingMLMDataset(TorchDataset):
                  batch_size: int = 5000, num_workers: Optional[int] = None,
                  cache_dir: Optional[str] = None,
                  max_batch_in_memory: Optional[int] = None,
-                 parallel_chunksize: int = 32):
+                 parallel_chunksize: int = 32,
+                 local_parquet_dir: Optional[str] = None,
+                 prefer_local_cache: bool = True):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.mlm_probability = mlm_probability
@@ -92,6 +95,9 @@ class StreamingMLMDataset(TorchDataset):
         self.max_batch_in_memory = max_batch_in_memory or default_max_batch
         self.processing_batch_size = min(self.batch_size, self.max_batch_in_memory)
         self.storage_manager = StorageManager()
+        self.prefer_local_cache = prefer_local_cache
+        self.local_parquet_dir = Path(local_parquet_dir) if local_parquet_dir else None
+        self.data_source = "unknown"
         
         # Setup cache directory structure
         if cache_dir:
@@ -216,11 +222,7 @@ class StreamingMLMDataset(TorchDataset):
             )
         
         try:
-            dataset = load_dataset(
-                "erickfmm/red_pajama_es_hq_35",
-                split="train",
-                streaming=True
-            )
+            dataset = self._load_dataset_source()
             
             # Skip already processed examples
             dataset_iter = iter(dataset)
@@ -340,6 +342,67 @@ class StreamingMLMDataset(TorchDataset):
                 ) from e
         
         return
+
+    def _resolve_local_parquet_files(self) -> List[str]:
+        """Find local parquet files if present (Hugging Face cache or user-provided)."""
+        candidate_dirs: List[Path] = []
+        if self.local_parquet_dir:
+            candidate_dirs.append(self.local_parquet_dir)
+
+        hf_cache = os.getenv("HF_DATASETS_CACHE")
+        if hf_cache:
+            candidate_dirs.append(Path(hf_cache) / "hub" / "datasets--erickfmm--red_pajama_es_hq_35")
+
+        candidate_dirs.append(
+            Path.home() / ".cache" / "huggingface" / "hub" / "datasets--erickfmm--red_pajama_es_hq_35"
+        )
+
+        expanded_dirs: List[Path] = []
+        for base_dir in candidate_dirs:
+            if not base_dir.exists():
+                continue
+
+            expanded_dirs.append(base_dir)
+
+            snapshots_dir = base_dir / "snapshots"
+            if snapshots_dir.exists():
+                for train_dir in snapshots_dir.glob("*/train"):
+                    expanded_dirs.append(train_dir)
+
+        for base_dir in expanded_dirs:
+            if not base_dir.exists():
+                continue
+
+            parquet_files = sorted(str(p.resolve()) for p in base_dir.rglob("*.parquet"))
+            if parquet_files:
+                return parquet_files
+
+        return []
+
+    def _load_dataset_source(self):
+        """Load dataset from local parquet cache when available, fallback to streaming."""
+        parquet_files = self._resolve_local_parquet_files() if self.prefer_local_cache else []
+        if parquet_files:
+            self.data_source = f"local_parquet:{len(parquet_files)}"
+            logging.info(
+                "Using local parquet cache with %s files (no streaming download).",
+                len(parquet_files)
+            )
+            return load_dataset(
+                "parquet",
+                data_files=parquet_files,
+                split="train"
+            )
+
+        self.data_source = "streaming_remote"
+        logging.info(
+            "Local parquet cache not found (checked user path/HF cache); falling back to streaming."
+        )
+        return load_dataset(
+            "erickfmm/red_pajama_es_hq_35",
+            split="train",
+            streaming=True
+        )
     
     def _process_batch_parallel(self, texts: List[str], batch_id: int) -> List[Dict]:
         """Process a batch of texts in parallel"""
@@ -394,6 +457,9 @@ class StreamingMLMDataset(TorchDataset):
             'batch_size': self.batch_size,
             'num_workers': self.num_workers,
             'cache_dir': str(self.cache_dir),
+            'data_source': self.data_source,
+            'prefer_local_cache': self.prefer_local_cache,
+            'local_parquet_dir': str(self.local_parquet_dir) if self.local_parquet_dir else None,
         }
     
     def cleanup_cache(self):
