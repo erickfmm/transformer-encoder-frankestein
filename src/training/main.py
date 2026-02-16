@@ -139,8 +139,8 @@ def main():
             top_k_experts=2,
             dropout=0.1,
             ode_solver="rk4",
-            ode_steps=2,
-            use_bitnet=True,
+            ode_steps=4, # ODE can be unstable, keep steps low for mini, 4 for better stability
+            use_bitnet=False, # on mini, we can afford full precision for stability, because it went on infinity with ternary in early tests
             norm_type="derf",
             layer_pattern=stable_layer_pattern,
             use_factorized_embedding=True,
