@@ -41,8 +41,8 @@ class TrainingConfig:
 
     # Post-backward stability
     max_nan_retries: int = 3
-    grad_clip_max_norm: float = 1.0
-    inf_post_clip_threshold: float = 10.0
+    grad_clip_max_norm: float = 5.0  # Increased from 1.0 - too aggressive clipping was causing issues
+    inf_post_clip_threshold: float = 100.0  # Increased from 10.0 - more conservative threshold
     min_grad_norm_for_signal: float = 1e-10
     inf_epoch_patience: int = 5
     zero_grad_plateau_patience: int = 5
@@ -306,7 +306,7 @@ class TitanTrainer:
     def _scale_learning_rate(self, factor: float):
         """Scale all optimizer param-group learning rates by a multiplicative factor."""
         for group in self.optimizer.param_groups:
-            group['lr'] = max(group['lr'] * factor, 1e-8)
+            group['lr'] = max(group['lr'] * factor, 1e-9)  # Lower floor to allow more aggressive reduction
     
     def _setup_optimizer(self) -> optim.Optimizer:
         """Setup optimizer with parameter groups for different components"""
@@ -339,15 +339,16 @@ class TitanTrainer:
             else:
                 other_params.append(param)
         
-        # Parameter groups with different learning rates
+        # Parameter groups with DRASTICALLY REDUCED learning rates for stability
+        # Previous LRs were causing immediate gradient explosion (see metrics: grad_norm 2→42889)
         param_groups = [
-            {'params': embed_params, 'lr': 1e-4, 'weight_decay': 0.01, 'name': 'embeddings'},
-            {'params': norm_params, 'lr': 2e-4, 'weight_decay': 0.001, 'name': 'norms'},
-            {'params': ode_params, 'lr': 5e-5, 'weight_decay': 0.01, 'name': 'ode'},  # Lower LR for ODE stability
-            {'params': retnet_params, 'lr': 1.5e-4, 'weight_decay': 0.01, 'name': 'retnet'},
-            {'params': mamba_params, 'lr': 1e-4, 'weight_decay': 0.01, 'name': 'mamba'},
-            {'params': titan_attn_params, 'lr': 1e-4, 'weight_decay': 0.01, 'name': 'attention'},
-            {'params': other_params, 'lr': 1e-4, 'weight_decay': 0.01, 'name': 'other'}
+            {'params': embed_params, 'lr': 1e-6, 'weight_decay': 0.01, 'name': 'embeddings'},  # Reduced 100x
+            {'params': norm_params, 'lr': 5e-6, 'weight_decay': 0.001, 'name': 'norms'},  # Reduced 40x
+            {'params': ode_params, 'lr': 1e-7, 'weight_decay': 0.01, 'name': 'ode'},  # Reduced 500x - ODE extremely unstable
+            {'params': retnet_params, 'lr': 5e-6, 'weight_decay': 0.01, 'name': 'retnet'},  # Reduced 30x
+            {'params': mamba_params, 'lr': 2e-6, 'weight_decay': 0.01, 'name': 'mamba'},  # Reduced 50x
+            {'params': titan_attn_params, 'lr': 3e-6, 'weight_decay': 0.01, 'name': 'attention'},  # Reduced 33x
+            {'params': other_params, 'lr': 2e-6, 'weight_decay': 0.01, 'name': 'other'}  # Reduced 50x
         ]
         
         # Filter out empty groups
@@ -398,7 +399,7 @@ class TitanTrainer:
         logging.info(f"📐 Gradient Accumulation: {self.gradient_accumulation_steps} steps")
     
     def compute_mlm_loss(self, input_ids, attention_mask, labels):
-        """Compute MLM loss with proper masking"""
+        """Compute MLM loss with proper masking and shape safety checks"""
         # Forward pass
         logits = self.model(input_ids)
 
@@ -408,7 +409,15 @@ class TitanTrainer:
             raise RuntimeError(f"Non-finite logits detected in forward pass: {bad} elements")
         
         # Reshape for loss computation
-        _, _, vocab_size = logits.shape
+        batch_size, seq_len, vocab_size = logits.shape
+        
+        # CRITICAL: Ensure all tensors have matching shapes before flattening
+        # Variable sequence lengths can cause shape mismatches
+        if labels.shape != input_ids.shape:
+            raise RuntimeError(f"Shape mismatch: labels {labels.shape} != input_ids {input_ids.shape}")
+        if attention_mask.shape != input_ids.shape:
+            raise RuntimeError(f"Shape mismatch: attention_mask {attention_mask.shape} != input_ids {input_ids.shape}")
+        
         logits = logits.view(-1, vocab_size)
         labels = labels.view(-1)
         input_flat = input_ids.view(-1)
@@ -523,11 +532,11 @@ class TitanTrainer:
                     grad_stats = self._inspect_gradients()
                     current_epoch_had_zero = current_epoch_had_zero or grad_stats["has_zero"]
 
-                    # Repair policy for NaN gradients: skip step, zero grad, LR/2 retry up to N times
+                    # Repair policy for NaN gradients: skip step, zero grad, LR*0.75 retry up to N times
                     if grad_stats["has_nan"]:
                         repair_action = f"nan_grad_retry_{retry_count + 1}"
                         self.optimizer.zero_grad(set_to_none=True)
-                        self._scale_learning_rate(0.5)
+                        self._scale_learning_rate(0.75)  # Less aggressive reduction (was 0.5)
                         retry_count += 1
 
                         if retry_count > self.training_config.max_nan_retries:

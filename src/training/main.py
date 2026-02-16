@@ -56,7 +56,7 @@ def main():
 
     # Setup logging
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
     
@@ -130,16 +130,16 @@ def main():
     if args.model_mode == "mini":
         config = UltraConfig(
             vocab_size=50000,
-            hidden_size=384,
+            hidden_size=512,
             num_layers=6,
             num_loops=2,
             num_heads=6,
             retention_heads=6,
             num_experts=4,
             top_k_experts=2,
-            dropout=0.1,
+            dropout=0.2,
             ode_solver="rk4",
-            ode_steps=4, # ODE can be unstable, keep steps low for mini, 4 for better stability
+            ode_steps=2, # ODE can be unstable, keep steps low for mini
             use_bitnet=False, # on mini, we can afford full precision for stability, because it went on infinity with ternary in early tests
             norm_type="derf",
             layer_pattern=stable_layer_pattern,
