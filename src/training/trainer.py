@@ -12,6 +12,7 @@ import torch.optim as optim
 from torch.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
+import torch.nn.functional as F
 
 from utils.storage_manager import StorageManager
 from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
@@ -46,6 +47,10 @@ class TrainingConfig:
     inf_epoch_patience: int = 5
     zero_grad_plateau_patience: int = 5
 
+    # Precision control
+    # NOTE: Default False because hybrid ODE/SSM blocks can become unstable in fp16 on older GPUs (e.g., Tesla P40).
+    use_amp: bool = False
+
 # ==================== TITAN TRAINER ====================
 class TitanTrainer:
     """Advanced trainer for TITAN-BERT-ULTRA with specialized optimizations"""
@@ -57,7 +62,14 @@ class TitanTrainer:
         self.config = config
         self.training_config = training_config or TrainingConfig()
         self.device = device or "cuda" if torch.cuda.is_available() else "cpu" # device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.use_amp = torch.cuda.is_available() and str(self.device).startswith("cuda")
+        self.use_amp = (
+            bool(self.training_config.use_amp)
+            and torch.cuda.is_available()
+            and str(self.device).startswith("cuda")
+        )
+        self.amp_dtype = torch.float16
+        if self.use_amp and torch.cuda.is_bf16_supported():
+            self.amp_dtype = torch.bfloat16
         self.model.to(self.device)
         
         # Specialized optimizer for hybrid architecture
@@ -355,9 +367,11 @@ class TitanTrainer:
         
         def lr_lambda(step):
             if step < warmup_steps:
-                return step / warmup_steps
+                # Start above zero to avoid dead first optimizer updates
+                return (step + 1) / warmup_steps
             else:
                 progress = (step - warmup_steps) / (total_steps - warmup_steps)
+                progress = min(max(progress, 0.0), 1.0)
                 return 0.5 * (1 + math.cos(math.pi * progress))
         
         return optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
@@ -387,25 +401,50 @@ class TitanTrainer:
         """Compute MLM loss with proper masking"""
         # Forward pass
         logits = self.model(input_ids)
+
+        # Safety: avoid propagating non-finite logits into CE (would yield NaN loss)
+        if not torch.isfinite(logits).all():
+            bad = (~torch.isfinite(logits)).sum().item()
+            raise RuntimeError(f"Non-finite logits detected in forward pass: {bad} elements")
         
         # Reshape for loss computation
-        batch_size, seq_len, vocab_size = logits.shape
+        _, _, vocab_size = logits.shape
         logits = logits.view(-1, vocab_size)
         labels = labels.view(-1)
+        input_flat = input_ids.view(-1)
+        attn_flat = attention_mask.view(-1)
         
-        # Only compute loss on masked tokens (labels != -100)
-        loss_fct = torch.nn.CrossEntropyLoss(ignore_index=-100)
-        
-        # Update labels: keep original for masked positions, set -100 for others
-        mlm_labels = labels.clone()
-        mlm_labels[labels == input_ids.view(-1)] = -100  # Don't predict non-masked tokens
-        
-        loss = loss_fct(logits, mlm_labels)
+        # Support both label conventions:
+        # 1) labels already contain -100 on unmasked tokens (HF-style)
+        # 2) labels contain full original sequence; infer masked positions by input!=label
+        if (labels == -100).any():
+            mlm_labels = labels.clone()
+        else:
+            mlm_labels = labels.clone()
+            mlm_labels[labels == input_flat] = -100
+
+        valid_mask = (mlm_labels != -100)
+
+        # Rare fallback: if no valid MLM targets exist, force one valid supervised token
+        # from attended positions to keep CE finite and training alive.
+        if valid_mask.sum().item() == 0:
+            candidate_positions = torch.nonzero(attn_flat > 0, as_tuple=False)
+            if candidate_positions.numel() > 0:
+                first_idx = int(candidate_positions[0].item())
+                mlm_labels[first_idx] = labels[first_idx]
+                valid_mask = (mlm_labels != -100)
+
+        # Compute CE in float32 for numerical stability
+        if valid_mask.sum().item() > 0:
+            loss = F.cross_entropy(logits[valid_mask].float(), mlm_labels[valid_mask])
+        else:
+            # Defensive fallback (should almost never happen after forced target above)
+            loss = logits.new_zeros((), requires_grad=True)
         
         # Compute accuracy on masked tokens
         with torch.no_grad():
-            mask = (mlm_labels != -100)
-            if mask.sum() > 0:
+            mask = valid_mask
+            if mask.any():
                 predictions = logits.argmax(dim=-1)
                 correct = (predictions == mlm_labels) & mask
                 accuracy = correct.sum().float() / mask.sum().float()
@@ -450,7 +489,7 @@ class TitanTrainer:
 
                 while retry_count <= self.training_config.max_nan_retries and not batch_done:
                     # Forward pass (AMP if enabled)
-                    with autocast(self.device, enabled=self.use_amp):
+                    with autocast(self.device, enabled=self.use_amp, dtype=self.amp_dtype):
                         loss, accuracy = self.compute_mlm_loss(
                             batch['input_ids'],
                             batch['attention_mask'],
