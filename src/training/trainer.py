@@ -6,7 +6,7 @@ import math
 import heapq
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from tqdm import tqdm
 import torch.optim as optim
 from torch.amp import autocast, GradScaler
@@ -38,17 +38,26 @@ class TrainingConfig:
     log_gradient_stats: bool = True
     gradient_log_interval: int = 100
 
+    # Post-backward stability
+    max_nan_retries: int = 3
+    grad_clip_max_norm: float = 1.0
+    inf_post_clip_threshold: float = 10.0
+    min_grad_norm_for_signal: float = 1e-10
+    inf_epoch_patience: int = 5
+    zero_grad_plateau_patience: int = 5
+
 # ==================== TITAN TRAINER ====================
 class TitanTrainer:
     """Advanced trainer for TITAN-BERT-ULTRA with specialized optimizations"""
     
-    def __init__(self, model: TormentedBertFrankenstein, config: UltraConfig, 
+    def __init__(self, model: torch.nn.Module, config: UltraConfig,
                  training_config: TrainingConfig = None,
                  device: str = None): #torch.device = None):
         self.model = model
         self.config = config
         self.training_config = training_config or TrainingConfig()
         self.device = device or "cuda" if torch.cuda.is_available() else "cpu" # device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.use_amp = torch.cuda.is_available() and str(self.device).startswith("cuda")
         self.model.to(self.device)
         
         # Specialized optimizer for hybrid architecture
@@ -91,6 +100,12 @@ class TitanTrainer:
         # === NEW: NaN detection state ===
         self.nan_detected = False
         self.last_valid_state = None  # For debugging
+
+        # Stability / early-stop state
+        self.current_epoch_had_inf = False
+        self.consecutive_inf_epochs = 0
+        self.consecutive_zero_grad_plateau_epochs = 0
+        self.non_improving_epochs = 0
         
         self._log_setup()
     
@@ -107,12 +122,15 @@ class TitanTrainer:
             self.csv_writer.writerow([
                 'timestamp', 'epoch', 'step', 'global_step', 
                 'loss', 'accuracy', 'learning_rate', 'grad_norm',
-                'scaler_scale', 'gpu_memory_gb', 'gpu_cached_gb'
+                'scaler_scale', 'gpu_memory_gb', 'gpu_cached_gb',
+                'has_nan', 'has_inf', 'has_zero', 'repair_action'
             ])
             self.csv_file.flush()
     
-    def _log_step_to_csv(self, epoch: int, step: int, loss: float, accuracy: float, 
-                          lr: float, grad_norm: float = 0.0):
+    def _log_step_to_csv(self, epoch: int, step: int, loss: float, accuracy: float,
+                         lr: float, grad_norm: float = 0.0,
+                         has_nan: bool = False, has_inf: bool = False,
+                         has_zero: bool = False, repair_action: str = "none"):
         """Log a single training step to CSV"""
         gpu_memory = 0.0
         gpu_cached = 0.0
@@ -131,7 +149,11 @@ class TitanTrainer:
             f'{grad_norm:.6f}',
             f'{self.scaler.get_scale():.2f}',
             f'{gpu_memory:.4f}',
-            f'{gpu_cached:.4f}'
+            f'{gpu_cached:.4f}',
+            int(has_nan),
+            int(has_inf),
+            int(has_zero),
+            repair_action
         ])
         self.csv_file.flush()
     
@@ -233,6 +255,46 @@ class TitanTrainer:
         logging.error("=" * 80)
         
         return True
+
+    def _inspect_gradients(self) -> Dict[str, float]:
+        """Inspect gradients right after backward for NaN/Inf/zero and global norm validity."""
+        has_nan = False
+        has_inf = False
+        has_zero = False
+        total_norm = 0.0
+
+        for param in self.model.parameters():
+            if param.grad is None:
+                continue
+
+            grad = param.grad
+            if torch.isnan(grad).any():
+                has_nan = True
+            if torch.isinf(grad).any():
+                has_inf = True
+            if (grad == 0).all():
+                has_zero = True
+
+            grad_norm = grad.norm().item()
+            total_norm += grad_norm
+
+        if not torch.isfinite(torch.tensor(total_norm, device=self.device)):
+            has_inf = True
+
+        if total_norm < self.training_config.min_grad_norm_for_signal:
+            has_zero = True
+
+        return {
+            "has_nan": has_nan,
+            "has_inf": has_inf,
+            "has_zero": has_zero,
+            "total_norm": float(total_norm),
+        }
+
+    def _scale_learning_rate(self, factor: float):
+        """Scale all optimizer param-group learning rates by a multiplicative factor."""
+        for group in self.optimizer.param_groups:
+            group['lr'] = max(group['lr'] * factor, 1e-8)
     
     def _setup_optimizer(self) -> optim.Optimizer:
         """Setup optimizer with parameter groups for different components"""
@@ -365,6 +427,8 @@ class TitanTrainer:
         total_accuracy = 0.0
         num_batches = 0
         grad_norm = 0.0
+        self.current_epoch_had_inf = False
+        current_epoch_had_zero = False
         
         # Progress bar with detailed metrics
         progress_bar = tqdm(
@@ -374,85 +438,153 @@ class TitanTrainer:
             ncols=120
         )
         
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         
         for batch_idx, batch in enumerate(progress_bar):
             try:
                 # Move to device
                 batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
-                
-                # Forward pass with mixed precision
-                with autocast(self.device):
-                    loss, accuracy = self.compute_mlm_loss(
-                        batch['input_ids'],
-                        batch['attention_mask'], 
-                        batch['labels']
-                    )
-                    
-                    # === NEW: Check for NaN before scaling ===
-                    if self._check_for_nan(loss * self.gradient_accumulation_steps, batch_idx, batch):
-                        # Save emergency checkpoint before stopping
-                        try:
-                            emergency_path = self.save_checkpoint(epoch, suffix="_nan_emergency")
-                            logging.error(f"Emergency checkpoint saved: {emergency_path}")
-                        except Exception as e:
-                            logging.error(f"Failed to save emergency checkpoint: {e}")
-                        return total_loss / max(num_batches, 1), True  # Signal to stop
-                    
-                    # Scale loss for gradient accumulation
-                    loss = loss / self.gradient_accumulation_steps
-                
-                # Backward pass
-                self.scaler.scale(loss).backward()
-                
-                # Update every gradient_accumulation_steps
-                if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
-                    # Gradient clipping before scaling
-                    self.scaler.unscale_(self.optimizer)
-                    grad_norm = clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                    
-                    # === NEW: Check for NaN in gradients ===
-                    if torch.isnan(grad_norm) or torch.isinf(grad_norm):
-                        logging.warning(f"⚠️ Invalid grad_norm at step {self.global_step}, skipping update")
-                        self.optimizer.zero_grad()
+                repair_action = "none"
+                retry_count = 0
+                batch_done = False
+
+                while retry_count <= self.training_config.max_nan_retries and not batch_done:
+                    # Forward pass (AMP if enabled)
+                    with autocast(self.device, enabled=self.use_amp):
+                        loss, accuracy = self.compute_mlm_loss(
+                            batch['input_ids'],
+                            batch['attention_mask'],
+                            batch['labels']
+                        )
+
+                        if self._check_for_nan(loss * self.gradient_accumulation_steps, batch_idx, batch):
+                            repair_action = f"nan_loss_retry_{retry_count + 1}"
+                            self.optimizer.zero_grad(set_to_none=True)
+                            self._scale_learning_rate(0.5)
+                            retry_count += 1
+
+                            if retry_count > self.training_config.max_nan_retries:
+                                try:
+                                    emergency_path = self.save_checkpoint(epoch, suffix="_nan_emergency")
+                                    logging.error(f"Emergency checkpoint saved: {emergency_path}")
+                                except Exception as e:
+                                    logging.error(f"Failed to save emergency checkpoint: {e}")
+                                return total_loss / max(num_batches, 1), True
+                            continue
+
+                        raw_loss = loss.item()
+                        scaled_loss = loss / self.gradient_accumulation_steps
+
+                    # Backward pass
+                    if self.use_amp:
+                        self.scaler.scale(scaled_loss).backward()
+                    else:
+                        scaled_loss.backward()
+
+                    grad_stats = self._inspect_gradients()
+                    current_epoch_had_zero = current_epoch_had_zero or grad_stats["has_zero"]
+
+                    # Repair policy for NaN gradients: skip step, zero grad, LR/2 retry up to N times
+                    if grad_stats["has_nan"]:
+                        repair_action = f"nan_grad_retry_{retry_count + 1}"
+                        self.optimizer.zero_grad(set_to_none=True)
+                        self._scale_learning_rate(0.5)
+                        retry_count += 1
+
+                        if retry_count > self.training_config.max_nan_retries:
+                            logging.error(
+                                "NaN gradients persisted after retries. Saving checkpoint and stopping training."
+                            )
+                            try:
+                                emergency_path = self.save_checkpoint(epoch, suffix="_nan_grad_emergency")
+                                logging.error(f"Emergency checkpoint saved: {emergency_path}")
+                            except Exception as e:
+                                logging.error(f"Failed to save emergency checkpoint: {e}")
+                            return total_loss / max(num_batches, 1), True
                         continue
-                    
-                    # Optimizer step
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                    self.scheduler.step()
-                    self.optimizer.zero_grad()
-                    
-                    self.global_step += 1
-                    
-                    # === NEW: CSV Logging for every step ===
-                    current_lr = self.scheduler.get_last_lr()[0]
-                    step_loss = loss.item() * self.gradient_accumulation_steps
-                    self._log_step_to_csv(
-                        epoch=epoch,
-                        step=batch_idx,
-                        loss=step_loss,
-                        accuracy=accuracy.item(),
-                        lr=current_lr,
-                        grad_norm=grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
-                    )
-                    
-                    # === NEW: Rolling checkpoint every N steps ===
-                    if self.global_step % self.training_config.checkpoint_every_n_steps == 0:
-                        self._save_rolling_checkpoint(epoch)
-                    
-                    # === NEW: Track best checkpoints ===
-                    self._maybe_save_best_checkpoint(epoch, step_loss)
-                
-                # Accumulate metrics
-                total_loss += loss.item() * self.gradient_accumulation_steps
-                total_accuracy += accuracy.item()
-                num_batches += 1
+
+                    # Update every gradient_accumulation_steps
+                    if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
+                        if self.use_amp:
+                            self.scaler.unscale_(self.optimizer)
+
+                        grad_norm = clip_grad_norm_(
+                            self.model.parameters(),
+                            max_norm=self.training_config.grad_clip_max_norm
+                        )
+                        grad_norm_value = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else float(grad_norm)
+
+                        post_clip_bad = (not math.isfinite(grad_norm_value)) or (
+                            grad_norm_value > self.training_config.inf_post_clip_threshold
+                        )
+
+                        # Repair policy for Inf/exploding gradients
+                        if grad_stats["has_inf"] or post_clip_bad:
+                            self.current_epoch_had_inf = True
+                            repair_action = "inf_skip_step_lr_half"
+                            self._scale_learning_rate(0.5)
+                            self.optimizer.zero_grad(set_to_none=True)
+
+                            self.global_step += 1
+                            current_lr = self.scheduler.get_last_lr()[0]
+                            self._log_step_to_csv(
+                                epoch=epoch,
+                                step=batch_idx,
+                                loss=raw_loss,
+                                accuracy=accuracy.item(),
+                                lr=current_lr,
+                                grad_norm=grad_norm_value,
+                                has_nan=grad_stats["has_nan"],
+                                has_inf=True,
+                                has_zero=grad_stats["has_zero"],
+                                repair_action=repair_action,
+                            )
+                            batch_done = True
+                            continue
+
+                        # Normal optimizer step
+                        if self.use_amp:
+                            self.scaler.step(self.optimizer)
+                            self.scaler.update()
+                        else:
+                            self.optimizer.step()
+
+                        self.scheduler.step()
+                        self.optimizer.zero_grad(set_to_none=True)
+
+                        self.global_step += 1
+                        current_lr = self.scheduler.get_last_lr()[0]
+                        self._log_step_to_csv(
+                            epoch=epoch,
+                            step=batch_idx,
+                            loss=raw_loss,
+                            accuracy=accuracy.item(),
+                            lr=current_lr,
+                            grad_norm=grad_norm_value,
+                            has_nan=grad_stats["has_nan"],
+                            has_inf=grad_stats["has_inf"],
+                            has_zero=grad_stats["has_zero"],
+                            repair_action=repair_action,
+                        )
+
+                        if self.global_step % self.training_config.checkpoint_every_n_steps == 0:
+                            self._save_rolling_checkpoint(epoch)
+
+                        self._maybe_save_best_checkpoint(epoch, raw_loss)
+
+                    # Accumulate metrics
+                    total_loss += raw_loss
+                    total_accuracy += accuracy.item()
+                    num_batches += 1
+                    batch_done = True
+
+                if not batch_done:
+                    return total_loss / max(num_batches, 1), True
                 
                 # Update progress bar
                 current_lr = self.scheduler.get_last_lr()[0]
                 progress_bar.set_postfix({
-                    'loss': f'{loss.item() * self.gradient_accumulation_steps:.4f}',
+                    'loss': f'{(total_loss / max(num_batches, 1)):.4f}',
                     'acc': f'{accuracy.item():.3f}',
                     'lr': f'{current_lr:.2e}',
                     'step': self.global_step
@@ -480,7 +612,7 @@ class TitanTrainer:
                     logging.error(f"OOM at batch {batch_idx}, clearing cache and continuing...")
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
-                    self.optimizer.zero_grad()
+                    self.optimizer.zero_grad(set_to_none=True)
                     continue
                 else:
                     raise e
@@ -489,16 +621,45 @@ class TitanTrainer:
         avg_loss = total_loss / max(num_batches, 1)
         avg_accuracy = total_accuracy / max(num_batches, 1)
         
-        # Update best loss
+        # Update best loss / plateau tracking
         if avg_loss < self.best_loss:
             self.best_loss = avg_loss
+            self.non_improving_epochs = 0
             logging.info(f"🎉 New best loss: {self.best_loss:.4f}")
+        else:
+            self.non_improving_epochs += 1
+
+        if self.current_epoch_had_inf:
+            self.consecutive_inf_epochs += 1
+        else:
+            self.consecutive_inf_epochs = 0
+
+        if current_epoch_had_zero and self.non_improving_epochs >= self.training_config.zero_grad_plateau_patience:
+            self.consecutive_zero_grad_plateau_epochs += 1
+        else:
+            self.consecutive_zero_grad_plateau_epochs = 0
         
         logging.info(
             f"📊 Epoch {epoch+1} Summary: "
             f"Loss={avg_loss:.4f}, Accuracy={avg_accuracy:.3f}, "
-            f"Best Loss={self.best_loss:.4f}"
+            f"Best Loss={self.best_loss:.4f}, "
+            f"InfEpochs={self.consecutive_inf_epochs}, "
+            f"ZeroGradPlateauEpochs={self.consecutive_zero_grad_plateau_epochs}"
         )
+
+        # Early stop policy: unrecoverable exploding gradients across epochs
+        if self.consecutive_inf_epochs > self.training_config.inf_epoch_patience:
+            logging.error(
+                "Early stop: Inf/exploding gradients persisted for too many consecutive epochs."
+            )
+            return avg_loss, True
+
+        # Early stop policy: vanishing gradients + plateau persistence
+        if self.consecutive_zero_grad_plateau_epochs >= 1:
+            logging.error(
+                "Early stop: persistent near-zero gradients with plateaued loss detected."
+            )
+            return avg_loss, True
         
         return avg_loss, False  # No NaN detected
     
@@ -518,7 +679,7 @@ class TitanTrainer:
             'scaler_state_dict': self.scaler.state_dict(),
             'config': self.config,
             'best_loss': self.best_loss,
-            'model_class': 'TormentedBertFrankenstein'
+            'model_class': self.model.__class__.__name__
         }
         
         torch.save(checkpoint, checkpoint_path)
@@ -565,7 +726,7 @@ class TitanTrainer:
                 'scaler_state_dict': self.scaler.state_dict(),
                 'config': self.config,
                 'best_loss': current_loss,
-                'model_class': 'TormentedBertFrankenstein'
+                'model_class': self.model.__class__.__name__
             }
             
             torch.save(checkpoint, checkpoint_path)
@@ -603,7 +764,7 @@ class TitanTrainer:
             'scaler_state_dict': self.scaler.state_dict(),
             'config': self.config,
             'best_loss': self.best_loss,
-            'model_class': 'TormentedBertFrankenstein'
+            'model_class': self.model.__class__.__name__
         }
         
         filename = f"titan_checkpoint_epoch_{epoch}{suffix}.pt"

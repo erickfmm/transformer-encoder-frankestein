@@ -26,6 +26,7 @@ STABLE CONFIGURATION NOTES (based on literature research):
 """
 
 import os
+import argparse
 import logging
 import torch
 from torch.utils.data import DataLoader
@@ -33,11 +34,26 @@ from torch.utils.data import DataLoader
 from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 from training.streaming_mlm_dataset import StreamingMLMDataset
 from training.trainer import TitanTrainer, TrainingConfig
-from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+from model.tormented_bert_frankestein import TormentedBertFrankenstein, TormentedBertMini, UltraConfig
 
 # ==================== MAIN EXECUTION ====================
 def main():
     """Main training pipeline for TORMENTED-BERT-Frankenstein"""
+    parser = argparse.ArgumentParser(description="Train Frankenstein or Mini variant")
+    parser.add_argument(
+        "--model-mode",
+        choices=["frankenstein", "mini"],
+        default=os.environ.get("MODEL_MODE", "mini"),
+        help="Model variant to train"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Dataloader batch size. Default: 8 for mini on CUDA (P40), otherwise conservative auto value"
+    )
+    args = parser.parse_args()
+
     # Setup logging
     logging.basicConfig(
         level=logging.INFO,
@@ -111,32 +127,55 @@ def main():
         "ode"           # 6. ODE at end, more stable gradients from above
     ]
     
-    # Configure for available hardware (P40 24GB target)
-    config = UltraConfig(
-        vocab_size=50000,
-        hidden_size=1024,           # Reduced from 2048 for stability
-        num_layers=12,              # Physical layers (uses 2 cycles of 6-pattern)
-        num_loops=2,                # Logical depth = 24
-        num_heads=16,
-        retention_heads=8,
-        num_experts=4,              # Reduced MoE experts
-        top_k_experts=2,
-        dropout=0.1,
-        ode_solver="rk4",
-        ode_steps=4,                # Low steps for speed
-        use_bitnet=True,            # Essential for memory efficiency
-        norm_type="dynamic_tanh",
-        layer_pattern=stable_layer_pattern  # Use stable pattern
-    )
+    if args.model_mode == "mini":
+        config = UltraConfig(
+            vocab_size=50000,
+            hidden_size=384,
+            num_layers=6,
+            num_loops=2,
+            num_heads=6,
+            retention_heads=6,
+            num_experts=4,
+            top_k_experts=2,
+            dropout=0.1,
+            ode_solver="rk4",
+            ode_steps=2,
+            use_bitnet=True,
+            norm_type="derf",
+            layer_pattern=stable_layer_pattern,
+            use_factorized_embedding=True,
+            factorized_embedding_dim=128,
+            use_embedding_conv=True,
+        )
+        model = TormentedBertMini(config)
+    else:
+        # Configure for available hardware (P40 24GB target)
+        config = UltraConfig(
+            vocab_size=50000,
+            hidden_size=1024,           # Reduced from 2048 for stability
+            num_layers=12,              # Physical layers (uses 2 cycles of 6-pattern)
+            num_loops=2,                # Logical depth = 24
+            num_heads=16,
+            retention_heads=8,
+            num_experts=4,              # Reduced MoE experts
+            top_k_experts=2,
+            dropout=0.1,
+            ode_solver="rk4",
+            ode_steps=4,                # Low steps for speed
+            use_bitnet=True,            # Essential for memory efficiency
+            norm_type="dynamic_tanh",
+            layer_pattern=stable_layer_pattern  # Use stable pattern
+        )
+        model = TormentedBertFrankenstein(config)
     
     logging.info(f"Model Config:")
+    logging.info(f"  - Mode: {args.model_mode}")
     logging.info(f"  - Hidden Size: {config.hidden_size}")
     logging.info(f"  - Layers: {config.num_layers} x {config.num_loops} = {config.num_layers * config.num_loops} logical")
     logging.info(f"  - Layer Pattern: {config.layer_pattern}")
     logging.info(f"  - BitNet: {config.use_bitnet}")
     logging.info(f"  - ODE Solver: {config.ode_solver} ({config.ode_steps} steps)")
-    
-    model = TormentedBertFrankenstein(config)
+    logging.info(f"  - Norm Type: {config.norm_type}")
     
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
@@ -175,8 +214,21 @@ def main():
     logging.info(f"  - Cache directory: {stats['cache_dir']}")
     logging.info(f"  - Recovery enabled: Cache will be reused on restart")
     
-    # Smaller batch size due to model complexity
-    batch_size = 2 if torch.cuda.is_available() else 1
+    # Batch size policy:
+    # - If provided explicitly, use it.
+    # - Otherwise, default to 8 for mini mode on CUDA (good starting point for P40 24GB),
+    #   and conservative values for other cases.
+    if args.batch_size is not None:
+        if args.batch_size <= 0:
+            raise ValueError("--batch-size must be > 0")
+        batch_size = args.batch_size
+    else:
+        if torch.cuda.is_available() and args.model_mode == "mini":
+            batch_size = 8
+        elif torch.cuda.is_available():
+            batch_size = 2
+        else:
+            batch_size = 1
     
     dataloader = DataLoader(
         dataset,
@@ -189,11 +241,13 @@ def main():
     
     logging.info(f"Dataset size: {len(dataset)} examples")
     logging.info(f"Batch size: {batch_size}")
+    if args.batch_size is None:
+        logging.info("Batch size selected automatically based on model mode and device")
     logging.info(f"Steps per epoch: {len(dataloader)}")
     
     # Step 4: Train
     logging.info("\n" + "="*60)
-    logging.info("Step 4: Training TORMENTED-BERT-Frankenstein")
+    logging.info(f"Step 4: Training TORMENTED-BERT ({args.model_mode})")
     logging.info("="*60)
     
     # Configure training behavior
@@ -279,7 +333,7 @@ def main():
             # Test forward pass
             test_input = torch.randint(0, 50000, (1, 512))
             if torch.cuda.is_available():
-                test_input = test_input.cuda()
+                test_input = test_input.to("cuda")
             
             logging.info("🔍 Testing final model...")
             test_output = model(test_input)

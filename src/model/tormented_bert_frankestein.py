@@ -20,7 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from dataclasses import dataclass, field
-from typing import Optional, List, Literal
+from typing import Optional, List
 
 # ==================== CONFIGURACIÓN DE RIESGO ====================
 @dataclass
@@ -51,6 +51,15 @@ class UltraConfig:
     # Toggles
     use_bitnet: bool = True     # OBLIGATORIO para P40
     norm_type: str = "dynamic_tanh"
+
+    # Mini / Embedding factorization
+    use_factorized_embedding: bool = False
+    factorized_embedding_dim: int = 128
+    use_embedding_conv: bool = True
+
+    # HoPE settings
+    hope_base: float = 10_000.0
+    hope_damping: float = 0.01
 
 # ==================== CORE: BITNET b1.58 (1.58 Bits) ====================
 def activation_quant(x):
@@ -101,10 +110,128 @@ class DynamicTanhNorm(nn.Module):
         # Dynamic Tanh gating
         return torch.tanh(x_norm * self.alpha + self.beta)
 
+
+class Derf(nn.Module):
+    """Derf normalization: y = gamma * erf(alpha * x + s) + beta."""
+    def __init__(self, dim: int):
+        super().__init__()
+        self.alpha = nn.Parameter(torch.tensor(1.0))
+        self.s = nn.Parameter(torch.tensor(0.0))
+        self.gamma = nn.Parameter(torch.ones(dim))
+        self.beta = nn.Parameter(torch.zeros(dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.gamma * torch.erf(self.alpha * x + self.s) + self.beta
+
 def get_norm(config):
     if config.norm_type == "dynamic_tanh":
         return DynamicTanhNorm(config.hidden_size)
+    if config.norm_type == "derf":
+        return Derf(config.hidden_size)
     return nn.LayerNorm(config.hidden_size)
+
+
+class FactorizedEmbedding(nn.Module):
+    """Factorized token embedding with optional Conv1d pre-projection."""
+    def __init__(self, config: UltraConfig):
+        super().__init__()
+        self.low_dim = config.factorized_embedding_dim
+        self.use_conv = config.use_embedding_conv
+        self.embedding = nn.Embedding(config.vocab_size, self.low_dim)
+        self.conv = nn.Conv1d(self.low_dim, self.low_dim, kernel_size=3, padding=1) if self.use_conv else None
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.proj = proj_cls(self.low_dim, config.hidden_size, bias=False)
+
+    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+        x = self.embedding(input_ids)
+        if self.conv is not None:
+            x = self.conv(x.transpose(1, 2)).transpose(1, 2)
+        return self.proj(x)
+
+
+class HoPE(nn.Module):
+    """Hyperbolic positional encoding over dim pairs with monotonic exponential damping."""
+    def __init__(self, head_dim: int, base: float = 10_000.0, damping: float = 0.01):
+        super().__init__()
+        self.head_dim = head_dim
+        self.pair_dim = head_dim // 2
+        self.base = base
+        self.damping = damping
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: int = 0) -> torch.Tensor:
+        # x: [B, H, N, Dh]
+        if self.pair_dim == 0:
+            return x
+
+        _, _, seq_len, _ = x.shape
+        device = x.device
+        dtype = x.dtype
+
+        pos = torch.arange(seq_len, device=device, dtype=dtype)
+        if self.pair_dim > 1:
+            idx = torch.arange(self.pair_dim, device=device, dtype=dtype)
+            inv_freq = torch.exp(-math.log(self.base) * idx / (self.pair_dim - 1))
+        else:
+            inv_freq = torch.ones(1, device=device, dtype=dtype)
+
+        layer_scale = 1.0 + 0.05 * float(logical_layer_idx)
+        angles = (pos[:, None] * inv_freq[None, :] * layer_scale).clamp(-12.0, 12.0)
+
+        damping = torch.exp(-(self.damping * layer_scale) * pos).unsqueeze(-1)
+        cosh_term = torch.cosh(angles) * damping
+        sinh_term = torch.sinh(angles) * damping
+
+        x_even = x[..., : self.pair_dim * 2 : 2]
+        x_odd = x[..., 1 : self.pair_dim * 2 : 2]
+
+        cosh_term = cosh_term.unsqueeze(0).unsqueeze(0)
+        sinh_term = sinh_term.unsqueeze(0).unsqueeze(0)
+
+        y_even = x_even * cosh_term + x_odd * sinh_term
+        y_odd = x_even * sinh_term + x_odd * cosh_term
+
+        y = x.clone()
+        y[..., : self.pair_dim * 2 : 2] = y_even
+        y[..., 1 : self.pair_dim * 2 : 2] = y_odd
+        return y
+
+
+class TitanAttention(nn.Module):
+    """Real multi-head Titan attention using BitLinear projections and HoPE on q/k."""
+    def __init__(self, config: UltraConfig):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.scale = self.head_dim ** -0.5
+
+        if self.hidden_size % self.num_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_heads for TitanAttention")
+
+        self.q_proj = BitLinear(self.hidden_size, self.hidden_size, bias=False)
+        self.k_proj = BitLinear(self.hidden_size, self.hidden_size, bias=False)
+        self.v_proj = BitLinear(self.hidden_size, self.hidden_size, bias=False)
+        self.out_proj = BitLinear(self.hidden_size, self.hidden_size, bias=False)
+        self.hope = HoPE(self.head_dim, base=config.hope_base, damping=config.hope_damping)
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+        bsz, seq_len, hidden = x.shape
+        logical_layer_idx = logical_layer_idx or 0
+
+        q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        q = self.hope(q, logical_layer_idx=logical_layer_idx)
+        k = self.hope(k, logical_layer_idx=logical_layer_idx)
+
+        attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+
+        out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+        return self.out_proj(out)
 
 # ==================== ODE ATTENTION (Continuous Depth) ====================
 class ODEFunc(nn.Module):
@@ -262,8 +389,7 @@ class HybridLayer(nn.Module):
             # Placeholder simple para Mamba (en prod usar mamba-ssm)
             self.mixer = BitLinear(config.hidden_size, config.hidden_size) 
         else: # titan_attn
-            # Atención estándar + HOPE (del script anterior)
-            self.mixer = BitLinear(config.hidden_size, config.hidden_size) # Placeholder
+            self.mixer = TitanAttention(config)
 
         # Sparse MoE FFN (BitNet)
         self.norm2 = get_norm(config)
@@ -277,7 +403,7 @@ class HybridLayer(nn.Module):
         ])
         self.top_k = config.top_k_experts
 
-    def forward(self, x):
+    def forward(self, x, logical_layer_idx: Optional[int] = None):
         residual = x
         x = self.norm1(x)
         
@@ -285,6 +411,8 @@ class HybridLayer(nn.Module):
         if self.layer_type == "mamba":
             # Simulación rápida
             x = x + self.mixer(x) 
+        elif self.layer_type == "titan_attn":
+            x = self.mixer(x, logical_layer_idx=logical_layer_idx)
         else:
             x = self.mixer(x)
             
@@ -325,8 +453,11 @@ class TormentedBertFrankenstein(nn.Module):
         super().__init__()
         self.config = config
         
-        # Embedding + HOPE
-        self.emb = nn.Embedding(config.vocab_size, config.hidden_size)
+        # Embedding
+        if config.use_factorized_embedding:
+            self.emb = FactorizedEmbedding(config)
+        else:
+            self.emb = nn.Embedding(config.vocab_size, config.hidden_size)
         self.dropout = nn.Dropout(config.dropout)
         
         # Capas Físicas
@@ -343,12 +474,60 @@ class TormentedBertFrankenstein(nn.Module):
         x = self.dropout(x)
         
         # Looping (Recursividad)
+        logical_layer_idx = 0
         for loop in range(self.config.num_loops):
             for layer in self.layers:
-                x = layer(x)
+                x = layer(x, logical_layer_idx=logical_layer_idx)
+                logical_layer_idx += 1
                 
         x = self.final_norm(x)
         return self.head(x)
+
+
+class TormentedBertMini(nn.Module):
+    """Mini variant preset for stable and efficient training on constrained GPUs."""
+    @staticmethod
+    def build_mini_config(vocab_size: int = 50_000, use_bitnet: bool = True) -> UltraConfig:
+        stable_layer_pattern = [
+            "retnet",
+            "titan_attn",
+            "retnet",
+            "mamba",
+            "titan_attn",
+            "ode",
+        ]
+        return UltraConfig(
+            vocab_size=vocab_size,
+            hidden_size=384,
+            num_layers=6,
+            num_loops=2,
+            num_heads=6,
+            retention_heads=6,
+            num_experts=4,
+            top_k_experts=2,
+            dropout=0.1,
+            ode_solver="rk4",
+            ode_steps=2,
+            use_bitnet=use_bitnet,
+            norm_type="derf",
+            layer_pattern=stable_layer_pattern,
+            use_factorized_embedding=True,
+            factorized_embedding_dim=128,
+            use_embedding_conv=True,
+        )
+
+    def __init__(self, config: Optional[UltraConfig] = None):
+        super().__init__()
+        self.config = config or self.build_mini_config()
+
+        # Force Mini defaults when config is omitted, preserve custom overrides otherwise.
+        if self.config.use_factorized_embedding is False:
+            self.config.use_factorized_embedding = True
+
+        self.backbone = TormentedBertFrankenstein(self.config)
+
+    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+        return self.backbone(input_ids)
 
 # ==================== PRUEBA DE ESTRÉS ====================
 if __name__ == "__main__":
@@ -361,8 +540,9 @@ if __name__ == "__main__":
         ode_steps=2             # Poca precisión, alta velocidad
     )
     
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     print("\n⚡ TORMENTED-BERT-Frankenstein INITIALIZING ⚡")
-    model = TormentedBertFrankenstein(config).cuda()
+    model = TormentedBertFrankenstein(config).to(device)
     
     # Contar parámetros y ahorros
     params = sum(p.numel() for p in model.parameters())
@@ -375,7 +555,7 @@ if __name__ == "__main__":
     print(f"Dynamics: Neural ODE (RK4)")
     
     # Fake Batch
-    x = torch.randint(0, 50000, (4, 512)).cuda()
+    x = torch.randint(0, 50000, (4, 512), device=device)
     
     print("\n[...] Running Forward Pass with ODE Dynamics & RetNet...")
     y = model(x)

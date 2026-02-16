@@ -167,6 +167,27 @@ Run the high-throughput trainer optimized for Xeon CPUs:
 python3 src/training/v2/main.py
 ```
 
+### **Training in Mini mode (roadmap preset)**
+
+Use the Mini variant with stable defaults:
+
+- `hidden_size=384`
+- `num_layers=6`, `num_loops=2` (12 logical passes)
+- `num_heads=6`
+- `norm_type="derf"`
+- factorized embedding `128 -> 384` with optional `Conv1d(k=3)`
+- stable pattern: `[retnet, titan_attn, retnet, mamba, titan_attn, ode]`
+
+```bash
+python src/training/main.py --model-mode mini
+```
+
+For original Frankenstein mode:
+
+```bash
+python src/training/main.py --model-mode frankenstein
+```
+
 *Note: Ensure you have mounted a RAM disk if your NVMe is slow:*
 
 ```bash
