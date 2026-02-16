@@ -31,9 +31,9 @@ import torch
 from torch.utils.data import DataLoader
 
 from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
-from training.v1.streaming_mlm_dataset import StreamingMLMDataset
-from training.v2.trainer import TitanTrainer, TrainingConfig
-from model.v2.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+from training.streaming_mlm_dataset import StreamingMLMDataset
+from training.trainer import TitanTrainer, TrainingConfig
+from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 
 # ==================== MAIN EXECUTION ====================
 def main():

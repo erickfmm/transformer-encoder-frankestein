@@ -15,7 +15,7 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from sbert.v2.inference_sbert import SBERTInference
+from sbert.inference_sbert import SBERTInference
 
 
 def example_basic_similarity():

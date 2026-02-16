@@ -13,10 +13,10 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from model.v2.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
-from deploy.v2.quantization import save_quantized_checkpoint, estimate_model_size
-from deploy.v2.deploy import ModelDeployer
-from deploy.v2.inference import TormentedBertInference
+from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+from deploy.quantization import save_quantized_checkpoint, estimate_model_size
+from deploy.deploy import ModelDeployer
+from deploy.inference import TormentedBertInference
 
 
 def main():

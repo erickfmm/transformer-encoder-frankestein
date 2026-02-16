@@ -31,11 +31,11 @@ A research playground for building **unconventional, "Frankenstein" Transformer 
 
 ## ✨ Overview
 
-**Transformer Encoder Frankenstein** is a collection of experimental encoder-only Transformer models designed to push the boundaries of what's possible on constrained hardware. Instead of following conventional architectures, we combine multiple cutting-edge research ideas into hybrid "Frankenstein" models.
+**Transformer Encoder Frankenstein** is an experimental encoder-only Transformer model designed to push the boundaries of what's possible on constrained hardware. Instead of following conventional architectures, we combine multiple cutting-edge research ideas into a hybrid "Frankenstein" model.
 
 ### Why "Frankenstein"?
 
-Like Dr. Frankenstein's creation, these models are assembled from various "parts":
+Like Dr. Frankenstein's creation, this model is assembled from various "parts":
 
 | Component | Source | Purpose |
 |-----------|--------|---------|
@@ -63,10 +63,6 @@ transformer-encoder-frankestein/
 ├── 📖 README.md               # You are here!
 │
 ├── 📁 docs/
-│   ├── 📁 v1/                 # Spanish MoE-BERT documentation
-│   │   ├── README.md          # Full v1 architecture guide
-│   │   └── diagram.mermaid    # Architecture diagram
-│   │
 │   └── 📁 v2/                 # Titan-BERT-Ultra documentation
 │       ├── README.md          # Full v2 architecture guide
 │       ├── diagram.mermaid    # Architecture diagram
@@ -74,19 +70,15 @@ transformer-encoder-frankestein/
 │
 ├── 📁 src/
 │   ├── 📁 model/
-│   │   ├── v1/                # MoE-BERT implementation
-│   │   │   ├── configuration.py
-│   │   │   └── model.py
-│   │   │
-│   │   └── v2/                # Titan-BERT-Ultra implementation
-│   │       └── titan_bert_ultra.py
+│   │   └── tormented_bert_frankestein.py  # Tormented-BERT-Frankenstein implementation
 │   │
 │   ├── 📁 tokenizer/
 │   │   └── spm_spa_redpajama35.py  # SentencePiece tokenizer
 │   │
 │   ├── 📁 training/
-│   │   ├── v1/                # MoE-BERT trainer
-│   │   └── v2/                # Titan-BERT-Ultra trainer
+│   │   ├── main.py            # Main training script
+│   │   ├── trainer.py         # Trainer implementation
+│   │   └── streaming_mlm_dataset.py  # Streaming MLM dataset
 │   │
 │   └── 📁 utils/
 │       └── storage_manager.py # Disk budget management
@@ -96,31 +88,7 @@ transformer-encoder-frankestein/
 
 ## 🏗️ Model Versions
 
-### [📘 v1: Spanish MoE-BERT](docs/v1/README.md)
-
-A **340M parameter** BERT-like encoder with Sparse Mixture of Experts, optimized for Spanish NLP tasks.
-
-| Feature | Specification |
-|---------|---------------|
-| **Architecture** | Transformer Encoder + Sparse MoE |
-| **Hidden Size** | 1024 |
-| **Layers** | 24 |
-| **Experts** | 32 (top-4 activated) |
-| **Parameters** | ~340M |
-| **Positional Encoding** | RoPE |
-| **Primary Task** | Semantic Similarity, MLM |
-
-**Key Innovations:**
-- Mixed attention types (GQA, standard, latent)
-- SwiGLU activation functions
-- Dynamic Tanh normalization
-- Custom 50k Spanish SentencePiece tokenizer
-
-👉 **[Read the full v1 documentation →](docs/v1/README.md)**
-
----
-
-### [📗 v2: Titan-BERT-Ultra](docs/v2/README.md)
+### [📗 Tormented-BERT-Frankenstein](docs/v2/README.md)
 
 An **audacious 1.58-bit** Transformer combining Neural ODEs, RetNet, and Titan Memory for extreme efficiency.
 
@@ -188,46 +156,30 @@ pip install -e ".[train]"
 ### Verify Installation
 
 ```bash
-python -c "from src.model.v1.model import SpanishMoEBERT; print('✅ v1 model loaded')"
-python -c "from src.model.v2.titan_bert_ultra import TitanBertUltra; print('✅ v2 model loaded')"
+python -c "from src.model.tormented_bert_frankestein import TormentedBertFrankenstein; print('✅ Model loaded')"
 ```
 
 ---
 
 ## 🎯 Usage
 
-### Training v1: Spanish MoE-BERT
+### Training
 
 ```bash
-# Train the SentencePiece tokenizer first
-python -c "
-from src.tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
-tokenizer = SpanishSPMTokenizer(vocab_size=50000)
-tokenizer.train(model_prefix='models/es_redpajama_50k')
-"
-
-# Run pre-training
-python src/training/v1/main.py
-```
-
-### Training v2: Titan-BERT-Ultra
-
-```bash
-# Run the Titan-BERT-Ultra trainer
-python src/training/v2/main.py
+# Run the trainer
+python src/training/main.py
 ```
 
 ### Inference Example
 
 ```python
 import torch
-from src.model.v1.model import SpanishMoEBERT
-from src.model.v1.configuration import SpanishMoEBERTConfig
+from src.model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 from src.tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 
 # Load model and tokenizer
-config = SpanishMoEBERTConfig()
-model = SpanishMoEBERT(config)
+config = UltraConfig()
+model = TormentedBertFrankenstein(config)
 tokenizer = SpanishSPMTokenizer.from_pretrained("./models/es_redpajama_50k")
 
 # Encode text

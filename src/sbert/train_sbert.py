@@ -25,9 +25,9 @@ from torch.utils.data import DataLoader
 import numpy as np
 
 # Add parent directories to path
-sys.path.append(str(Path(__file__).parent.parent.parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
-from model.v2.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 
 # Setup logging
 logging.basicConfig(

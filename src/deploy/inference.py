@@ -26,8 +26,8 @@ import time
 # Add parent directories to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from model.v2.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
-from deploy.v2.quantization import load_quantized_checkpoint
+from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+from deploy.quantization import load_quantized_checkpoint
 from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 
 logging.basicConfig(

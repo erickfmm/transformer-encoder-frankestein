@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
 
 from utils.storage_manager import StorageManager
-from model.v2.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 
 
 # ==================== TRAINING CONFIGURATION ====================
