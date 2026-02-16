@@ -208,10 +208,11 @@ class TitanAttention(nn.Module):
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for TitanAttention")
 
-        self.q_proj = BitLinear(self.hidden_size, self.hidden_size, bias=False)
-        self.k_proj = BitLinear(self.hidden_size, self.hidden_size, bias=False)
-        self.v_proj = BitLinear(self.hidden_size, self.hidden_size, bias=False)
-        self.out_proj = BitLinear(self.hidden_size, self.hidden_size, bias=False)
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.q_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.k_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
         self.hope = HoPE(self.head_dim, base=config.hope_base, damping=config.hope_damping)
         self.dropout = nn.Dropout(config.dropout)
 
@@ -247,8 +248,9 @@ class ODEFunc(nn.Module):
         self.scale = self.head_dim ** -0.5
         
         # All Linears are BitLinear
-        self.qkv = BitLinear(self.dim, self.dim * 3, bias=False)
-        self.out_proj = BitLinear(self.dim, self.dim, bias=False)
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.qkv = proj_cls(self.dim, self.dim * 3, bias=False)
+        self.out_proj = proj_cls(self.dim, self.dim, bias=False)
         self.norm = get_norm(config)
         self.dropout = nn.Dropout(config.dropout)
 
@@ -314,11 +316,12 @@ class MultiScaleRetention(nn.Module):
         self.head_dim = self.dim // self.heads
         self.scale = self.head_dim ** -0.5
         
-        self.q_proj = BitLinear(self.dim, self.dim, bias=False)
-        self.k_proj = BitLinear(self.dim, self.dim, bias=False)
-        self.v_proj = BitLinear(self.dim, self.dim, bias=False)
-        self.g_proj = BitLinear(self.dim, self.dim, bias=False) # Gating
-        self.out_proj = BitLinear(self.dim, self.dim, bias=False)
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.q_proj = proj_cls(self.dim, self.dim, bias=False)
+        self.k_proj = proj_cls(self.dim, self.dim, bias=False)
+        self.v_proj = proj_cls(self.dim, self.dim, bias=False)
+        self.g_proj = proj_cls(self.dim, self.dim, bias=False) # Gating
+        self.out_proj = proj_cls(self.dim, self.dim, bias=False)
         self.swish = nn.SiLU()
         self.norm = get_norm(config)
 
@@ -380,6 +383,8 @@ class HybridLayer(nn.Module):
         self.layer_type = layer_type
         self.norm1 = get_norm(config)
         
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        
         # Selección de Arquitectura de Mezcla
         if layer_type == "ode":
             self.mixer = ODEAttentionBlock(config)
@@ -387,7 +392,7 @@ class HybridLayer(nn.Module):
             self.mixer = MultiScaleRetention(config)
         elif layer_type == "mamba":
             # Placeholder simple para Mamba (en prod usar mamba-ssm)
-            self.mixer = BitLinear(config.hidden_size, config.hidden_size) 
+            self.mixer = proj_cls(config.hidden_size, config.hidden_size) 
         else: # titan_attn
             self.mixer = TitanAttention(config)
 
@@ -396,9 +401,9 @@ class HybridLayer(nn.Module):
         self.router = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = nn.ModuleList([
             nn.Sequential(
-                BitLinear(config.hidden_size, config.hidden_size * 2),
+                proj_cls(config.hidden_size, config.hidden_size * 2),
                 nn.SiLU(),
-                BitLinear(config.hidden_size * 2, config.hidden_size)
+                proj_cls(config.hidden_size * 2, config.hidden_size)
             ) for _ in range(config.num_experts)
         ])
         self.top_k = config.top_k_experts
@@ -467,7 +472,8 @@ class TormentedBertFrankenstein(nn.Module):
         ])
         
         self.final_norm = get_norm(config)
-        self.head = BitLinear(config.hidden_size, config.vocab_size)
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.head = proj_cls(config.hidden_size, config.vocab_size)
 
     def forward(self, input_ids):
         x = self.emb(input_ids)
