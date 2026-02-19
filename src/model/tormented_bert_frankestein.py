@@ -163,6 +163,15 @@ class FactorizedEmbedding(nn.Module):
         x = self.embedding(input_ids)
         if self.conv is not None:
             x = self.conv(x.transpose(1, 2)).transpose(1, 2)
+            # Even kernels with symmetric padding can shift length by +1.
+            # Force sequence length to match inputs to keep MLM labels aligned.
+            if x.size(1) != input_ids.size(1):
+                target_len = input_ids.size(1)
+                if x.size(1) > target_len:
+                    x = x[:, :target_len, :]
+                else:
+                    pad_len = target_len - x.size(1)
+                    x = F.pad(x, (0, 0, 0, pad_len))
         return self.proj(x)
 
 
