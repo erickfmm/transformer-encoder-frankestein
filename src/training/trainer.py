@@ -40,6 +40,47 @@ class TrainingConfig:
     gradient_log_interval: int = 100
     gradient_accumulation_steps: int = 4
 
+    # Optimizer learning rates by parameter group
+    lr_embeddings: float = 1e-6
+    lr_norms: float = 5e-6
+    lr_ode: float = 1e-7
+    lr_retnet: float = 5e-6
+    lr_mamba: float = 2e-6
+    lr_attention: float = 3e-6
+    lr_other: float = 2e-6
+
+    # Optimizer weight decay by parameter group
+    wd_embeddings: float = 0.01
+    wd_norms: float = 0.001
+    wd_ode: float = 0.01
+    wd_retnet: float = 0.01
+    wd_mamba: float = 0.01
+    wd_attention: float = 0.01
+    wd_other: float = 0.01
+
+    # Optimizer betas by parameter group
+    betas_embeddings: Tuple[float, float] = (0.9, 0.95)
+    betas_norms: Tuple[float, float] = (0.9, 0.95)
+    betas_ode: Tuple[float, float] = (0.9, 0.95)
+    betas_retnet: Tuple[float, float] = (0.9, 0.95)
+    betas_mamba: Tuple[float, float] = (0.9, 0.95)
+    betas_attention: Tuple[float, float] = (0.9, 0.95)
+    betas_other: Tuple[float, float] = (0.9, 0.95)
+
+    # Optimizer eps by parameter group
+    eps_embeddings: float = 1e-8
+    eps_norms: float = 1e-8
+    eps_ode: float = 1e-8
+    eps_retnet: float = 1e-8
+    eps_mamba: float = 1e-8
+    eps_attention: float = 1e-8
+    eps_other: float = 1e-8
+
+    # Scheduler configuration
+    scheduler_total_steps: int = 10000
+    scheduler_warmup_ratio: float = 0.1
+    scheduler_type: str = "cosine"
+
     # Post-backward stability
     max_nan_retries: int = 3
     grad_clip_max_norm: float = 5.0  # Increased from 1.0 - too aggressive clipping was causing issues
@@ -355,7 +396,11 @@ class TitanTrainer:
     
     def _setup_optimizer(self) -> optim.Optimizer:
         """Setup optimizer with parameter groups for different components"""
-        
+        def _as_betas(value):
+            if isinstance(value, (list, tuple)) and len(value) == 2:
+                return (float(value[0]), float(value[1]))
+            return (0.9, 0.95)
+
         # Separate parameters by component type
         ode_params = []
         retnet_params = []
@@ -387,13 +432,62 @@ class TitanTrainer:
         # Parameter groups with DRASTICALLY REDUCED learning rates for stability
         # Previous LRs were causing immediate gradient explosion (see metrics: grad_norm 2→42889)
         param_groups = [
-            {'params': embed_params, 'lr': 1e-6, 'weight_decay': 0.01, 'name': 'embeddings'},  # Reduced 100x
-            {'params': norm_params, 'lr': 5e-6, 'weight_decay': 0.001, 'name': 'norms'},  # Reduced 40x
-            {'params': ode_params, 'lr': 1e-7, 'weight_decay': 0.01, 'name': 'ode'},  # Reduced 500x - ODE extremely unstable
-            {'params': retnet_params, 'lr': 5e-6, 'weight_decay': 0.01, 'name': 'retnet'},  # Reduced 30x
-            {'params': mamba_params, 'lr': 2e-6, 'weight_decay': 0.01, 'name': 'mamba'},  # Reduced 50x
-            {'params': titan_attn_params, 'lr': 3e-6, 'weight_decay': 0.01, 'name': 'attention'},  # Reduced 33x
-            {'params': other_params, 'lr': 2e-6, 'weight_decay': 0.01, 'name': 'other'}  # Reduced 50x
+            {
+                'params': embed_params,
+                'lr': self.training_config.lr_embeddings,
+                'weight_decay': self.training_config.wd_embeddings,
+                'betas': _as_betas(self.training_config.betas_embeddings),
+                'eps': self.training_config.eps_embeddings,
+                'name': 'embeddings'
+            },  # Reduced 100x
+            {
+                'params': norm_params,
+                'lr': self.training_config.lr_norms,
+                'weight_decay': self.training_config.wd_norms,
+                'betas': _as_betas(self.training_config.betas_norms),
+                'eps': self.training_config.eps_norms,
+                'name': 'norms'
+            },  # Reduced 40x
+            {
+                'params': ode_params,
+                'lr': self.training_config.lr_ode,
+                'weight_decay': self.training_config.wd_ode,
+                'betas': _as_betas(self.training_config.betas_ode),
+                'eps': self.training_config.eps_ode,
+                'name': 'ode'
+            },  # Reduced 500x - ODE extremely unstable
+            {
+                'params': retnet_params,
+                'lr': self.training_config.lr_retnet,
+                'weight_decay': self.training_config.wd_retnet,
+                'betas': _as_betas(self.training_config.betas_retnet),
+                'eps': self.training_config.eps_retnet,
+                'name': 'retnet'
+            },  # Reduced 30x
+            {
+                'params': mamba_params,
+                'lr': self.training_config.lr_mamba,
+                'weight_decay': self.training_config.wd_mamba,
+                'betas': _as_betas(self.training_config.betas_mamba),
+                'eps': self.training_config.eps_mamba,
+                'name': 'mamba'
+            },  # Reduced 50x
+            {
+                'params': titan_attn_params,
+                'lr': self.training_config.lr_attention,
+                'weight_decay': self.training_config.wd_attention,
+                'betas': _as_betas(self.training_config.betas_attention),
+                'eps': self.training_config.eps_attention,
+                'name': 'attention'
+            },  # Reduced 33x
+            {
+                'params': other_params,
+                'lr': self.training_config.lr_other,
+                'weight_decay': self.training_config.wd_other,
+                'betas': _as_betas(self.training_config.betas_other),
+                'eps': self.training_config.eps_other,
+                'name': 'other'
+            }  # Reduced 50x
         ]
         
         # Filter out empty groups
@@ -404,21 +498,38 @@ class TitanTrainer:
             param_count = sum(p.numel() for p in group['params'])
             logging.info(f"Parameter group '{group['name']}': {param_count:,} parameters, lr={group['lr']}")
         
-        return optim.AdamW(param_groups, betas=(0.9, 0.95), eps=1e-8)
+        return optim.AdamW(param_groups)
     
     def _setup_scheduler(self):
         """Setup learning rate scheduler with warmup"""
-        total_steps = 10000  # Estimated total steps
-        warmup_steps = int(0.1 * total_steps)
+        total_steps = int(self.training_config.scheduler_total_steps)
+        if total_steps <= 0:
+            total_steps = 10000  # Estimated total steps
+        warmup_ratio = float(self.training_config.scheduler_warmup_ratio)
+        warmup_ratio = min(max(warmup_ratio, 0.0), 1.0)
+        warmup_steps = int(warmup_ratio * total_steps)
         
+        scheduler_type = str(self.training_config.scheduler_type).strip().lower()
+
         def lr_lambda(step):
-            if step < warmup_steps:
-                # Start above zero to avoid dead first optimizer updates
-                return (step + 1) / warmup_steps
-            else:
-                progress = (step - warmup_steps) / (total_steps - warmup_steps)
+            if scheduler_type == "constant":
+                return 1.0
+            if scheduler_type == "linear_warmup_then_constant":
+                if warmup_steps == 0:
+                    return 1.0
+                if step < warmup_steps:
+                    return (step + 1) / warmup_steps
+                return 1.0
+            # cosine (default)
+            if warmup_steps == 0:
+                progress = step / max(total_steps, 1)
                 progress = min(max(progress, 0.0), 1.0)
                 return 0.5 * (1 + math.cos(math.pi * progress))
+            if step < warmup_steps:
+                return (step + 1) / warmup_steps
+            progress = (step - warmup_steps) / max(total_steps - warmup_steps, 1)
+            progress = min(max(progress, 0.0), 1.0)
+            return 0.5 * (1 + math.cos(math.pi * progress))
         
         return optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
     

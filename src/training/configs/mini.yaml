@@ -39,6 +39,40 @@ training:
   cache_dir: "./temp_data/v2_dataset_cache"
   use_amp: false
   gradient_accumulation_steps: 4
+  lr_embeddings: 1e-6
+  lr_norms: 5e-6
+  lr_ode: 1e-7
+  lr_retnet: 5e-6
+  lr_mamba: 2e-6
+  lr_attention: 3e-6
+  lr_other: 2e-6
+  wd_embeddings: 0.01
+  wd_norms: 0.001
+  wd_ode: 0.01
+  wd_retnet: 0.01
+  wd_mamba: 0.01
+  wd_attention: 0.01
+  wd_other: 0.01
+  betas_embeddings: [0.9, 0.95]
+  betas_norms: [0.9, 0.95]
+  betas_ode: [0.9, 0.95]
+  betas_retnet: [0.9, 0.95]
+  betas_mamba: [0.9, 0.95]
+  betas_attention: [0.9, 0.95]
+  betas_other: [0.9, 0.95]
+  eps_embeddings: 1e-8
+  eps_norms: 1e-8
+  eps_ode: 1e-8
+  eps_retnet: 1e-8
+  eps_mamba: 1e-8
+  eps_attention: 1e-8
+  eps_other: 1e-8
+  scheduler_total_steps: 10000
+  scheduler_warmup_ratio: 0.1
+  scheduler_type: cosine
+  grad_clip_max_norm: 5.0
+  inf_post_clip_threshold: 100.0
+  max_nan_retries: 3
   checkpoint_every_n_steps: 500
   max_rolling_checkpoints: 3
   num_best_checkpoints: 2
