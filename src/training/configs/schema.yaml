@@ -1,0 +1,613 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "training-config.schema.json"
+title: "Training Config Schema"
+type: object
+additionalProperties: false
+required:
+  - model_class
+  - model
+  - training
+
+properties:
+  model_class:
+    type: string
+    description: "Model variant name."
+    enum:
+      - frankenstein
+      - mini
+    examples:
+      - frankenstein
+      - mini
+
+  model:
+    type: object
+    description: "UltraConfig model parameters."
+    additionalProperties: false
+    required:
+      - vocab_size
+      - hidden_size
+      - num_layers
+      - num_loops
+      - num_heads
+      - retention_heads
+      - num_experts
+      - top_k_experts
+      - dropout
+      - layer_pattern
+      - ode_solver
+      - ode_steps
+      - use_bitnet
+      - norm_type
+      - use_factorized_embedding
+      - factorized_embedding_dim
+      - use_embedding_conv
+      - embedding_conv_kernel
+      - use_hope
+      - use_moe
+      - ffn_hidden_size
+      - ffn_activation
+    properties:
+      vocab_size:
+        type: integer
+        minimum: 1
+        description: "Vocabulary size."
+        examples: [50000]
+      hidden_size:
+        type: integer
+        minimum: 1
+        description: "Hidden dimension."
+        examples: [768]
+      num_layers:
+        type: integer
+        minimum: 1
+        description: "Physical layer count."
+        examples: [12]
+      num_loops:
+        type: integer
+        minimum: 1
+        description: "Logical loop count."
+        examples: [1, 2]
+      num_heads:
+        type: integer
+        minimum: 1
+        description: "Attention heads."
+        examples: [12]
+      retention_heads:
+        type: integer
+        minimum: 1
+        description: "Retention heads."
+        examples: [12]
+      num_experts:
+        type: integer
+        minimum: 1
+        description: "MoE expert count."
+        examples: [4]
+      top_k_experts:
+        type: integer
+        minimum: 1
+        description: "Top-k experts for routing."
+        examples: [2]
+      dropout:
+        type: number
+        minimum: 0.0
+        maximum: 1.0
+        description: "Global dropout."
+        examples: [0.1]
+      layer_pattern:
+        type: array
+        minItems: 1
+        description: "Ordered layer pattern."
+        items:
+          type: string
+          enum: [retnet, mamba, ode, titan_attn, standard_attn, sigmoid_attn]
+        examples:
+          - [retnet, titan_attn, retnet, mamba, titan_attn, ode]
+          - [standard_attn]
+      ode_solver:
+        type: string
+        enum: [rk4, euler]
+        description: "ODE integrator."
+        examples: [rk4]
+      ode_steps:
+        type: integer
+        minimum: 1
+        description: "ODE integration steps."
+        examples: [2]
+      use_bitnet:
+        type: boolean
+        description: "Enable BitLinear."
+        examples: [false]
+      norm_type:
+        type: string
+        enum: [layer_norm, dynamic_tanh, derf]
+        description: "Normalization type."
+        examples: [layer_norm]
+      use_factorized_embedding:
+        type: boolean
+        description: "Enable factorized embeddings."
+        examples: [false]
+      factorized_embedding_dim:
+        type: integer
+        minimum: 1
+        description: "Reduced embedding dimension."
+        examples: [128]
+      use_embedding_conv:
+        type: boolean
+        description: "Enable Conv1d on embeddings."
+        examples: [false]
+      embedding_conv_kernel:
+        type: integer
+        minimum: 1
+        description: "Conv1d kernel size."
+        examples: [3]
+      hope_base:
+        type: number
+        minimum: 0.0
+        description: "HoPE base value."
+        examples: [10000.0]
+      hope_damping:
+        type: number
+        minimum: 0.0
+        description: "HoPE damping."
+        examples: [0.01]
+      use_hope:
+        type: boolean
+        description: "Apply HoPE in titan_attn."
+        examples: [true]
+      use_moe:
+        type: boolean
+        description: "Enable MoE in FFN."
+        examples: [true]
+      ffn_hidden_size:
+        type: integer
+        minimum: 1
+        description: "FFN intermediate dimension."
+        examples: [3072]
+      ffn_activation:
+        type: string
+        enum: [silu, gelu]
+        description: "FFN activation function."
+        examples: [gelu]
+
+  training:
+    type: object
+    description: "TrainingConfig + runtime parameters."
+    additionalProperties: false
+    required:
+      - batch_size
+      - dataloader_workers
+      - max_length
+      - mlm_probability
+      - max_samples
+      - dataset_batch_size
+      - num_workers
+      - cache_dir
+      - use_amp
+      - gradient_accumulation_steps
+      - lr_embeddings
+      - lr_norms
+      - lr_ode
+      - lr_retnet
+      - lr_mamba
+      - lr_attention
+      - lr_other
+      - wd_embeddings
+      - wd_norms
+      - wd_ode
+      - wd_retnet
+      - wd_mamba
+      - wd_attention
+      - wd_other
+      - betas_embeddings
+      - betas_norms
+      - betas_ode
+      - betas_retnet
+      - betas_mamba
+      - betas_attention
+      - betas_other
+      - eps_embeddings
+      - eps_norms
+      - eps_ode
+      - eps_retnet
+      - eps_mamba
+      - eps_attention
+      - eps_other
+      - scheduler_total_steps
+      - scheduler_warmup_ratio
+      - scheduler_type
+      - grad_clip_max_norm
+      - inf_post_clip_threshold
+      - max_nan_retries
+      - checkpoint_every_n_steps
+      - max_rolling_checkpoints
+      - num_best_checkpoints
+      - nan_check_interval
+      - log_gradient_stats
+      - gradient_log_interval
+      - use_galore
+      - galore_rank
+      - galore_update_interval
+      - galore_scale
+      - galore_max_dim
+    properties:
+      batch_size:
+        type: integer
+        minimum: 1
+        description: "Dataloader batch size."
+        examples: [4]
+      dataloader_workers:
+        type: integer
+        minimum: 0
+        description: "Dataloader workers."
+        examples: [2]
+      max_length:
+        type: integer
+        minimum: 1
+        description: "Max sequence length."
+        examples: [512]
+      mlm_probability:
+        type: number
+        minimum: 0.0
+        maximum: 1.0
+        description: "MLM mask probability."
+        examples: [0.15]
+      max_samples:
+        type: integer
+        minimum: 1
+        description: "Max samples to stream."
+        examples: [20000000]
+      dataset_batch_size:
+        type: integer
+        minimum: 1
+        description: "Streaming dataset internal batch size."
+        examples: [25000]
+      num_workers:
+        type: integer
+        minimum: 0
+        description: "Streaming dataset workers."
+        examples: [8]
+      cache_dir:
+        type: string
+        description: "Cache directory."
+        examples: ["./temp_data/v2_dataset_cache"]
+      local_parquet_dir:
+        type: string
+        description: "Local parquet path (optional)."
+        examples: ["/path/to/parquet"]
+      prefer_local_cache:
+        type: boolean
+        description: "Prefer local cache when available."
+        examples: [true]
+      stream_local_parquet:
+        type: boolean
+        description: "Stream from local parquet if enabled."
+        examples: [true]
+      use_amp:
+        type: boolean
+        description: "Enable mixed precision."
+        examples: [false]
+      gradient_accumulation_steps:
+        type: integer
+        minimum: 1
+        description: "Gradient accumulation steps."
+        examples: [4]
+      lr_embeddings:
+        type: number
+        minimum: 0.0
+        description: "LR for embedding parameters."
+        examples: [1e-6]
+      lr_norms:
+        type: number
+        minimum: 0.0
+        description: "LR for normalization parameters."
+        examples: [5e-6]
+      lr_ode:
+        type: number
+        minimum: 0.0
+        description: "LR for ODE parameters."
+        examples: [1e-7]
+      lr_retnet:
+        type: number
+        minimum: 0.0
+        description: "LR for RetNet parameters."
+        examples: [5e-6]
+      lr_mamba:
+        type: number
+        minimum: 0.0
+        description: "LR for Mamba parameters."
+        examples: [2e-6]
+      lr_attention:
+        type: number
+        minimum: 0.0
+        description: "LR for attention parameters."
+        examples: [3e-6]
+      lr_other:
+        type: number
+        minimum: 0.0
+        description: "LR for all other parameters."
+        examples: [2e-6]
+      wd_embeddings:
+        type: number
+        minimum: 0.0
+        description: "Weight decay for embedding parameters."
+        examples: [0.01]
+      wd_norms:
+        type: number
+        minimum: 0.0
+        description: "Weight decay for normalization parameters."
+        examples: [0.001]
+      wd_ode:
+        type: number
+        minimum: 0.0
+        description: "Weight decay for ODE parameters."
+        examples: [0.01]
+      wd_retnet:
+        type: number
+        minimum: 0.0
+        description: "Weight decay for RetNet parameters."
+        examples: [0.01]
+      wd_mamba:
+        type: number
+        minimum: 0.0
+        description: "Weight decay for Mamba parameters."
+        examples: [0.01]
+      wd_attention:
+        type: number
+        minimum: 0.0
+        description: "Weight decay for attention parameters."
+        examples: [0.01]
+      wd_other:
+        type: number
+        minimum: 0.0
+        description: "Weight decay for all other parameters."
+        examples: [0.01]
+      betas_embeddings:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items: { type: number }
+        description: "Adam betas for embedding parameters."
+        examples: [[0.9, 0.95]]
+      betas_norms:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items: { type: number }
+        description: "Adam betas for normalization parameters."
+        examples: [[0.9, 0.95]]
+      betas_ode:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items: { type: number }
+        description: "Adam betas for ODE parameters."
+        examples: [[0.9, 0.95]]
+      betas_retnet:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items: { type: number }
+        description: "Adam betas for RetNet parameters."
+        examples: [[0.9, 0.95]]
+      betas_mamba:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items: { type: number }
+        description: "Adam betas for Mamba parameters."
+        examples: [[0.9, 0.95]]
+      betas_attention:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items: { type: number }
+        description: "Adam betas for attention parameters."
+        examples: [[0.9, 0.95]]
+      betas_other:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items: { type: number }
+        description: "Adam betas for other parameters."
+        examples: [[0.9, 0.95]]
+      eps_embeddings:
+        type: number
+        minimum: 0.0
+        description: "Adam eps for embedding parameters."
+        examples: [1e-8]
+      eps_norms:
+        type: number
+        minimum: 0.0
+        description: "Adam eps for normalization parameters."
+        examples: [1e-8]
+      eps_ode:
+        type: number
+        minimum: 0.0
+        description: "Adam eps for ODE parameters."
+        examples: [1e-8]
+      eps_retnet:
+        type: number
+        minimum: 0.0
+        description: "Adam eps for RetNet parameters."
+        examples: [1e-8]
+      eps_mamba:
+        type: number
+        minimum: 0.0
+        description: "Adam eps for Mamba parameters."
+        examples: [1e-8]
+      eps_attention:
+        type: number
+        minimum: 0.0
+        description: "Adam eps for attention parameters."
+        examples: [1e-8]
+      eps_other:
+        type: number
+        minimum: 0.0
+        description: "Adam eps for other parameters."
+        examples: [1e-8]
+      scheduler_total_steps:
+        type: integer
+        minimum: 1
+        description: "Total steps for scheduler."
+        examples: [10000]
+      scheduler_warmup_ratio:
+        type: number
+        minimum: 0.0
+        maximum: 1.0
+        description: "Warmup fraction of total steps."
+        examples: [0.1]
+      scheduler_type:
+        type: string
+        enum: [cosine, constant, linear_warmup_then_constant]
+        description: "Scheduler type."
+        examples: [cosine]
+      grad_clip_max_norm:
+        type: number
+        minimum: 0.0
+        description: "Gradient clipping max norm."
+        examples: [5.0]
+      inf_post_clip_threshold:
+        type: number
+        minimum: 0.0
+        description: "Post-clip exploding gradient threshold."
+        examples: [100.0]
+      max_nan_retries:
+        type: integer
+        minimum: 0
+        description: "Max retries for NaN handling."
+        examples: [3]
+      checkpoint_every_n_steps:
+        type: integer
+        minimum: 1
+        description: "Checkpoint frequency in steps."
+        examples: [500]
+      max_rolling_checkpoints:
+        type: integer
+        minimum: 1
+        description: "Rolling checkpoints to keep."
+        examples: [3]
+      num_best_checkpoints:
+        type: integer
+        minimum: 1
+        description: "Best checkpoints to keep."
+        examples: [2]
+      nan_check_interval:
+        type: integer
+        minimum: 1
+        description: "NaN/Inf check interval."
+        examples: [10]
+      log_gradient_stats:
+        type: boolean
+        description: "Enable gradient logging."
+        examples: [true]
+      gradient_log_interval:
+        type: integer
+        minimum: 1
+        description: "Gradient logging interval."
+        examples: [10]
+      use_galore:
+        type: boolean
+        description: "Enable GaLore."
+        examples: [false]
+      galore_rank:
+        type: integer
+        minimum: 1
+        description: "GaLore low-rank projection."
+        examples: [64]
+      galore_update_interval:
+        type: integer
+        minimum: 1
+        description: "GaLore update interval."
+        examples: [1]
+      galore_scale:
+        type: number
+        minimum: 0.0
+        description: "GaLore gradient scale."
+        examples: [1.0]
+      galore_max_dim:
+        type: integer
+        minimum: 1
+        description: "Max tensor dimension for GaLore."
+        examples: [4096]
+
+examples:
+  - model_class: frankenstein
+    model:
+      vocab_size: 50000
+      hidden_size: 768
+      num_layers: 12
+      num_loops: 1
+      num_heads: 12
+      retention_heads: 12
+      num_experts: 4
+      top_k_experts: 2
+      dropout: 0.1
+      layer_pattern: [standard_attn]
+      ode_solver: rk4
+      ode_steps: 2
+      use_bitnet: false
+      norm_type: layer_norm
+      use_factorized_embedding: false
+      factorized_embedding_dim: 128
+      use_embedding_conv: false
+      embedding_conv_kernel: 3
+      use_hope: false
+      use_moe: false
+      ffn_hidden_size: 3072
+      ffn_activation: gelu
+    training:
+      batch_size: 4
+      dataloader_workers: 2
+      max_length: 512
+      mlm_probability: 0.15
+      max_samples: 20000000
+      dataset_batch_size: 25000
+      num_workers: 8
+      cache_dir: "./temp_data/v2_dataset_cache"
+      use_amp: false
+      gradient_accumulation_steps: 4
+      lr_embeddings: 1e-6
+      lr_norms: 5e-6
+      lr_ode: 1e-7
+      lr_retnet: 5e-6
+      lr_mamba: 2e-6
+      lr_attention: 3e-6
+      lr_other: 2e-6
+      wd_embeddings: 0.01
+      wd_norms: 0.001
+      wd_ode: 0.01
+      wd_retnet: 0.01
+      wd_mamba: 0.01
+      wd_attention: 0.01
+      wd_other: 0.01
+      betas_embeddings: [0.9, 0.95]
+      betas_norms: [0.9, 0.95]
+      betas_ode: [0.9, 0.95]
+      betas_retnet: [0.9, 0.95]
+      betas_mamba: [0.9, 0.95]
+      betas_attention: [0.9, 0.95]
+      betas_other: [0.9, 0.95]
+      eps_embeddings: 1e-8
+      eps_norms: 1e-8
+      eps_ode: 1e-8
+      eps_retnet: 1e-8
+      eps_mamba: 1e-8
+      eps_attention: 1e-8
+      eps_other: 1e-8
+      scheduler_total_steps: 10000
+      scheduler_warmup_ratio: 0.1
+      scheduler_type: cosine
+      grad_clip_max_norm: 5.0
+      inf_post_clip_threshold: 100.0
+      max_nan_retries: 3
+      checkpoint_every_n_steps: 500
+      max_rolling_checkpoints: 3
+      num_best_checkpoints: 2
+      nan_check_interval: 10
+      log_gradient_stats: true
+      gradient_log_interval: 10
+      use_galore: false
+      galore_rank: 64
+      galore_update_interval: 1
+      galore_scale: 1.0
+      galore_max_dim: 4096

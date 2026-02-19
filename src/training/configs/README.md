@@ -10,6 +10,7 @@ This directory contains YAML presets. Each file describes the model (`model`) an
 - `standard_hope.yaml`
 - `tinybert.yaml`
 - `embbert.yaml`
+- `schema.yaml` (JSON Schema in YAML form)
 
 ## General Structure
 
