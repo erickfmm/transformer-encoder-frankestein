@@ -247,6 +247,8 @@ TORMENTED-BERT-Frankenstein includes:
 - **Hybrid Architecture**: RetNet, Neural ODE, Mamba, and Attention layers
 - **Dynamic Tanh Normalization**: Improved training stability
 - **Sparse MoE**: Mixture of Experts for capacity scaling
+- **HoPE Attention**: Real multi-head attention with HoPE applied to Q/K
+- **Factorized Embeddings**: Lower parameter count with optional Conv1d
 
 ## Performance Tips
 
@@ -356,9 +358,19 @@ config = UltraConfig(
     ode_steps=2,
     retention_heads=8,
     num_heads=16,
-    use_bitnet=True
+    use_bitnet=True,
+    norm_type="derf",
+    use_factorized_embedding=True,
+    factorized_embedding_dim=128,
+    use_embedding_conv=True,
+    hope_base=10_000.0,
+    hope_damping=0.01
 )
 ```
+
+### Mini Preset
+
+El preset `TormentedBertMini` también es compatible con SBERT cuando necesitas un backbone más ligero.
 
 ### Integration with Sentence-Transformers Ecosystem
 

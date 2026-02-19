@@ -52,6 +52,12 @@ Replaces standard Softmax attention in specific layers.
 * **Benefit:** Increases model capacity without proportional computational cost.
 * **Implementation:** All expert networks use BitLinear layers for memory efficiency.
 
+### **6\. HoPE Attention (Real TitanAttention)**
+
+* **Mechanism:** Multi-head attention with `HoPE` applied to Q/K pairs.
+* **Benefit:** Better positional extrapolation and stable attention geometry.
+* **Implementation:** `TitanAttention` uses BitLinear Q/K/V + HoPE + softmax.
+
 ## **🛠️ Hardware Optimization (The "P40 Rig")**
 
 This code is specifically tuned for a server with:
@@ -138,7 +144,12 @@ config = UltraConfig(
     ode_steps=2,                # Low steps for speed
     use_bitnet=True,            # Essential for memory efficiency
     norm_type="dynamic_tanh",
-    layer_pattern=stable_layer_pattern  # Use stable pattern
+    layer_pattern=stable_layer_pattern,  # Use stable pattern
+    use_factorized_embedding=True,
+    factorized_embedding_dim=128,
+    use_embedding_conv=True,
+    hope_base=10_000.0,
+    hope_damping=0.01,
 )
 
 # Stable 6-layer pattern optimized for hybrid architectures:
@@ -158,6 +169,19 @@ stable_layer_pattern = [
 - **use_bitnet=True**: Essential for fitting large models in 24GB VRAM
 - **ode_steps=2**: Low step count balances precision with speed
 - **layer_pattern**: Research-backed stable pattern with RetNet anchors
+- **norm_type="derf"**: Optional normalization for stability
+- **factorized embeddings**: Lower parameter count with optional Conv1d
+- **HoPE**: Applied inside `TitanAttention` to Q/K
+
+### **Mini Preset**
+
+`TormentedBertMini` provides a stable preset:
+
+- `hidden_size=384`, `num_layers=6`, `num_loops=2`
+- `num_heads=6`, `retention_heads=6`
+- `norm_type="derf"`
+- `use_factorized_embedding=True`, `factorized_embedding_dim=128`
+- stable pattern: `[retnet, titan_attn, retnet, mamba, titan_attn, ode]`
 
 ### **Training**
 
@@ -241,7 +265,7 @@ This model implements concepts from the following papers:
    * *Fedus et al. (Google, 2022)*
    * "Switch Transformers: Scaling to Trillion Parameter Models"
 
-**Note:** "titan_attn" in the layer pattern refers to standard scaled dot-product attention, named for clarity in hybrid architectures.
+**Note:** "titan_attn" in the layer pattern refers to real multi-head attention with `HoPE` applied to Q/K.
 
 ## **⚠️ Disclaimer**
 

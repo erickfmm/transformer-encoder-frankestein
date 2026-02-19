@@ -1,0 +1,52 @@
+model_class: frankenstein
+model:
+  vocab_size: 50000
+  hidden_size: 1024
+  num_layers: 12
+  num_loops: 2
+  num_heads: 16
+  retention_heads: 8
+  num_experts: 4
+  top_k_experts: 2
+  dropout: 0.1
+  ode_solver: rk4
+  ode_steps: 4
+  use_bitnet: true
+  norm_type: dynamic_tanh
+  layer_pattern:
+    - retnet
+    - titan_attn
+    - retnet
+    - mamba
+    - titan_attn
+    - ode
+  use_factorized_embedding: false
+  factorized_embedding_dim: 128
+  use_embedding_conv: false
+  embedding_conv_kernel: 3
+  use_hope: true
+  use_moe: true
+  ffn_hidden_size: 2048
+  ffn_activation: silu
+training:
+  batch_size: 2
+  dataloader_workers: 2
+  max_length: 512
+  mlm_probability: 0.15
+  max_samples: 20000000
+  dataset_batch_size: 25000
+  num_workers: 8
+  cache_dir: "./temp_data/v2_dataset_cache"
+  use_amp: false
+  gradient_accumulation_steps: 4
+  checkpoint_every_n_steps: 500
+  max_rolling_checkpoints: 3
+  num_best_checkpoints: 2
+  nan_check_interval: 10
+  log_gradient_stats: true
+  gradient_log_interval: 10
+  use_galore: false
+  galore_rank: 64
+  galore_update_interval: 1
+  galore_scale: 1.0
+  galore_max_dim: 4096

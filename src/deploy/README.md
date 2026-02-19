@@ -19,6 +19,9 @@ TORMENTED-BERT combines multiple SOTA 2026 architectures:
 - **Mamba-2**: State space models
 - **Sparse MoE**: Mixture of Experts
 - **Dynamic Tanh Normalization**
+- **HoPE Attention**: Real multi-head attention with HoPE applied to Q/K
+- **Derf Norm**: Optional `norm_type="derf"` for stability
+- **Factorized Embeddings**: Smaller input embedding footprint
 
 ## Installation
 
@@ -233,7 +236,12 @@ Create a custom config JSON:
   "top_k_experts": 2,
   "dropout": 0.1,
   "use_bitnet": true,
-  "norm_type": "dynamic_tanh"
+  "norm_type": "dynamic_tanh",
+  "use_factorized_embedding": true,
+  "factorized_embedding_dim": 128,
+  "use_embedding_conv": true,
+  "hope_base": 10000.0,
+  "hope_damping": 0.01
 }
 ```
 
@@ -245,6 +253,10 @@ python deploy.py \
     --output deployed_model/ \
     --config custom_config.json
 ```
+
+### Mini Preset (Ligero)
+
+Para despliegues con menos VRAM, considera usar el preset `TormentedBertMini` como base de configuración.
 
 ### Masked Language Modeling
 

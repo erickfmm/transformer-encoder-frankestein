@@ -38,6 +38,7 @@ class TrainingConfig:
     # Gradient monitoring
     log_gradient_stats: bool = True
     gradient_log_interval: int = 100
+    gradient_accumulation_steps: int = 4
 
     # Post-backward stability
     max_nan_retries: int = 3
@@ -46,6 +47,13 @@ class TrainingConfig:
     min_grad_norm_for_signal: float = 1e-10
     inf_epoch_patience: int = 5
     zero_grad_plateau_patience: int = 5
+
+    # GaLore (low-rank gradient projection)
+    use_galore: bool = False
+    galore_rank: int = 64
+    galore_update_interval: int = 1
+    galore_scale: float = 1.0
+    galore_max_dim: int = 4096
 
     # Precision control
     # NOTE: Default False because hybrid ODE/SSM blocks can become unstable in fp16 on older GPUs (e.g., Tesla P40).
@@ -95,7 +103,7 @@ class TitanTrainer:
         self.best_loss = float('inf')
         
         # Gradient accumulation for effective larger batches
-        self.gradient_accumulation_steps = 4
+        self.gradient_accumulation_steps = max(int(self.training_config.gradient_accumulation_steps), 1)
         
         # === NEW: CSV Logger ===
         self.csv_file = None
@@ -302,6 +310,43 @@ class TitanTrainer:
             "has_zero": has_zero,
             "total_norm": float(total_norm),
         }
+
+    def _apply_galore_projection(self):
+        """Apply low-rank projection to gradients (GaLore-style) if enabled."""
+        if not self.training_config.use_galore:
+            return
+        if self.global_step % max(int(self.training_config.galore_update_interval), 1) != 0:
+            return
+
+        rank = max(int(self.training_config.galore_rank), 1)
+        max_dim = int(self.training_config.galore_max_dim)
+        scale = float(self.training_config.galore_scale)
+
+        for name, param in self.model.named_parameters():
+            if param.grad is None:
+                continue
+            if param.grad.dim() != 2:
+                continue
+            if "bias" in name.lower() or "embed" in name.lower():
+                continue
+
+            grad = param.grad
+            rows, cols = grad.shape
+            if min(rows, cols) < rank:
+                continue
+            if max(rows, cols) > max_dim:
+                continue
+
+            try:
+                u, s, vh = torch.linalg.svd(grad.float(), full_matrices=False)
+            except RuntimeError:
+                continue
+
+            u = u[:, :rank]
+            s = s[:rank]
+            vh = vh[:rank, :]
+            approx = (u * s) @ vh
+            grad.copy_(approx.to(dtype=grad.dtype) * scale)
 
     def _scale_learning_rate(self, factor: float):
         """Scale all optimizer param-group learning rates by a multiplicative factor."""
@@ -555,6 +600,8 @@ class TitanTrainer:
                     if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
                         if self.use_amp:
                             self.scaler.unscale_(self.optimizer)
+
+                        self._apply_galore_projection()
 
                         grad_norm = clip_grad_norm_(
                             self.model.parameters(),

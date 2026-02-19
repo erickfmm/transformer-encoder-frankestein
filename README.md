@@ -52,6 +52,10 @@ Like Dr. Frankenstein's creation, this model is assembled from various "parts":
 - 💾 **Memory-efficient**: Designed for GPUs with 20-24GB VRAM
 - 🧪 **Research-oriented**: Easy to experiment with architectural variants
 - 📦 **Self-contained**: Custom tokenizer, model, and training pipeline
+- 🧭 **HoPE Attention**: Real multi-head attention with HoPE applied to Q/K
+- 🧪 **Derf Norm**: Optional `norm_type="derf"` for stable training
+- 🧩 **Factorized Embeddings**: `Embedding -> (Conv1d) -> Projection` for smaller params
+- 🧱 **Mini Preset**: `TormentedBertMini` for stable training on constrained GPUs
 
 ---
 
@@ -117,6 +121,19 @@ An **audacious 1.58-bit** Transformer combining Neural ODEs, RetNet, and Titan M
 
 👉 **[Read the full v2 documentation →](docs/v2/README.md)**
 
+### 🧪 Tormented-BERT-Mini (Preset)
+
+Stable preset tuned for constrained GPUs:
+
+| Feature | Specification |
+|---------|---------------|
+| **Hidden Size** | 384 |
+| **Physical Layers** | 6 |
+| **Logical Depth** | 12 (num_loops=2) |
+| **Norm** | Derf |
+| **Embedding** | Factorized (128 -> 384) + optional Conv1d |
+| **Pattern** | `[retnet, titan_attn, retnet, mamba, titan_attn, ode]` |
+
 ---
 
 ## ⚙️ Installation
@@ -174,7 +191,7 @@ python src/training/main.py
 
 ```python
 import torch
-from src.model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+from src.model.tormented_bert_frankestein import TormentedBertFrankenstein, TormentedBertMini, UltraConfig
 from src.tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 
 # Load model and tokenizer
@@ -190,6 +207,27 @@ inputs = tokenizer.encode(text, return_tensors="pt")
 with torch.no_grad():
     outputs = model(**inputs)
     sentence_embedding = outputs.pooler_output  # [CLS] representation
+```
+
+### Mini Preset Example
+
+```python
+from src.model.tormented_bert_frankestein import TormentedBertMini
+
+model = TormentedBertMini()  # uses Mini preset config
+```
+
+### UltraConfig Flags (new)
+
+```python
+config = UltraConfig(
+    norm_type="derf",
+    use_factorized_embedding=True,
+    factorized_embedding_dim=128,
+    use_embedding_conv=True,
+    hope_base=10_000.0,
+    hope_damping=0.01,
+)
 ```
 
 ---

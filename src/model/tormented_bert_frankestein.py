@@ -61,6 +61,17 @@ class UltraConfig:
     hope_base: float = 10_000.0
     hope_damping: float = 0.01
 
+    # Attention / FFN toggles
+    use_hope: bool = True
+    use_moe: bool = True
+    ffn_hidden_size: Optional[int] = None
+    ffn_activation: str = "silu"
+    embedding_conv_kernel: int = 3
+
+    def __post_init__(self):
+        if self.ffn_hidden_size is None:
+            self.ffn_hidden_size = self.hidden_size * 2
+
 # ==================== CORE: BITNET b1.58 (1.58 Bits) ====================
 def activation_quant(x):
     """Cuantización de activaciones a 8-bit (rango -128 a 127 escalado)"""
@@ -138,7 +149,13 @@ class FactorizedEmbedding(nn.Module):
         self.low_dim = config.factorized_embedding_dim
         self.use_conv = config.use_embedding_conv
         self.embedding = nn.Embedding(config.vocab_size, self.low_dim)
-        self.conv = nn.Conv1d(self.low_dim, self.low_dim, kernel_size=3, padding=1) if self.use_conv else None
+        kernel = max(int(config.embedding_conv_kernel), 1)
+        padding = kernel // 2
+        self.conv = (
+            nn.Conv1d(self.low_dim, self.low_dim, kernel_size=kernel, padding=padding)
+            if self.use_conv
+            else None
+        )
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         self.proj = proj_cls(self.low_dim, config.hidden_size, bias=False)
 
@@ -204,6 +221,7 @@ class TitanAttention(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.scale = self.head_dim ** -0.5
+        self.use_hope = bool(config.use_hope)
 
         if self.hidden_size % self.num_heads != 0:
             raise ValueError("hidden_size must be divisible by num_heads for TitanAttention")
@@ -224,11 +242,82 @@ class TitanAttention(nn.Module):
         k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        q = self.hope(q, logical_layer_idx=logical_layer_idx)
-        k = self.hope(k, logical_layer_idx=logical_layer_idx)
+        if self.use_hope:
+            q = self.hope(q, logical_layer_idx=logical_layer_idx)
+            k = self.hope(k, logical_layer_idx=logical_layer_idx)
 
         attn_scores = (q @ k.transpose(-2, -1)) * self.scale
         attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+
+        out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+        return self.out_proj(out)
+
+
+class StandardAttention(nn.Module):
+    """Standard multi-head attention (softmax) without HoPE."""
+    def __init__(self, config: UltraConfig):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.scale = self.head_dim ** -0.5
+
+        if self.hidden_size % self.num_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_heads for StandardAttention")
+
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.q_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.k_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+        bsz, seq_len, hidden = x.shape
+
+        q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+
+        out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
+        return self.out_proj(out)
+
+
+class SigmoidAttention(nn.Module):
+    """Sigmoid attention with normalization by sum of weights."""
+    def __init__(self, config: UltraConfig):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.scale = self.head_dim ** -0.5
+        self.eps = 1e-6
+
+        if self.hidden_size % self.num_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_heads for SigmoidAttention")
+
+        proj_cls = BitLinear if config.use_bitnet else nn.Linear
+        self.q_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.k_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.v_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.out_proj = proj_cls(self.hidden_size, self.hidden_size, bias=False)
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x: torch.Tensor, logical_layer_idx: Optional[int] = None) -> torch.Tensor:
+        bsz, seq_len, hidden = x.shape
+
+        q = self.q_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(x).view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attn_scores = (q @ k.transpose(-2, -1)) * self.scale
+        attn_weights = torch.sigmoid(attn_scores)
+        attn_weights = attn_weights / (attn_weights.sum(dim=-1, keepdim=True) + self.eps)
         attn_weights = self.dropout(attn_weights)
 
         out = (attn_weights @ v).transpose(1, 2).contiguous().view(bsz, seq_len, hidden)
@@ -382,6 +471,7 @@ class HybridLayer(nn.Module):
         super().__init__()
         self.layer_type = layer_type
         self.norm1 = get_norm(config)
+        self.use_moe = bool(config.use_moe)
         
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
         
@@ -393,20 +483,36 @@ class HybridLayer(nn.Module):
         elif layer_type == "mamba":
             # Placeholder simple para Mamba (en prod usar mamba-ssm)
             self.mixer = proj_cls(config.hidden_size, config.hidden_size) 
+        elif layer_type == "standard_attn":
+            self.mixer = StandardAttention(config)
+        elif layer_type == "sigmoid_attn":
+            self.mixer = SigmoidAttention(config)
         else: # titan_attn
             self.mixer = TitanAttention(config)
 
-        # Sparse MoE FFN (BitNet)
         self.norm2 = get_norm(config)
-        self.router = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = nn.ModuleList([
-            nn.Sequential(
-                proj_cls(config.hidden_size, config.hidden_size * 2),
-                nn.SiLU(),
-                proj_cls(config.hidden_size * 2, config.hidden_size)
-            ) for _ in range(config.num_experts)
-        ])
-        self.top_k = config.top_k_experts
+        activation = nn.SiLU() if config.ffn_activation == "silu" else nn.GELU()
+
+        if self.use_moe:
+            # Sparse MoE FFN (BitNet)
+            self.router = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+            self.experts = nn.ModuleList([
+                nn.Sequential(
+                    proj_cls(config.hidden_size, config.ffn_hidden_size),
+                    activation,
+                    proj_cls(config.ffn_hidden_size, config.hidden_size)
+                ) for _ in range(config.num_experts)
+            ])
+            self.top_k = config.top_k_experts
+        else:
+            self.router = None
+            self.experts = None
+            self.top_k = 0
+            self.ffn = nn.Sequential(
+                proj_cls(config.hidden_size, config.ffn_hidden_size),
+                activation,
+                proj_cls(config.ffn_hidden_size, config.hidden_size)
+            )
 
     def forward(self, x, logical_layer_idx: Optional[int] = None):
         residual = x
@@ -416,39 +522,43 @@ class HybridLayer(nn.Module):
         if self.layer_type == "mamba":
             # Simulación rápida
             x = x + self.mixer(x) 
-        elif self.layer_type == "titan_attn":
+        elif self.layer_type in {"titan_attn", "standard_attn", "sigmoid_attn"}:
             x = self.mixer(x, logical_layer_idx=logical_layer_idx)
         else:
             x = self.mixer(x)
             
         x = residual + x
         
-        # MoE Logic
+        # MoE / FFN Logic
         residual = x
         x = self.norm2(x)
-        
-        # Routing
-        logits = self.router(x)
-        weights, indices = torch.topk(F.softmax(logits, dim=-1), self.top_k, dim=-1)
-        
-        # Execute experts
-        batch_size, seq_len, dim = x.shape
-        flat_x = x.view(-1, dim)
-        out = torch.zeros_like(flat_x)
-        
-        # Loop ingenuo (optimizar con scatter/gather en CUDA)
-        for k in range(self.top_k):
-            expert_indices = indices[:, :, k].flatten()
-            expert_weights = weights[:, :, k].flatten().unsqueeze(1)
-            
-            for i, expert in enumerate(self.experts):
-                mask = (expert_indices == i)
-                if mask.any():
-                    selected_x = flat_x[mask]
-                    expert_out = expert(selected_x)
-                    out[mask] += expert_out * expert_weights[mask]
-                    
-        x = residual + out.view(batch_size, seq_len, dim)
+
+        if self.use_moe:
+            # Routing
+            logits = self.router(x)
+            weights, indices = torch.topk(F.softmax(logits, dim=-1), self.top_k, dim=-1)
+
+            # Execute experts
+            batch_size, seq_len, dim = x.shape
+            flat_x = x.view(-1, dim)
+            out = torch.zeros_like(flat_x)
+
+            # Loop ingenuo (optimizar con scatter/gather en CUDA)
+            for k in range(self.top_k):
+                expert_indices = indices[:, :, k].flatten()
+                expert_weights = weights[:, :, k].flatten().unsqueeze(1)
+
+                for i, expert in enumerate(self.experts):
+                    mask = (expert_indices == i)
+                    if mask.any():
+                        selected_x = flat_x[mask]
+                        expert_out = expert(selected_x)
+                        out[mask] += expert_out * expert_weights[mask]
+
+            x = residual + out.view(batch_size, seq_len, dim)
+            return x
+
+        x = residual + self.ffn(x)
         return x
 
 # ==================== MAIN MODEL ====================

@@ -33,24 +33,42 @@ from torch.utils.data import DataLoader
 
 from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 from training.streaming_mlm_dataset import StreamingMLMDataset
-from training.trainer import TitanTrainer, TrainingConfig
+from training.trainer import TitanTrainer
+from training.config_loader import load_training_config, list_config_paths
 from model.tormented_bert_frankestein import TormentedBertFrankenstein, TormentedBertMini, UltraConfig
 
 # ==================== MAIN EXECUTION ====================
 def main():
     """Main training pipeline for TORMENTED-BERT-Frankenstein"""
-    parser = argparse.ArgumentParser(description="Train Frankenstein or Mini variant")
+    parser = argparse.ArgumentParser(description="Train models from YAML configs")
     parser.add_argument(
-        "--model-mode",
-        choices=["frankenstein", "mini"],
-        default=os.environ.get("MODEL_MODE", "mini"),
-        help="Model variant to train"
+        "--config",
+        type=str,
+        default=None,
+        help="Path to YAML config file"
+    )
+    parser.add_argument(
+        "--config-name",
+        type=str,
+        default=os.environ.get("CONFIG_NAME", "mini"),
+        help="Config name under src/training/configs (without extension)"
+    )
+    parser.add_argument(
+        "--list-configs",
+        action="store_true",
+        help="List available configs and exit"
     )
     parser.add_argument(
         "--batch-size",
         type=int,
         default=None,
-        help="Dataloader batch size. Default: 8 for mini on CUDA (P40), otherwise conservative auto value"
+        help="Override batch size from YAML"
+    )
+    parser.add_argument(
+        "--model-mode",
+        choices=["frankenstein", "mini"],
+        default=None,
+        help="Deprecated: use --config-name instead"
     )
     args = parser.parse_args()
 
@@ -62,28 +80,53 @@ def main():
     
     logging.info("⚡ Starting TORMENTED-BERT-Frankenstein training ⚡")
     logging.info(f"Current directory: {os.getcwd()}")
-    
+
     try:
         import psutil
         logging.info(f"Available storage: {psutil.disk_usage('.').free/1024**3:.2f}GB")
     except ImportError:
         logging.warning("psutil not installed, storage monitoring limited")
+
+    config_dir = os.path.join(os.path.dirname(__file__), "configs")
+    available_configs = list_config_paths(config_dir)
+    if args.list_configs:
+        logging.info("Available configs:")
+        for name, path in available_configs.items():
+            logging.info(f"  - {name}: {path}")
+        return
+
+    config_path = None
+    if args.config:
+        config_path = args.config
+    else:
+        config_name = args.config_name
+        if args.model_mode and args.model_mode not in ("", None):
+            config_name = args.model_mode
+        config_path = available_configs.get(config_name)
+
+    if not config_path or not os.path.exists(config_path):
+        raise FileNotFoundError(f"Config not found: {config_path}")
+
+    model_class, config, training_config, training_runtime = load_training_config(config_path)
+    logging.info(f"Using config: {config_path}")
     
     # Step 1: Train/Load tokenizer
     logging.info("\n" + "="*60)
-    logging.info("Step 1: Training/Loading SPM tokenizer (50k vocab)")
+    logging.info(f"Step 1: Training/Loading SPM tokenizer ({config.vocab_size} vocab)")
     logging.info("="*60)
     
     # Check if tokenizer already exists
-    model_path = "es_redpajama_50k.model"
+    vocab_size = config.vocab_size
+    model_prefix = "es_redpajama_50k" if vocab_size == 50_000 else f"es_redpajama_{vocab_size}"
+    model_path = f"{model_prefix}.model"
     if os.path.exists(model_path):
         logging.info("Loading existing tokenizer...")
-        tokenizer = SpanishSPMTokenizer(vocab_size=50000, model_path=model_path)
+        tokenizer = SpanishSPMTokenizer(vocab_size=vocab_size, model_path=model_path)
     else:
         logging.info("Training new tokenizer with maximum data (100GB RAM target)...")
-        tokenizer = SpanishSPMTokenizer(vocab_size=50000)
+        tokenizer = SpanishSPMTokenizer(vocab_size=vocab_size)
         tokenizer.train(
-            model_prefix="es_redpajama_50k",
+            model_prefix=model_prefix,
             max_training_samples=50_000_000,  # Up to 50M samples
             target_ram_gb=100.0  # Use up to 100GB RAM for quality tokenizer
         )
@@ -96,80 +139,25 @@ def main():
     logging.info("Step 2: Creating TORMENTED-BERT-Frankenstein model")
     logging.info("="*60)
     
-    # =========================================================================
-    # STABLE LAYER PATTERN CONFIGURATION
-    # =========================================================================
-    # Based on research from hybrid architectures (TransMamba, SST, etc.):
-    # 
-    # Key insights for stability:
-    # 1. RetNet: Most stable for long-range dependencies, use as anchors
-    # 2. Titan Attention: Standard attention, proven stable, good for local patterns
-    # 3. ODE: Continuous dynamics can be unstable, use sparingly, lower LR
-    # 4. Mamba: Good efficiency but can struggle with certain patterns
-    #
-    # STABLE 6-LAYER PATTERN (repeated to fill num_layers):
-    # [retnet -> titan_attn -> retnet -> mamba -> titan_attn -> ode]
-    #
-    # Rationale:
-    # - Start with RetNet for stable gradient flow initialization
-    # - Alternate RetNet/Titan for stability anchoring
-    # - Place ODE at the end where gradients are more stable
-    # - Mamba in middle position, sandwiched by stable layers
-    # - 2x RetNet, 2x Titan, 1x Mamba, 1x ODE per cycle
-    # =========================================================================
-    
     stable_layer_pattern = [
-        "retnet",       # 1. Stable anchor, good gradient flow
-        "titan_attn",   # 2. Proven attention mechanism
-        "retnet",       # 3. Another stable anchor
-        "mamba",        # 4. Efficient SSM, sandwiched by stable layers
-        "titan_attn",   # 5. Attention for local patterns
-        "ode"           # 6. ODE at end, more stable gradients from above
+        "retnet",
+        "titan_attn",
+        "retnet",
+        "mamba",
+        "titan_attn",
+        "ode",
     ]
-    
-    if args.model_mode == "mini":
-        config = UltraConfig(
-            vocab_size=50000,
-            hidden_size=512,
-            num_layers=6,
-            num_loops=2,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=4,
-            top_k_experts=2,
-            dropout=0.2,
-            ode_solver="rk4",
-            ode_steps=2, # ODE can be unstable, keep steps low for mini
-            use_bitnet=False, # on mini, we can afford full precision for stability, because it went on infinity with ternary in early tests
-            norm_type="derf",
-            layer_pattern=stable_layer_pattern,
-            use_factorized_embedding=True,
-            factorized_embedding_dim=128,
-            use_embedding_conv=True,
-        )
+
+    if not config.layer_pattern:
+        config.layer_pattern = stable_layer_pattern
+
+    if model_class == "mini":
         model = TormentedBertMini(config)
     else:
-        # Configure for available hardware (P40 24GB target)
-        config = UltraConfig(
-            vocab_size=50000,
-            hidden_size=1024,           # Reduced from 2048 for stability
-            num_layers=12,              # Physical layers (uses 2 cycles of 6-pattern)
-            num_loops=2,                # Logical depth = 24
-            num_heads=16,
-            retention_heads=8,
-            num_experts=4,              # Reduced MoE experts
-            top_k_experts=2,
-            dropout=0.1,
-            ode_solver="rk4",
-            ode_steps=4,                # Low steps for speed
-            use_bitnet=True,            # Essential for memory efficiency
-            norm_type="dynamic_tanh",
-            layer_pattern=stable_layer_pattern  # Use stable pattern
-        )
         model = TormentedBertFrankenstein(config)
     
     logging.info(f"Model Config:")
-    logging.info(f"  - Mode: {args.model_mode}")
+    logging.info(f"  - Model Class: {model_class}")
     logging.info(f"  - Hidden Size: {config.hidden_size}")
     logging.info(f"  - Layers: {config.num_layers} x {config.num_loops} = {config.num_layers * config.num_loops} logical")
     logging.info(f"  - Layer Pattern: {config.layer_pattern}")
@@ -188,20 +176,33 @@ def main():
     logging.info("Step 3: Preparing MLM dataset with resilient caching")
     logging.info("="*60)
     
+    max_length = int(training_runtime.get("max_length", 512))
+    mlm_probability = float(training_runtime.get("mlm_probability", 0.15))
+    max_samples = int(training_runtime.get("max_samples", 20_000_000))
+    dataset_batch_size = int(training_runtime.get("dataset_batch_size", 25_000))
+    dataset_num_workers = int(training_runtime.get("num_workers", 8))
+    cache_dir = training_runtime.get("cache_dir", "./temp_data/v2_dataset_cache")
+    local_parquet_dir = training_runtime.get(
+        "local_parquet_dir",
+        "/home/erickfmm/.cache/huggingface/hub/"
+        "datasets--erickfmm--red_pajama_es_hq_35/"
+        "snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/"
+        "train/",
+    )
+    prefer_local_cache = bool(training_runtime.get("prefer_local_cache", True))
+    stream_local_parquet = bool(training_runtime.get("stream_local_parquet", True))
+
     dataset = StreamingMLMDataset(
         tokenizer=tokenizer,
-        max_length=512,             # Standard sequence length
-        mlm_probability=0.15,
-        max_samples=20_000_000,         # Increased for v2 training
-        batch_size=25000,            # Process 25000 examples per batch
-        num_workers=8,             # Use all 56 cores for parallel processing
-        cache_dir="./temp_data/v2_dataset_cache",  # Separate cache for v2
-        local_parquet_dir="/home/erickfmm/.cache/huggingface/hub/"
-                          "datasets--erickfmm--red_pajama_es_hq_35/"
-                          "snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/"
-                          "train/",
-        prefer_local_cache=True,
-        stream_local_parquet=True
+        max_length=max_length,
+        mlm_probability=mlm_probability,
+        max_samples=max_samples,
+        batch_size=dataset_batch_size,
+        num_workers=dataset_num_workers,
+        cache_dir=cache_dir,
+        local_parquet_dir=local_parquet_dir,
+        prefer_local_cache=prefer_local_cache,
+        stream_local_parquet=stream_local_parquet,
     )
     
     # Show dataset statistics
@@ -215,26 +216,23 @@ def main():
     logging.info(f"  - Recovery enabled: Cache will be reused on restart")
     
     # Batch size policy:
-    # - If provided explicitly, use it.
-    # - Otherwise, default to 8 for mini mode on CUDA (good starting point for P40 24GB),
-    #   and conservative values for other cases.
+    # - Use YAML default if present.
+    # - CLI override takes priority.
+    batch_size = training_runtime.get("batch_size", None)
     if args.batch_size is not None:
         if args.batch_size <= 0:
             raise ValueError("--batch-size must be > 0")
         batch_size = args.batch_size
-    else:
-        if torch.cuda.is_available() and args.model_mode == "mini":
-            batch_size = 8
-        elif torch.cuda.is_available():
-            batch_size = 2
-        else:
-            batch_size = 1
+    if batch_size is None:
+        batch_size = 1
+
+    dataloader_workers = int(training_runtime.get("dataloader_workers", 2))
     
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,
+        num_workers=dataloader_workers,
         pin_memory=torch.cuda.is_available(),
         drop_last=True
     )
@@ -247,20 +245,10 @@ def main():
     
     # Step 4: Train
     logging.info("\n" + "="*60)
-    logging.info(f"Step 4: Training TORMENTED-BERT ({args.model_mode})")
+    logging.info(f"Step 4: Training TORMENTED-BERT ({model_class})")
     logging.info("="*60)
     
-    # Configure training behavior
-    training_config = TrainingConfig(
-        csv_log_path="training_metrics.csv",      # CSV file for all metrics
-        checkpoint_every_n_steps=500,             # Rolling checkpoint frequency
-        max_rolling_checkpoints=3,                # Keep only 3 rolling checkpoints
-        num_best_checkpoints=2,                   # Keep top 2 best models
-        nan_check_interval=10,                    # Check NaN every 10 steps
-        log_gradient_stats=True,
-        gradient_log_interval=10
-    )
-    
+    # Configure training behavior from YAML
     trainer = TitanTrainer(model, config, training_config=training_config)
     
     num_epochs = 5  # Increased for better convergence
