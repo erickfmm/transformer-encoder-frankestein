@@ -673,3 +673,135 @@ Turbo-Muon,"AOL Pre-conditioning, 4-step NS",Orthogonal,O(n3) per layer,1×,10.4
 
 Conclusion
 The mathematical landscape of Transformer optimization is fractured between scaling parameter dimensions independently (AdamW, Schedule-Free, ADOPT), extracting curvature representations explicitly (Shampoo, SOAP, Sophia), leveraging gradient trajectory variance bounds (MARS, Cautious, AdEMAMix), and treating weight projections as constrained geometric manifolds (Muon, Turbo-Muon). Navigating this complex hierarchy enables deep learning engineers to pinpoint the exact intersection of memory overhead, FLOP throughput, and convergence bounds tailored to their specific hardware limitations.
+## 3. Memory-Efficient and Low-Rank Optimizers
+
+### Adafactor
+
+Features: Adafactor reduces optimizer memory by factorizing second-moment statistics for matrix-like tensors, storing row/column accumulators instead of dense variance states.
+
+Paper / DOI: Shazeer & Stern (2018) [10.48550/arXiv.1804.04235]
+
+Mathematical Formulation:
+Given gradient $G_t \in \mathbb{R}^{n \times m}$:
+
+$$R_t = \beta_2 R_{t-1} + (1 - \beta_2)(G_t^2) 1_m$$
+$$C_t = \beta_2 C_{t-1} + (1 - \beta_2) 1_n^\top (G_t^2)$$
+$$\hat{V}_t = \frac{R_t C_t / 1_n^\top R_t}{1 - \beta_2^t}$$
+$$U_t = \frac{G_t}{\sqrt{\hat{V}_t} + \epsilon}, \quad \hat{U}_t = \frac{U_t}{\max(1, \text{RMS}(U_t)/d)}$$
+
+Pure PyTorch Implementation:
+
+```Python
+class Adafactor(Optimizer):
+    ...
+```
+
+### GaLore (Gradient Low-Rank Projection)
+
+Features: GaLore projects 2D gradients into a low-rank subspace, optimizes in that compact space, and reconstructs updates in original space.
+
+Paper / DOI: Zhao et al. (2024) [10.48550/arXiv.2403.03507]
+
+Mathematical Formulation:
+$$U, S, V = \text{SVD}(G_t), \quad P = U_{[:, :r]} \; \text{or} \; V_{[:, :r]}$$
+$$G_{low} = P^T G_t \; (\text{or } G_t P^T), \quad \Delta = P \Delta_{low} \; (\text{or } \Delta_{low} P)$$
+
+Pure PyTorch Implementation:
+
+```Python
+class GaLoreAdamW(Optimizer):
+    ...
+```
+
+## 4. Parameter-Free and Distance-Adaptive Methods
+
+### Prodigy
+
+Features: Prodigy adapts effective step scale through a running distance-like statistic, reducing sensitivity to manual LR tuning.
+
+Paper / DOI: Mishchenko & Defazio (2023) [10.48550/arXiv.2306.06101]
+
+Mathematical Formulation:
+$$s_k = \sum \langle u_t, p_t - p_0 \rangle$$
+$$d_t = \max(d_{t-1}, d_0 + d_{coef} \cdot s_k)$$
+$$\theta_{t+1} = \theta_t - \eta \cdot d_t \cdot u_t$$
+
+Pure PyTorch Implementation:
+
+```Python
+class Prodigy(Optimizer):
+    ...
+```
+
+## 5. Sign and Second-Order Dynamics
+
+### Lion (EvoLved Sign Momentum)
+
+Features: Lion uses sign-based updates with momentum tracking, reducing memory footprint compared to Adam-like second-moment methods.
+
+Paper / DOI: Chen et al. (2023) [10.48550/arXiv.2302.06675]
+
+Mathematical Formulation:
+$$c_t = \beta_1 m_t + (1 - \beta_1) g_t$$
+$$\theta_{t+1} = \theta_t - \eta_t (\text{sign}(c_t) + \lambda \theta_t)$$
+$$m_{t+1} = \beta_2 m_t + (1 - \beta_2) g_t$$
+
+Pure PyTorch Implementation:
+
+```Python
+class Lion(Optimizer):
+    ...
+```
+
+### Sophia
+
+Features: Sophia uses periodic diagonal Hessian estimates with clipped second-order-scaled updates for stable large-scale optimization.
+
+Paper / DOI: Liu et al. (2023) [10.48550/arXiv.2305.14342]
+
+Mathematical Formulation:
+$$h_t = \beta_2 h_{t-k} + (1 - \beta_2) \hat{h}_t$$
+$$\theta_{t+1} = \theta_t - \eta_t \cdot \text{clip} \left( \frac{m_t}{\max(\gamma h_t, \epsilon)}, 1 \right)$$
+
+Pure PyTorch Implementation:
+
+```Python
+class Sophia(Optimizer):
+    ...
+```
+
+## 6. Orthogonality-Based Optimizers
+
+### Muon
+
+Features: Muon orthogonalizes momentum-driven updates for 2D tensors using Newton-Schulz iterations.
+
+Paper / DOI: Muon (2025) [10.48550/arXiv.2505.23737]
+
+Mathematical Formulation:
+$$X_0 = G / (||G||_F + \epsilon)$$
+$$A_k = X_k X_k^T, \quad B_k = b A_k + c A_k^2, \quad X_{k+1} = a X_k + B_k X_k$$
+
+Pure PyTorch Implementation:
+
+```Python
+class Muon(Optimizer):
+    ...
+```
+
+### Turbo-Muon
+
+Features: Turbo-Muon adds almost-orthogonal preconditioning before Newton-Schulz updates, reducing the number of required orthogonalization iterations.
+
+Paper / DOI: Turbo-Muon (2025) [10.48550/arXiv.2512.04632]
+
+Mathematical Formulation:
+$$A_0 = X_0^T X_0, \quad s_i = (\|A_{0i}\|_1)^{-1/2}$$
+$$X_1 = X_0 \cdot \text{diag}(s), \quad A_1 = \text{diag}(s) A_0 \text{diag}(s)$$
+
+Pure PyTorch Implementation:
+
+```Python
+class TurboMuon(Optimizer):
+    ...
+```

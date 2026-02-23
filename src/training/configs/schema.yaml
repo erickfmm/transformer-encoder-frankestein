@@ -184,34 +184,7 @@ properties:
       - cache_dir
       - use_amp
       - gradient_accumulation_steps
-      - lr_embeddings
-      - lr_norms
-      - lr_ode
-      - lr_retnet
-      - lr_mamba
-      - lr_attention
-      - lr_other
-      - wd_embeddings
-      - wd_norms
-      - wd_ode
-      - wd_retnet
-      - wd_mamba
-      - wd_attention
-      - wd_other
-      - betas_embeddings
-      - betas_norms
-      - betas_ode
-      - betas_retnet
-      - betas_mamba
-      - betas_attention
-      - betas_other
-      - eps_embeddings
-      - eps_norms
-      - eps_ode
-      - eps_retnet
-      - eps_mamba
-      - eps_attention
-      - eps_other
+      - optimizer
       - scheduler_total_steps
       - scheduler_warmup_ratio
       - scheduler_type
@@ -291,160 +264,150 @@ properties:
         minimum: 1
         description: "Gradient accumulation steps."
         examples: [4]
-      lr_embeddings:
-        type: number
-        minimum: 0.0
-        description: "LR for embedding parameters."
-        examples: [1e-6]
-      lr_norms:
-        type: number
-        minimum: 0.0
-        description: "LR for normalization parameters."
-        examples: [5e-6]
-      lr_ode:
-        type: number
-        minimum: 0.0
-        description: "LR for ODE parameters."
-        examples: [1e-7]
-      lr_retnet:
-        type: number
-        minimum: 0.0
-        description: "LR for RetNet parameters."
-        examples: [5e-6]
-      lr_mamba:
-        type: number
-        minimum: 0.0
-        description: "LR for Mamba parameters."
-        examples: [2e-6]
-      lr_attention:
-        type: number
-        minimum: 0.0
-        description: "LR for attention parameters."
-        examples: [3e-6]
-      lr_other:
-        type: number
-        minimum: 0.0
-        description: "LR for all other parameters."
-        examples: [2e-6]
-      wd_embeddings:
-        type: number
-        minimum: 0.0
-        description: "Weight decay for embedding parameters."
-        examples: [0.01]
-      wd_norms:
-        type: number
-        minimum: 0.0
-        description: "Weight decay for normalization parameters."
-        examples: [0.001]
-      wd_ode:
-        type: number
-        minimum: 0.0
-        description: "Weight decay for ODE parameters."
-        examples: [0.01]
-      wd_retnet:
-        type: number
-        minimum: 0.0
-        description: "Weight decay for RetNet parameters."
-        examples: [0.01]
-      wd_mamba:
-        type: number
-        minimum: 0.0
-        description: "Weight decay for Mamba parameters."
-        examples: [0.01]
-      wd_attention:
-        type: number
-        minimum: 0.0
-        description: "Weight decay for attention parameters."
-        examples: [0.01]
-      wd_other:
-        type: number
-        minimum: 0.0
-        description: "Weight decay for all other parameters."
-        examples: [0.01]
-      betas_embeddings:
-        type: array
-        minItems: 2
-        maxItems: 2
-        items: { type: number }
-        description: "Adam betas for embedding parameters."
-        examples: [[0.9, 0.95]]
-      betas_norms:
-        type: array
-        minItems: 2
-        maxItems: 2
-        items: { type: number }
-        description: "Adam betas for normalization parameters."
-        examples: [[0.9, 0.95]]
-      betas_ode:
-        type: array
-        minItems: 2
-        maxItems: 2
-        items: { type: number }
-        description: "Adam betas for ODE parameters."
-        examples: [[0.9, 0.95]]
-      betas_retnet:
-        type: array
-        minItems: 2
-        maxItems: 2
-        items: { type: number }
-        description: "Adam betas for RetNet parameters."
-        examples: [[0.9, 0.95]]
-      betas_mamba:
-        type: array
-        minItems: 2
-        maxItems: 2
-        items: { type: number }
-        description: "Adam betas for Mamba parameters."
-        examples: [[0.9, 0.95]]
-      betas_attention:
-        type: array
-        minItems: 2
-        maxItems: 2
-        items: { type: number }
-        description: "Adam betas for attention parameters."
-        examples: [[0.9, 0.95]]
-      betas_other:
-        type: array
-        minItems: 2
-        maxItems: 2
-        items: { type: number }
-        description: "Adam betas for other parameters."
-        examples: [[0.9, 0.95]]
-      eps_embeddings:
-        type: number
-        minimum: 0.0
-        description: "Adam eps for embedding parameters."
-        examples: [1e-8]
-      eps_norms:
-        type: number
-        minimum: 0.0
-        description: "Adam eps for normalization parameters."
-        examples: [1e-8]
-      eps_ode:
-        type: number
-        minimum: 0.0
-        description: "Adam eps for ODE parameters."
-        examples: [1e-8]
-      eps_retnet:
-        type: number
-        minimum: 0.0
-        description: "Adam eps for RetNet parameters."
-        examples: [1e-8]
-      eps_mamba:
-        type: number
-        minimum: 0.0
-        description: "Adam eps for Mamba parameters."
-        examples: [1e-8]
-      eps_attention:
-        type: number
-        minimum: 0.0
-        description: "Adam eps for attention parameters."
-        examples: [1e-8]
-      eps_other:
-        type: number
-        minimum: 0.0
-        description: "Adam eps for other parameters."
-        examples: [1e-8]
+      optimizer:
+        type: object
+        description: "Optimizer chooser with prefixed hyperparameters."
+        additionalProperties: false
+        required:
+          - optimizer_class
+          - parameters
+        properties:
+          optimizer_class:
+            type: string
+            enum:
+              - sgd_momentum
+              - adamw
+              - adafactor
+              - galore_adamw
+              - prodigy
+              - lion
+              - sophia
+              - muon
+              - turbo_muon
+              - radam
+              - adan
+              - adopt
+              - ademamix
+              - mars_adamw
+              - cautious_adamw
+              - lamb
+              - schedulefree_adamw
+              - shampoo
+              - soap
+            description: "Optimizer id."
+            examples: [adamw]
+          parameters:
+            type: object
+            description: "Optimizer parameters prefixed with '<optimizer_class>-'. Available parameters for each optimizer are documented in x_parameter_reference."
+            minProperties: 1
+            additionalProperties: true
+            x_parameter_reference:
+              shared_per_group_suffixes:
+                - lr_embeddings
+                - lr_norms
+                - lr_ode
+                - lr_retnet
+                - lr_mamba
+                - lr_attention
+                - lr_other
+                - wd_embeddings
+                - wd_norms
+                - wd_ode
+                - wd_retnet
+                - wd_mamba
+                - wd_attention
+                - wd_other
+                - betas_embeddings
+                - betas_norms
+                - betas_ode
+                - betas_retnet
+                - betas_mamba
+                - betas_attention
+                - betas_other
+                - eps_embeddings
+                - eps_norms
+                - eps_ode
+                - eps_retnet
+                - eps_mamba
+                - eps_attention
+                - eps_other
+              by_optimizer:
+                sgd_momentum:
+                  prefix: "sgd_momentum-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [momentum, nesterov]
+                adamw:
+                  prefix: "adamw-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                adafactor:
+                  prefix: "adafactor-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [beta2_decay, clip_threshold, eps1, eps2]
+                galore_adamw:
+                  prefix: "galore_adamw-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [rank, update_proj_gap]
+                prodigy:
+                  prefix: "prodigy-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [d_coef]
+                lion:
+                  prefix: "lion-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                sophia:
+                  prefix: "sophia-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [rho, update_k]
+                muon:
+                  prefix: "muon-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [momentum, nesterov, ns_steps, ns_eps]
+                turbo_muon:
+                  prefix: "turbo_muon-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [momentum, nesterov, ns_steps, ns_eps]
+                radam:
+                  prefix: "radam-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                adan:
+                  prefix: "adan-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                adopt:
+                  prefix: "adopt-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                ademamix:
+                  prefix: "ademamix-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                mars_adamw:
+                  prefix: "mars_adamw-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                cautious_adamw:
+                  prefix: "cautious_adamw-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [cautious_clip]
+                lamb:
+                  prefix: "lamb-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                schedulefree_adamw:
+                  prefix: "schedulefree_adamw-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                shampoo:
+                  prefix: "shampoo-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
+                soap:
+                  prefix: "soap-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: []
       scheduler_total_steps:
         type: integer
         minimum: 1
@@ -529,6 +492,273 @@ properties:
         minimum: 1
         description: "Max tensor dimension for GaLore."
         examples: [4096]
+    allOf:
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: sgd_momentum
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^sgd_momentum-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: adamw
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^adamw-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: adafactor
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^adafactor-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: galore_adamw
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^galore_adamw-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: prodigy
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^prodigy-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: lion
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^lion-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: sophia
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^sophia-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: muon
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^muon-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: turbo_muon
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^turbo_muon-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: radam
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^radam-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: adan
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^adan-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: adopt
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^adopt-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: ademamix
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^ademamix-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: mars_adamw
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^mars_adamw-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: cautious_adamw
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^cautious_adamw-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: lamb
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^lamb-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: schedulefree_adamw
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^schedulefree_adamw-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: shampoo
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^shampoo-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: soap
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^soap-": {}
 
 examples:
   - model_class: frankenstein
@@ -566,34 +796,37 @@ examples:
       cache_dir: "./temp_data/v2_dataset_cache"
       use_amp: false
       gradient_accumulation_steps: 4
-      lr_embeddings: 1e-6
-      lr_norms: 5e-6
-      lr_ode: 1e-7
-      lr_retnet: 5e-6
-      lr_mamba: 2e-6
-      lr_attention: 3e-6
-      lr_other: 2e-6
-      wd_embeddings: 0.01
-      wd_norms: 0.001
-      wd_ode: 0.01
-      wd_retnet: 0.01
-      wd_mamba: 0.01
-      wd_attention: 0.01
-      wd_other: 0.01
-      betas_embeddings: [0.9, 0.95]
-      betas_norms: [0.9, 0.95]
-      betas_ode: [0.9, 0.95]
-      betas_retnet: [0.9, 0.95]
-      betas_mamba: [0.9, 0.95]
-      betas_attention: [0.9, 0.95]
-      betas_other: [0.9, 0.95]
-      eps_embeddings: 1e-8
-      eps_norms: 1e-8
-      eps_ode: 1e-8
-      eps_retnet: 1e-8
-      eps_mamba: 1e-8
-      eps_attention: 1e-8
-      eps_other: 1e-8
+      optimizer:
+        optimizer_class: adamw
+        parameters:
+          adamw-lr_embeddings: 1e-6
+          adamw-lr_norms: 5e-6
+          adamw-lr_ode: 1e-7
+          adamw-lr_retnet: 5e-6
+          adamw-lr_mamba: 2e-6
+          adamw-lr_attention: 3e-6
+          adamw-lr_other: 2e-6
+          adamw-wd_embeddings: 0.01
+          adamw-wd_norms: 0.001
+          adamw-wd_ode: 0.01
+          adamw-wd_retnet: 0.01
+          adamw-wd_mamba: 0.01
+          adamw-wd_attention: 0.01
+          adamw-wd_other: 0.01
+          adamw-betas_embeddings: [0.9, 0.95]
+          adamw-betas_norms: [0.9, 0.95]
+          adamw-betas_ode: [0.9, 0.95]
+          adamw-betas_retnet: [0.9, 0.95]
+          adamw-betas_mamba: [0.9, 0.95]
+          adamw-betas_attention: [0.9, 0.95]
+          adamw-betas_other: [0.9, 0.95]
+          adamw-eps_embeddings: 1e-8
+          adamw-eps_norms: 1e-8
+          adamw-eps_ode: 1e-8
+          adamw-eps_retnet: 1e-8
+          adamw-eps_mamba: 1e-8
+          adamw-eps_attention: 1e-8
+          adamw-eps_other: 1e-8
       scheduler_total_steps: 10000
       scheduler_warmup_ratio: 0.1
       scheduler_type: cosine

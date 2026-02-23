@@ -57,34 +57,37 @@ training:
   stream_local_parquet: true
   use_amp: false
   gradient_accumulation_steps: 4
-  lr_embeddings: 1e-6
-  lr_norms: 5e-6
-  lr_ode: 1e-7
-  lr_retnet: 5e-6
-  lr_mamba: 2e-6
-  lr_attention: 3e-6
-  lr_other: 2e-6
-  wd_embeddings: 0.01
-  wd_norms: 0.001
-  wd_ode: 0.01
-  wd_retnet: 0.01
-  wd_mamba: 0.01
-  wd_attention: 0.01
-  wd_other: 0.01
-  betas_embeddings: [0.9, 0.95]
-  betas_norms: [0.9, 0.95]
-  betas_ode: [0.9, 0.95]
-  betas_retnet: [0.9, 0.95]
-  betas_mamba: [0.9, 0.95]
-  betas_attention: [0.9, 0.95]
-  betas_other: [0.9, 0.95]
-  eps_embeddings: 1e-8
-  eps_norms: 1e-8
-  eps_ode: 1e-8
-  eps_retnet: 1e-8
-  eps_mamba: 1e-8
-  eps_attention: 1e-8
-  eps_other: 1e-8
+  optimizer:
+    optimizer_class: adamw
+    parameters:
+      adamw-lr_embeddings: 1e-6
+      adamw-lr_norms: 5e-6
+      adamw-lr_ode: 1e-7
+      adamw-lr_retnet: 5e-6
+      adamw-lr_mamba: 2e-6
+      adamw-lr_attention: 3e-6
+      adamw-lr_other: 2e-6
+      adamw-wd_embeddings: 0.01
+      adamw-wd_norms: 0.001
+      adamw-wd_ode: 0.01
+      adamw-wd_retnet: 0.01
+      adamw-wd_mamba: 0.01
+      adamw-wd_attention: 0.01
+      adamw-wd_other: 0.01
+      adamw-betas_embeddings: [0.9, 0.95]
+      adamw-betas_norms: [0.9, 0.95]
+      adamw-betas_ode: [0.9, 0.95]
+      adamw-betas_retnet: [0.9, 0.95]
+      adamw-betas_mamba: [0.9, 0.95]
+      adamw-betas_attention: [0.9, 0.95]
+      adamw-betas_other: [0.9, 0.95]
+      adamw-eps_embeddings: 1e-8
+      adamw-eps_norms: 1e-8
+      adamw-eps_ode: 1e-8
+      adamw-eps_retnet: 1e-8
+      adamw-eps_mamba: 1e-8
+      adamw-eps_attention: 1e-8
+      adamw-eps_other: 1e-8
   scheduler_total_steps: 10000
   scheduler_warmup_ratio: 0.1
   scheduler_type: cosine
@@ -103,6 +106,68 @@ training:
   galore_scale: 1.0
   galore_max_dim: 4096
 ```
+
+## Optimizer Chooser
+
+`training.optimizer.optimizer_class` supported values:
+- `sgd_momentum`
+- `adamw`
+- `adafactor`
+- `galore_adamw`
+- `prodigy`
+- `lion`
+- `sophia`
+- `muon`
+- `turbo_muon`
+- `radam`
+- `adan`
+- `adopt`
+- `ademamix`
+- `mars_adamw`
+- `cautious_adamw`
+- `lamb`
+- `schedulefree_adamw`
+- `shampoo`
+- `soap`
+
+`training.optimizer.parameters` must use the selected optimizer prefix. Example: when `optimizer_class: adamw`, all keys must start with `adamw-`.
+
+### Optimizer Parameters Reference
+
+All optimizers support these shared per-group parameter suffixes (use with optimizer prefix, e.g. `adamw-lr_embeddings`):
+
+- `lr_embeddings`, `lr_norms`, `lr_ode`, `lr_retnet`, `lr_mamba`, `lr_attention`, `lr_other`
+- `wd_embeddings`, `wd_norms`, `wd_ode`, `wd_retnet`, `wd_mamba`, `wd_attention`, `wd_other`
+- `betas_embeddings`, `betas_norms`, `betas_ode`, `betas_retnet`, `betas_mamba`, `betas_attention`, `betas_other`
+- `eps_embeddings`, `eps_norms`, `eps_ode`, `eps_retnet`, `eps_mamba`, `eps_attention`, `eps_other`
+
+Optimizer-specific global parameter suffixes (also prefixed):
+
+- `sgd_momentum`: `momentum`, `nesterov`
+- `adamw`: none
+- `adafactor`: `beta2_decay`, `clip_threshold`, `eps1`, `eps2`
+- `galore_adamw`: `rank`, `update_proj_gap`
+- `prodigy`: `d_coef`
+- `lion`: none
+- `sophia`: `rho`, `update_k`
+- `muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
+- `turbo_muon`: `momentum`, `nesterov`, `ns_steps`, `ns_eps`
+- `radam`: none
+- `adan`: none
+- `adopt`: none
+- `ademamix`: none
+- `mars_adamw`: none
+- `cautious_adamw`: `cautious_clip`
+- `lamb`: none
+- `schedulefree_adamw`: none
+- `shampoo`: none
+- `soap`: none
+
+Examples:
+- `adafactor-beta2_decay: 0.8`
+- `galore_adamw-rank: 128`
+- `sophia-update_k: 10`
+- `muon-ns_steps: 5`
 
 ## Available Fields (Detailed)
 
@@ -149,34 +214,7 @@ training:
 - `stream_local_parquet`: stream from local parquet.
 - `use_amp`: mixed precision.
 - `gradient_accumulation_steps`: gradient accumulation steps.
-- `lr_embeddings`: LR for embedding parameters.
-- `lr_norms`: LR for normalization parameters.
-- `lr_ode`: LR for ODE parameters.
-- `lr_retnet`: LR for RetNet parameters.
-- `lr_mamba`: LR for Mamba parameters.
-- `lr_attention`: LR for attention parameters.
-- `lr_other`: LR for all other parameters.
-- `wd_embeddings`: weight decay for embedding parameters.
-- `wd_norms`: weight decay for normalization parameters.
-- `wd_ode`: weight decay for ODE parameters.
-- `wd_retnet`: weight decay for RetNet parameters.
-- `wd_mamba`: weight decay for Mamba parameters.
-- `wd_attention`: weight decay for attention parameters.
-- `wd_other`: weight decay for all other parameters.
-- `betas_embeddings`: Adam betas for embedding parameters (list like `[0.9, 0.95]`).
-- `betas_norms`: Adam betas for normalization parameters.
-- `betas_ode`: Adam betas for ODE parameters.
-- `betas_retnet`: Adam betas for RetNet parameters.
-- `betas_mamba`: Adam betas for Mamba parameters.
-- `betas_attention`: Adam betas for attention parameters.
-- `betas_other`: Adam betas for all other parameters.
-- `eps_embeddings`: Adam eps for embedding parameters.
-- `eps_norms`: Adam eps for normalization parameters.
-- `eps_ode`: Adam eps for ODE parameters.
-- `eps_retnet`: Adam eps for RetNet parameters.
-- `eps_mamba`: Adam eps for Mamba parameters.
-- `eps_attention`: Adam eps for attention parameters.
-- `eps_other`: Adam eps for all other parameters.
+- `optimizer`: optimizer chooser object with `optimizer_class` and prefixed `parameters`.
 - `scheduler_total_steps`: total steps for the scheduler.
 - `scheduler_warmup_ratio`: warmup fraction of total steps.
 - `scheduler_type`: `cosine`, `constant`, or `linear_warmup_then_constant`.
@@ -194,6 +232,10 @@ training:
 - `galore_update_interval`: projection update frequency.
 - `galore_scale`: projected gradient scale.
 - `galore_max_dim`: max tensor size for GaLore.
+
+## Migration Note
+
+This is a hard migration. Legacy top-level optimizer keys (`lr_*`, `wd_*`, `betas_*`, `eps_*`) are no longer accepted in `training`.
 
 ## Notes
 

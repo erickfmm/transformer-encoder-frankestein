@@ -6,7 +6,7 @@ import math
 import heapq
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional, Dict
+from typing import Any, List, Tuple, Optional, Dict
 from tqdm import tqdm
 import torch.optim as optim
 from torch.amp import autocast, GradScaler
@@ -15,6 +15,7 @@ from torch.nn.utils import clip_grad_norm_
 import torch.nn.functional as F
 
 from utils.storage_manager import StorageManager
+from model.optimizer.factory import build_optimizer
 from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 
 
@@ -40,41 +41,9 @@ class TrainingConfig:
     gradient_log_interval: int = 100
     gradient_accumulation_steps: int = 4
 
-    # Optimizer learning rates by parameter group
-    lr_embeddings: float = 1e-6
-    lr_norms: float = 5e-6
-    lr_ode: float = 1e-7
-    lr_retnet: float = 5e-6
-    lr_mamba: float = 2e-6
-    lr_attention: float = 3e-6
-    lr_other: float = 2e-6
-
-    # Optimizer weight decay by parameter group
-    wd_embeddings: float = 0.01
-    wd_norms: float = 0.001
-    wd_ode: float = 0.01
-    wd_retnet: float = 0.01
-    wd_mamba: float = 0.01
-    wd_attention: float = 0.01
-    wd_other: float = 0.01
-
-    # Optimizer betas by parameter group
-    betas_embeddings: Tuple[float, float] = (0.9, 0.95)
-    betas_norms: Tuple[float, float] = (0.9, 0.95)
-    betas_ode: Tuple[float, float] = (0.9, 0.95)
-    betas_retnet: Tuple[float, float] = (0.9, 0.95)
-    betas_mamba: Tuple[float, float] = (0.9, 0.95)
-    betas_attention: Tuple[float, float] = (0.9, 0.95)
-    betas_other: Tuple[float, float] = (0.9, 0.95)
-
-    # Optimizer eps by parameter group
-    eps_embeddings: float = 1e-8
-    eps_norms: float = 1e-8
-    eps_ode: float = 1e-8
-    eps_retnet: float = 1e-8
-    eps_mamba: float = 1e-8
-    eps_attention: float = 1e-8
-    eps_other: float = 1e-8
+    # Optimizer chooser (hard-migrated format from YAML)
+    optimizer_class: str = "adamw"
+    optimizer_parameters: Dict[str, Any] = field(default_factory=dict)
 
     # Scheduler configuration
     scheduler_total_steps: int = 10000
@@ -396,11 +365,6 @@ class TitanTrainer:
     
     def _setup_optimizer(self) -> optim.Optimizer:
         """Setup optimizer with parameter groups for different components"""
-        def _as_betas(value):
-            if isinstance(value, (list, tuple)) and len(value) == 2:
-                return (float(value[0]), float(value[1]))
-            return (0.9, 0.95)
-
         # Separate parameters by component type
         ode_params = []
         retnet_params = []
@@ -429,65 +393,63 @@ class TitanTrainer:
             else:
                 other_params.append(param)
         
-        # Parameter groups with DRASTICALLY REDUCED learning rates for stability
-        # Previous LRs were causing immediate gradient explosion (see metrics: grad_norm 2→42889)
         param_groups = [
             {
                 'params': embed_params,
-                'lr': self.training_config.lr_embeddings,
-                'weight_decay': self.training_config.wd_embeddings,
-                'betas': _as_betas(self.training_config.betas_embeddings),
-                'eps': self.training_config.eps_embeddings,
+                'lr': 1e-6,
+                'weight_decay': 0.01,
+                'betas': (0.9, 0.95),
+                'eps': 1e-8,
                 'name': 'embeddings'
-            },  # Reduced 100x
+            },
             {
                 'params': norm_params,
-                'lr': self.training_config.lr_norms,
-                'weight_decay': self.training_config.wd_norms,
-                'betas': _as_betas(self.training_config.betas_norms),
-                'eps': self.training_config.eps_norms,
+                'lr': 5e-6,
+                'weight_decay': 0.001,
+                'betas': (0.9, 0.95),
+                'eps': 1e-8,
                 'name': 'norms'
-            },  # Reduced 40x
+            },
             {
                 'params': ode_params,
-                'lr': self.training_config.lr_ode,
-                'weight_decay': self.training_config.wd_ode,
-                'betas': _as_betas(self.training_config.betas_ode),
-                'eps': self.training_config.eps_ode,
+                'lr': 1e-7,
+                'weight_decay': 0.01,
+                'betas': (0.9, 0.95),
+                'eps': 1e-8,
                 'name': 'ode'
-            },  # Reduced 500x - ODE extremely unstable
+            },
             {
                 'params': retnet_params,
-                'lr': self.training_config.lr_retnet,
-                'weight_decay': self.training_config.wd_retnet,
-                'betas': _as_betas(self.training_config.betas_retnet),
-                'eps': self.training_config.eps_retnet,
+                'lr': 5e-6,
+                'weight_decay': 0.01,
+                'betas': (0.9, 0.95),
+                'eps': 1e-8,
                 'name': 'retnet'
-            },  # Reduced 30x
+            },
             {
                 'params': mamba_params,
-                'lr': self.training_config.lr_mamba,
-                'weight_decay': self.training_config.wd_mamba,
-                'betas': _as_betas(self.training_config.betas_mamba),
-                'eps': self.training_config.eps_mamba,
+                'lr': 2e-6,
+                'weight_decay': 0.01,
+                'betas': (0.9, 0.95),
+                'eps': 1e-8,
                 'name': 'mamba'
-            },  # Reduced 50x
+            },
             {
                 'params': titan_attn_params,
-                'lr': self.training_config.lr_attention,
-                'weight_decay': self.training_config.wd_attention,
-                'betas': _as_betas(self.training_config.betas_attention),
-                'eps': self.training_config.eps_attention,
+                'lr': 3e-6,
+                'weight_decay': 0.01,
+                'betas': (0.9, 0.95),
+                'eps': 1e-8,
                 'name': 'attention'
-            },  # Reduced 33x
+            },
             {
                 'params': other_params,
-                'lr': self.training_config.lr_other,
-                'weight_decay': self.training_config.wd_other,
-                'betas': _as_betas(self.training_config.betas_other),
-                'eps': self.training_config.eps_other,
+                'lr': 2e-6,
+                'weight_decay': 0.01,
+                'betas': (0.9, 0.95),
+                'eps': 1e-8,
                 'name': 'other'
-            }  # Reduced 50x
+            }
         ]
         
         # Filter out empty groups
@@ -498,7 +460,13 @@ class TitanTrainer:
             param_count = sum(p.numel() for p in group['params'])
             logging.info(f"Parameter group '{group['name']}': {param_count:,} parameters, lr={group['lr']}")
         
-        return optim.AdamW(param_groups)
+        optimizer = build_optimizer(
+            optimizer_class=self.training_config.optimizer_class,
+            param_groups=param_groups,
+            parameters=self.training_config.optimizer_parameters,
+        )
+        logging.info(f"Using optimizer: {self.training_config.optimizer_class}")
+        return optimizer
     
     def _setup_scheduler(self):
         """Setup learning rate scheduler with warmup"""
