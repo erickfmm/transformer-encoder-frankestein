@@ -17,9 +17,12 @@ A research playground for building **unconventional, "Frankenstein" Transformer 
 
 - [✨ Overview](#-overview)
 - [🚀 Quick Tour](#-quick-tour)
+- [🧭 Documentation Map](#-documentation-map)
 - [🏗️ Model Versions](#️-model-versions)
 - [⚙️ Installation](#️-installation)
 - [🎯 Usage](#-usage)
+- [🚀 Deployment](#-deployment)
+- [🧠 SBERT](#-sbert)
 - [📊 Dataset](#-dataset)
 - [🔧 Hardware Requirements](#-hardware-requirements)
 - [📚 References & Citations](#-references--citations)
@@ -52,10 +55,15 @@ Like Dr. Frankenstein's creation, this model is assembled from various "parts":
 - 💾 **Memory-efficient**: Designed for GPUs with 20-24GB VRAM
 - 🧪 **Research-oriented**: Easy to experiment with architectural variants
 - 📦 **Self-contained**: Custom tokenizer, model, and training pipeline
+- ⚙️ **YAML-first training**: run experiments with `--config-name` presets or custom `--config` files
 - 🧭 **HoPE Attention**: Real multi-head attention with HoPE applied to Q/K
+- 🔀 **Attention variants**: `titan_attn`, `standard_attn`, and `sigmoid_attn` blocks
 - 🧪 **Derf Norm**: Optional `norm_type="derf"` for stable training
 - 🧩 **Factorized Embeddings**: `Embedding -> (Conv1d) -> Projection` for smaller params
 - 🧱 **Mini Preset**: `TormentedBertMini` for stable training on constrained GPUs
+- 🛡️ **Stability controls**: NaN/Inf retries, gradient repair actions, and early-stop policies
+- 📦 **Deployment pipeline**: checkpoint conversion, quantized artifacts, validation, benchmarking, interactive inference
+- 🧠 **SBERT toolkit**: Spanish STS fine-tuning + similarity/search/clustering/encoding workflows
 
 ---
 
@@ -67,10 +75,9 @@ transformer-encoder-frankestein/
 ├── 📖 README.md               # You are here!
 │
 ├── 📁 docs/
-│   └── 📁 v2/                 # Titan-BERT-Ultra documentation
-│       ├── README.md          # Full v2 architecture guide
-│       ├── diagram.mermaid    # Architecture diagram
-│       └── paper.tex          # Research paper draft
+│   ├── README.md              # Architecture and technical notes
+│   ├── diagram.mermaid        # Architecture diagram source
+│   └── paper.tex              # Research paper draft
 │
 ├── 📁 src/
 │   ├── 📁 model/
@@ -84,15 +91,31 @@ transformer-encoder-frankestein/
 │   │   ├── trainer.py         # Trainer implementation
 │   │   └── streaming_mlm_dataset.py  # Streaming MLM dataset
 │   │
+│   ├── 📁 sbert/
+│   │   └── README.md          # SBERT fine-tuning and inference
+│   │
+│   ├── 📁 deploy/
+│   │   └── README.md          # Deployment and quantized inference
+│   │
 │   └── 📁 utils/
 │       └── storage_manager.py # Disk budget management
 ```
 
 ---
 
+## 🧭 Documentation Map
+
+- [Root README](README.md): project overview, installation, and quick usage.
+- [Architecture docs](docs/README.md): detailed TORMENTED design notes and diagram references.
+- [Training config docs](src/training/configs/README.md): YAML schema, available presets, and field descriptions.
+- [Deployment docs](src/deploy/README.md): checkpoint conversion, quantization, and inference pipeline.
+- [SBERT docs](src/sbert/README.md): sentence-embedding fine-tuning and semantic similarity workflows.
+
+---
+
 ## 🏗️ Model Versions
 
-### [📗 Tormented-BERT-Frankenstein](docs/v2/README.md)
+### [📗 Tormented-BERT-Frankenstein](docs/README.md)
 
 An **audacious 1.58-bit** Transformer combining Neural ODEs, RetNet, and Titan Memory for extreme efficiency.
 
@@ -118,8 +141,11 @@ An **audacious 1.58-bit** Transformer combining Neural ODEs, RetNet, and Titan M
 - 🛡️ **NaN Detection**: Automatic halt with debug logs and emergency checkpoints
 - 💾 **Smart Checkpointing**: Rolling checkpoints + top-K best model tracking
 - 🧬 **Stable Layer Pattern**: Research-backed `[retnet, titan_attn, retnet, mamba, titan_attn, ode]`
+- 🔧 **Component-wise Optimizer**: per-group LR/WD/betas/eps for embeddings, ODE, RetNet, Mamba, attention, and norms
+- 🔁 **Scheduler Modes**: `cosine`, `constant`, or `linear_warmup_then_constant`
+- 📉 **Optional GaLore**: low-rank gradient projection (`use_galore`, `galore_rank`, `galore_scale`)
 
-👉 **[Read the full v2 documentation →](docs/v2/README.md)**
+👉 **[Read the full architecture documentation →](docs/README.md)**
 
 ### 🧪 Tormented-BERT-Mini (Preset)
 
@@ -184,7 +210,16 @@ python -c "from src.model.tormented_bert_frankestein import TormentedBertFranken
 
 ```bash
 # Run the trainer
-python src/training/main.py
+python src/training/main.py --config-name mini
+
+# List available YAML configs
+python src/training/main.py --list-configs
+
+# Use a specific preset
+python src/training/main.py --config-name frankenstein
+
+# Use a custom YAML file
+python src/training/main.py --config src/training/configs/standard_hope.yaml
 ```
 
 ### Inference Example
@@ -197,16 +232,17 @@ from src.tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 # Load model and tokenizer
 config = UltraConfig()
 model = TormentedBertFrankenstein(config)
-tokenizer = SpanishSPMTokenizer.from_pretrained("./models/es_redpajama_50k")
+tokenizer = SpanishSPMTokenizer(model_path="src/es_redpajama_50k.model")
+model.eval()
 
 # Encode text
 text = "El aprendizaje automático es fascinante."
-inputs = tokenizer.encode(text, return_tensors="pt")
+tokens = tokenizer.encode(text, max_length=128)
+input_ids = torch.tensor([tokens["input_ids"]], dtype=torch.long)
 
-# Get embeddings
+# Forward pass (MLM logits)
 with torch.no_grad():
-    outputs = model(**inputs)
-    sentence_embedding = outputs.pooler_output  # [CLS] representation
+    logits = model(input_ids)  # [batch, seq, vocab]
 ```
 
 ### Mini Preset Example
@@ -222,12 +258,88 @@ model = TormentedBertMini()  # uses Mini preset config
 ```python
 config = UltraConfig(
     norm_type="derf",
+    layer_pattern=["retnet", "titan_attn", "standard_attn", "sigmoid_attn", "mamba", "ode"],
+    use_hope=True,
+    use_moe=True,
+    ffn_hidden_size=1536,
+    ffn_activation="silu",
     use_factorized_embedding=True,
     factorized_embedding_dim=128,
     use_embedding_conv=True,
+    embedding_conv_kernel=3,
     hope_base=10_000.0,
     hope_damping=0.01,
 )
+```
+
+### Trainer YAML Controls (new)
+
+See [`src/training/configs/README.md`](src/training/configs/README.md) for the full schema. Key knobs:
+
+```yaml
+training:
+  gradient_accumulation_steps: 4
+  scheduler_type: cosine   # or constant / linear_warmup_then_constant
+  checkpoint_every_n_steps: 500
+  max_rolling_checkpoints: 3
+  num_best_checkpoints: 2
+  max_nan_retries: 3
+  grad_clip_max_norm: 5.0
+  inf_post_clip_threshold: 100.0
+  use_galore: false
+  galore_rank: 64
+```
+
+---
+
+## 🚀 Deployment
+
+Production pipeline (see [`src/deploy/README.md`](src/deploy/README.md)):
+
+- BitNet b1.58 quantized export (`quantized` or `standard`)
+- Deployment artifact packaging (`config.json`, model weights, deployment metadata)
+- Validation pass after conversion
+- Inference modes: single text, batch input, interactive shell, benchmark mode
+
+```bash
+# Convert a training checkpoint into deployment artifacts
+python src/deploy/deploy.py \
+  --checkpoint src/checkpoints/titan_best_loss_10.938040_step_29.pt \
+  --output deployed_model \
+  --format quantized \
+  --validate
+
+# Run inference on text
+python src/deploy/inference.py --model deployed_model --text "Tu texto en español aquí"
+
+# Benchmark deployed model
+python src/deploy/inference.py --model deployed_model --benchmark
+```
+
+---
+
+## 🧠 SBERT
+
+Sentence embedding workflow (see [`src/sbert/README.md`](src/sbert/README.md)):
+
+- Fine-tunes on Spanish STS dataset `erickfmm/agentlans__multilingual-sentences__paired_10_sts`
+- Pooling modes: `mean` (default), `cls`, `max`
+- Built-in validation metrics (Spearman/Pearson correlation)
+- Inference modes: similarity, semantic search, clustering, and embedding export
+
+```bash
+# Train SBERT
+python src/sbert/train_sbert.py \
+  --output_dir ./output/sbert_tormented \
+  --batch_size 16 \
+  --epochs 4
+
+# Compare two sentences
+python src/sbert/inference_sbert.py \
+  --model_path ./output/sbert_tormented \
+  --mode similarity \
+  --sentence1 "El gato está en la casa" \
+  --sentence2 "Un felino se encuentra en el hogar"
 ```
 
 ---
