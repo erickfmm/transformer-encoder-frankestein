@@ -59,6 +59,218 @@ which corresponds to current attention and sequence-mixer literature \citep{sun_
 The \texttt{training.optimizer.optimizer\_class} supports a broad optimizer family:
 \texttt{adamw}, \texttt{adafactor}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{schedulefree\_adamw}, \texttt{lion}, \texttt{sophia}, \texttt{prodigy}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{shampoo}, \texttt{soap}, and others.
 
+\subsection{Schema Scope and Validation Rules}
+
+The schema is strict: top-level and nested objects set \texttt{additionalProperties: false}. This guarantees that unknown keys fail fast instead of being silently ignored. The \texttt{training.optimizer.parameters} object is additionally constrained by optimizer-specific prefix rules through \texttt{allOf}+\texttt{if/then} pattern checks.
+
+Normalization values currently accepted by schema are:
+\[
+\texttt{norm\_type} \in \{\texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}\}
+\]
+Thus, \texttt{rms\_norm} is \textbf{not} a valid schema value in the current contract.
+
+\subsection{Complete Model Feature Inventory}
+
+\small
+\begin{longtable}{p{3.1cm}p{2.4cm}p{7.0cm}}
+\toprule
+\textbf{Field} & \textbf{Type/Range} & \textbf{Meaning} \\
+\midrule
+\endhead
+\texttt{vocab\_size} & int $\ge 1$ & Vocabulary size. \\
+\texttt{hidden\_size} & int $\ge 1$ & Hidden dimension. \\
+\texttt{num\_layers} & int $\ge 1$ & Physical layer count. \\
+\texttt{num\_loops} & int $\ge 1$ & Logical loop count (looped blocks). \\
+\texttt{num\_heads} & int $\ge 1$ & Attention heads. \\
+\texttt{retention\_heads} & int $\ge 1$ & Retention heads for RetNet-style mixers. \\
+\texttt{num\_experts} & int $\ge 1$ & MoE expert count. \\
+\texttt{top\_k\_experts} & int $\ge 1$ & Top-$k$ expert routing in MoE. \\
+\texttt{dropout} & float $[0,1]$ & Global dropout. \\
+\texttt{layer\_pattern} & array enum & Ordered block list: \texttt{retnet}, \texttt{mamba}, \texttt{ode}, \texttt{titan\_attn}, \texttt{standard\_attn}, \texttt{sigmoid\_attn}. \\
+\texttt{ode\_solver} & enum & \texttt{rk4} or \texttt{euler}. \\
+\texttt{ode\_steps} & int $\ge 1$ & ODE integration steps. \\
+\texttt{use\_bitnet} & bool & Enable low-bit BitLinear path. \\
+\texttt{norm\_type} & enum & \texttt{layer\_norm}, \texttt{dynamic\_tanh}, \texttt{derf}. \\
+\texttt{use\_factorized\_embedding} & bool & Enable factorized embeddings. \\
+\texttt{factorized\_embedding\_dim} & int $\ge 1$ & Reduced embedding dimension for factorization. \\
+\texttt{use\_embedding\_conv} & bool & Enable Conv1d over embedding stream. \\
+\texttt{embedding\_conv\_kernel} & int $\ge 1$ & Conv1d kernel size. \\
+\texttt{hope\_base} & float $\ge 0$ & HoPE base value (optional in schema). \\
+\texttt{hope\_damping} & float $\ge 0$ & HoPE damping (optional in schema). \\
+\texttt{use\_hope} & bool & Apply HoPE in \texttt{titan\_attn}. \\
+\texttt{use\_moe} & bool & Enable MoE FFN routing path. \\
+\texttt{ffn\_hidden\_size} & int $\ge 1$ & FFN intermediate width. \\
+\texttt{ffn\_activation} & enum & \texttt{silu} or \texttt{gelu}. \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+Looped depth induced by schema is:
+\[
+L_{\text{logical}} = \texttt{num\_layers} \times \texttt{num\_loops}
+\]
+which is the configuration-level definition of looped blocks.
+
+\subsection{Complete Training Feature Inventory}
+
+\small
+\begin{longtable}{p{3.1cm}p{2.4cm}p{7.0cm}}
+\toprule
+\textbf{Field} & \textbf{Type/Range} & \textbf{Meaning} \\
+\midrule
+\endhead
+\texttt{batch\_size} & int $\ge 1$ & Loader batch size. \\
+\texttt{dataloader\_workers} & int $\ge 0$ & PyTorch dataloader workers. \\
+\texttt{max\_length} & int $\ge 1$ & Sequence length cap. \\
+\texttt{mlm\_probability} & float $[0,1]$ & MLM masking probability. \\
+\texttt{max\_samples} & int $\ge 1$ & Maximum streamed samples. \\
+\texttt{dataset\_batch\_size} & int $\ge 1$ & Internal streaming dataset chunk size. \\
+\texttt{num\_workers} & int $\ge 0$ & Streaming dataset workers. \\
+\texttt{cache\_dir} & string & Dataset cache directory. \\
+\texttt{local\_parquet\_dir} & string & Optional local parquet path. \\
+\texttt{prefer\_local\_cache} & bool & Prefer local cache when available. \\
+\texttt{stream\_local\_parquet} & bool & Stream from local parquet mode. \\
+\texttt{use\_amp} & bool & Mixed precision toggle. \\
+\texttt{gradient\_accumulation\_steps} & int $\ge 1$ & Effective batch through accumulation. \\
+\texttt{optimizer} & object & Contains \texttt{optimizer\_class} and prefixed \texttt{parameters}. \\
+\texttt{scheduler\_total\_steps} & int $\ge 1$ & Scheduler horizon. \\
+\texttt{scheduler\_warmup\_ratio} & float $[0,1]$ & Warmup ratio. \\
+\texttt{scheduler\_type} & enum & \texttt{cosine}, \texttt{constant}, \texttt{linear\_warmup\_then\_constant}. \\
+\texttt{grad\_clip\_max\_norm} & float $\ge 0$ & Global norm clipping threshold. \\
+\texttt{inf\_post\_clip\_threshold} & float $\ge 0$ & Exploding-gradient guard threshold after clipping. \\
+\texttt{max\_nan\_retries} & int $\ge 0$ & Retry budget for NaN/Inf instability. \\
+\texttt{checkpoint\_every\_n\_steps} & int $\ge 1$ & Rolling checkpoint frequency. \\
+\texttt{max\_rolling\_checkpoints} & int $\ge 1$ & Number of rolling checkpoints to keep. \\
+\texttt{num\_best\_checkpoints} & int $\ge 1$ & Number of best checkpoints tracked. \\
+\texttt{nan\_check\_interval} & int $\ge 1$ & NaN/Inf check cadence. \\
+\texttt{log\_gradient\_stats} & bool & Enable gradient statistics logging. \\
+\texttt{gradient\_log\_interval} & int $\ge 1$ & Gradient logging cadence. \\
+\texttt{csv\_log\_path} & string & Step-level CSV output path. \\
+\texttt{csv\_rotate\_on\_schema\_change} & bool & Rotate CSV if logging schema changes. \\
+\texttt{gpu\_metrics\_backend} & enum & \texttt{nvml} or \texttt{none}. \\
+\texttt{nvml\_device\_index} & int $\ge 0$ & Device index for NVML telemetry. \\
+\texttt{enable\_block\_grad\_norms} & bool & Include per-block gradient norm telemetry. \\
+\texttt{telemetry\_log\_interval} & int $\ge 1$ & Heavy telemetry interval (optimizer steps). \\
+\texttt{use\_galore} & bool & Enable GaLore strategy. \\
+\texttt{galore\_rank} & int $\ge 1$ & GaLore low-rank projection dimension. \\
+\texttt{galore\_update\_interval} & int $\ge 1$ & Projection refresh interval. \\
+\texttt{galore\_scale} & float $\ge 0$ & Gradient scaling in projected space. \\
+\texttt{galore\_max\_dim} & int $\ge 1$ & Maximum tensor dimension for GaLore projection. \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+\subsection{Optimizer Prefix Contract (Full)}
+
+Supported \texttt{optimizer\_class} values are:
+\texttt{sgd\_momentum}, \texttt{adamw}, \texttt{adafactor}, \texttt{galore\_adamw}, \texttt{prodigy}, \texttt{lion}, \texttt{sophia}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{lamb}, \texttt{schedulefree\_adamw}, \texttt{shampoo}, \texttt{soap}.
+
+Shared per-group suffix families (all prefixed by optimizer name) are:
+\begin{itemize}[leftmargin=*]
+    \item LR groups: \texttt{lr\_embeddings}, \texttt{lr\_norms}, \texttt{lr\_ode}, \texttt{lr\_retnet}, \texttt{lr\_mamba}, \texttt{lr\_attention}, \texttt{lr\_other}
+    \item Weight decay groups: \texttt{wd\_embeddings}, \texttt{wd\_norms}, \texttt{wd\_ode}, \texttt{wd\_retnet}, \texttt{wd\_mamba}, \texttt{wd\_attention}, \texttt{wd\_other}
+    \item Beta groups: \texttt{betas\_embeddings}, \texttt{betas\_norms}, \texttt{betas\_ode}, \texttt{betas\_retnet}, \texttt{betas\_mamba}, \texttt{betas\_attention}, \texttt{betas\_other}
+    \item Epsilon groups: \texttt{eps\_embeddings}, \texttt{eps\_norms}, \texttt{eps\_ode}, \texttt{eps\_retnet}, \texttt{eps\_mamba}, \texttt{eps\_attention}, \texttt{eps\_other}
+\end{itemize}
+
+Optimizer-specific global suffixes:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{sgd\_momentum}: \texttt{momentum}, \texttt{nesterov}
+    \item \texttt{adafactor}: \texttt{beta2\_decay}, \texttt{clip\_threshold}, \texttt{eps1}, \texttt{eps2}
+    \item \texttt{galore\_adamw}: \texttt{rank}, \texttt{update\_proj\_gap}
+    \item \texttt{prodigy}: \texttt{d\_coef}
+    \item \texttt{sophia}: \texttt{rho}, \texttt{update\_k}
+    \item \texttt{muon} / \texttt{turbo\_muon}: \texttt{momentum}, \texttt{nesterov}, \texttt{ns\_steps}, \texttt{ns\_eps}
+    \item \texttt{cautious\_adamw}: \texttt{cautious\_clip}
+\end{itemize}
+All other classes in the list above accept only prefixed shared groups.
+
+\subsection{Training Safety and Runtime Semantics}
+
+Schema-level safety features include accumulation, clipping, post-clip explosion checks, and NaN retries:
+\[
+g_{\text{acc}}=\frac{1}{K}\sum_{i=1}^{K} g_i,\quad K=\texttt{gradient\_accumulation\_steps}
+\]
+\[
+g_{\text{clip}} = g_{\text{acc}}\cdot
+\min\left(1,\frac{\tau}{\|g_{\text{acc}}\|_2+\epsilon}\right),\quad
+\tau=\texttt{grad\_clip\_max\_norm}
+\]
+then overflow guards use \texttt{inf\_post\_clip\_threshold} and retry logic bounded by \texttt{max\_nan\_retries}.
+
+\begin{algorithm}[t]
+\caption{Schema-Driven Training Step with Stability Controls}
+\begin{algorithmic}[1]
+\Require Batch stream, config $C$
+\State Initialize retry counter $r\gets 0$
+\For{each optimizer step}
+    \State Accumulate gradients for $K=C.\texttt{gradient\_accumulation\_steps}$ micro-batches
+    \State Apply global norm clipping with $\tau=C.\texttt{grad\_clip\_max\_norm}$
+    \If{post-clip gradient exceeds $C.\texttt{inf\_post\_clip\_threshold}$ or NaN/Inf detected}
+        \If{$r < C.\texttt{max\_nan\_retries}$}
+            \State restore safe state / skip step; $r \gets r+1$
+            \State \textbf{continue}
+        \Else
+            \State stop training with failure state
+        \EndIf
+    \EndIf
+    \State run optimizer step selected by \texttt{optimizer\_class}
+    \State update scheduler (\texttt{cosine}, \texttt{constant}, or \texttt{linear\_warmup\_then\_constant})
+    \If{step mod \texttt{checkpoint\_every\_n\_steps}$=0$}
+        \State save rolling checkpoint and prune to \texttt{max\_rolling\_checkpoints}
+    \EndIf
+    \State update best checkpoints up to \texttt{num\_best\_checkpoints}
+    \State emit CSV + telemetry following \texttt{gradient\_log\_interval} and \texttt{telemetry\_log\_interval}
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\section{Normalization Variants: RMSNorm, Dynamic Tanh, and Dynamic Erf}
+
+Normalization and normalization-alternatives are central to training stability and throughput in transformer-like systems. Based on ArXiv sources, the three relevant formulations are:
+
+\subsection{RMSNorm}
+RMSNorm removes mean-centering and only rescales by root mean square magnitude \citep{zhang_root_2019}:
+\[
+\mathrm{RMS}(x)=\sqrt{\frac{1}{d}\sum_{i=1}^{d}x_i^2+\epsilon},\qquad
+y_i=\gamma_i\frac{x_i}{\mathrm{RMS}(x)}
+\]
+Compared with LayerNorm, RMSNorm is computationally simpler (no subtraction of feature mean) and is often used when reducing normalization overhead is important.
+
+\subsection{Dynamic Tanh (DyT)}
+Dynamic Tanh proposes replacing explicit normalization with a bounded elementwise map \citep{zhu_transformers_2025}:
+\[
+\mathrm{DyT}(x)=\tanh(\alpha x)
+\]
+where $\alpha$ is learned. The core idea is that bounded nonlinear contraction can provide stable signal scaling without explicitly computing per-token normalization statistics.
+
+\subsection{Dynamic Erf (Derf)}
+Derf extends the same normalization-free direction by using an error-function based map \citep{chen_stronger_2025}:
+\[
+\mathrm{Derf}(x)=\mathrm{erf}(\alpha x+s)
+\]
+with learnable scale/shift. Reported results in the cited work indicate stronger performance than DyT and common normalization baselines across multiple domains.
+
+\subsection{Schema Implications}
+Current configuration contract in this repository allows:
+\[
+\texttt{norm\_type}\in\{\texttt{layer\_norm},\texttt{dynamic\_tanh},\texttt{derf}\}
+\]
+so DyT and Derf are directly available in schema-driven runs, while RMSNorm is not currently an accepted enum value and would require code/schema extension.
+
+\small
+\begin{longtable}{p{2.6cm}p{3.8cm}p{2.6cm}p{4.4cm}}
+\toprule
+\textbf{Method} & \textbf{Formula} & \textbf{Stats Needed} & \textbf{Notes} \\
+\midrule
+\endhead
+RMSNorm & $y_i=\gamma_i x_i/\sqrt{\frac{1}{d}\sum_j x_j^2+\epsilon}$ & RMS only & Lower overhead than LayerNorm; widely used normalization baseline \citep{zhang_root_2019}. \\
+Dynamic Tanh & $\tanh(\alpha x)$ & none & Normalization-free bounded transform; simple drop-in replacement direction \citep{zhu_transformers_2025}. \\
+Dynamic Erf (Derf) & $\mathrm{erf}(\alpha x+s)$ & none & Normalization-free alternative designed to improve over DyT \citep{chen_stronger_2025}. \\
+\bottomrule
+\end{longtable}
+\normalsize
+
 \section{Attention and Sequence-Mixer Families}
 
 \subsection{Standard Attention}
