@@ -1,294 +1,258 @@
-# **⚡ TORMENTED-BERT-Frankenstein: The Ultimate Hybrid Transformer**
+# Toolkit Reference
 
-**TORMENTED-BERT-Frankenstein** is an audacious, "Frankenstein" architecture designed to push the limits of efficiency and logical depth on constrained hardware (specifically the **Nvidia Tesla P40 24GB**).
+This document describes the project as a configurable library + CLI toolchain.
 
-## **📛 The TORMENTED Acronym**
+## 1. CLI Command Surface
 
-**TORMENTED** stands for:
-- **T**ernary (BitNet b1.58 quantization)
-- **O**DE (Neural Ordinary Differential Equations)
-- **R**etention (RetNet multi-scale retention)
-- **M**amba (State Space Models)
-- **E**xperts (Mixture-of-Experts)
-- **N**eural (Neural architecture)
-- **T**anh (Dynamic Tanh normalization)
-- **E**ncoder (Transformer encoder)
-- **D**epth (Recursive loop architecture)
-
-It abandons standard FP16 Transformers in favor of **BitNet b1.58** ternary weights, **Neural ODE** continuous dynamics, **RetNet** retention mechanisms, **Mamba** state space models, and **sparse MoE** for conditional computation.
-
-## **🧠 Key Architectural Innovations**
-
-### **1\. BitNet b1.58 (Ternary Weights)**
-
-Every linear layer (nn.Linear) is replaced by a custom BitLinear.
-
-* **Concept:** Weights are constrained to ![][image1].  
-* **Impact:** Reduces memory footprint by **\~3.5x** compared to FP16.  
-* **Benefit:** Allows training a massive hidden\_size=2048 model on a 24GB P40 card, where a standard BERT-Large would OOM.
-
-### **2\. Neural ODE Attention**
-
-Instead of discrete layers, the attention mechanism models the derivative of the hidden state over time: ![][image2].
-
-* **Implementation:** Uses a custom **RK4 (Runge-Kutta 4\)** solver inside the forward pass.  
-* **Benefit:** Parameter efficiency and continuous depth modeling.
-
-### **3\. Multi-Scale Retention (RetNet)**
-
-Replaces standard Softmax attention in specific layers.
-
-* **Mechanism:** Uses a decay matrix to enforce locality and causal priors.  
-* **Benefit:** Training parallelism of Transformers with the inference efficiency of RNNs.
-
-### **4\. Recursive Looping Architecture**
-
-* **Looping:** The input passes through the physical layers multiple times (num\_loops). A 12-layer physical model acts as a 24+ layer logical model.  
-* **Parameter Efficiency:** Achieves deep logical depth without proportional parameter growth.
-
-### **5\. Sparse Mixture-of-Experts**
-
-* **Conditional Computation:** Routes each token to top-k experts among N total experts.
-* **Benefit:** Increases model capacity without proportional computational cost.
-* **Implementation:** All expert networks use BitLinear layers for memory efficiency.
-
-### **6\. HoPE Attention (Real TitanAttention)**
-
-* **Mechanism:** Multi-head attention with `HoPE` applied to Q/K pairs.
-* **Benefit:** Better positional extrapolation and stable attention geometry.
-* **Implementation:** `TitanAttention` uses BitLinear Q/K/V + HoPE + softmax.
-
-## **🛠️ Hardware Optimization (The "P40 Rig")**
-
-This code is specifically tuned for a server with:
-
-* **GPU:** Nvidia Tesla P40 (24GB VRAM, Pascal Architecture).  
-* **CPU:** Dual Xeon E5-2680v4 (28 cores each, 56 total, 112 threads).  
-* **RAM:** 128GB DDR4.
-
-**Optimizations:**
-
-1. **BitNet Quantization:** Keeps the VRAM usage low, bypassing the P40's lack of FP16 Tensor Cores.  
-2. **CPU Prefetching:** The training script utilizes the massive thread count (112 threads) to pre-process data into the 128GB RAM, minimizing NVMe bottlenecks.  
-3. **Dynamic Tanh Norm:** Used instead of LayerNorm to avoid variance calculations that can be unstable with ternary weights.
-
-## **� Training Infrastructure**
-
-### **Stable Layer Pattern**
-
-The training pipeline uses a research-backed stable 6-layer pattern optimized for hybrid architectures:
-
-```
-["retnet", "titan_attn", "retnet", "mamba", "titan_attn", "ode"]
-```
-
-* **RetNet anchors:** Placed at positions 0 and 2 for gradient stability
-* **Mamba sandwiched:** SSM block buffered by retention layers
-* **ODE at end:** Continuous dynamics placed last to avoid early instability
-
-### **Advanced Monitoring & Logging**
-
-| Feature | Description |
-|---------|-------------|
-| **CSV Metrics Logging** | Per-step logging of loss, accuracy, learning rate, and GPU memory |
-| **NaN Detection** | Automatic training halt with comprehensive debug output |
-| **Gradient Monitoring** | Logs gradient norms per component type for debugging |
-| **Emergency Checkpoints** | Saves model state when NaN detected for analysis |
-
-### **Checkpoint Management**
-
-* **Rolling Checkpoints:** Saves every N steps, keeping only the last K checkpoints
-* **Best Model Tracking:** Maintains top-K checkpoints by validation loss using a min-heap
-* **Configurable Strategy:** All parameters controlled via `TrainingConfig` dataclass
-
-```python
-@dataclass
-class TrainingConfig:
-    log_csv: bool = True
-    csv_log_path: str = "training_metrics.csv"
-    rolling_checkpoint_every: int = 500
-    keep_rolling_checkpoints: int = 3
-    keep_best_checkpoints: int = 2
-    detect_nan: bool = True
-```
-
-## **�📊 Architecture Diagram**
-
-![Diagram](./diagram.png)
-
-*For detailed technical documentation, see: [Technical Specification (PDF)](./tital_bert_ultra.pdf)*
-
-## **🚀 Usage**
-
-### **Requirements**
-
-pip install torch sentencepiece datasets  
-\# Optional: pip install torchdiffeq (if using external solver)
-
-### **Configuration (UltraConfig)**
-
-Edit `main.py` to adjust the model configuration:
-
-```python
-config = UltraConfig(
-    vocab_size=50000,
-    hidden_size=1024,           # Reduced from 2048 for stability
-    num_layers=12,              # Physical layers (uses 2 cycles of 6-pattern)
-    num_loops=2,                # Logical depth = 24
-    num_heads=16,
-    retention_heads=8,
-    num_experts=4,              # Reduced MoE experts
-    top_k_experts=2,
-    dropout=0.1,
-    ode_solver="rk4",
-    ode_steps=2,                # Low steps for speed
-    use_bitnet=True,            # Essential for memory efficiency
-    norm_type="dynamic_tanh",
-    layer_pattern=stable_layer_pattern,  # Use stable pattern
-    use_factorized_embedding=True,
-    factorized_embedding_dim=128,
-    use_embedding_conv=True,
-    hope_base=10_000.0,
-    hope_damping=0.01,
-)
-
-# Stable 6-layer pattern optimized for hybrid architectures:
-stable_layer_pattern = [
-    "retnet",       # Stable anchor, good gradient flow
-    "titan_attn",   # Proven attention mechanism
-    "retnet",       # Another stable anchor
-    "mamba",        # Efficient SSM, sandwiched by stable layers
-    "titan_attn",   # Attention for local patterns
-    "ode"           # ODE at end, more stable gradients
-]
-```
-
-**Key Configuration Notes:**
-- **hidden_size=1024**: Reduced from 2048 for better stability on P40 hardware
-- **num_loops=2**: Creates 24 logical layers from 12 physical layers
-- **use_bitnet=True**: Essential for fitting large models in 24GB VRAM
-- **ode_steps=2**: Low step count balances precision with speed
-- **layer_pattern**: Research-backed stable pattern with RetNet anchors
-- **norm_type="derf"**: Optional normalization for stability
-- **factorized embeddings**: Lower parameter count with optional Conv1d
-- **HoPE**: Applied inside `TitanAttention` to Q/K
-
-### **Mini Preset**
-
-`TormentedBertMini` provides a stable preset:
-
-- `hidden_size=384`, `num_layers=6`, `num_loops=2`
-- `num_heads=6`, `retention_heads=6`
-- `norm_type="derf"`
-- `use_factorized_embedding=True`, `factorized_embedding_dim=128`
-- stable pattern: `[retnet, titan_attn, retnet, mamba, titan_attn, ode]`
-
-### **Training**
-
-Run the high-throughput trainer optimized for Xeon CPUs:
+The entrypoint is:
 
 ```bash
-frankestein-transformer train --config-name mini --device auto
+frankestein-transformer
 ```
 
-### **Training in Mini mode (roadmap preset)**
+Subcommands:
 
-Use the Mini variant with stable defaults:
+- `train`
+- `deploy`
+- `quantize`
+- `infer`
+- `sbert-train`
+- `sbert-infer`
 
-- `hidden_size=384`
-- `num_layers=6`, `num_loops=2` (12 logical passes)
-- `num_heads=6`
-- `norm_type="derf"`
-- factorized embedding `128 -> 384` with optional `Conv1d(k=3)`
-- stable pattern: `[retnet, titan_attn, retnet, mamba, titan_attn, ode]`
-
-```bash
-frankestein-transformer train --model-mode mini --device auto
-```
-
-For original Frankenstein mode:
-
-```bash
-frankestein-transformer train --model-mode frankenstein --device auto
-```
-
-### **CLI-first workflow**
-
-The repository now ships as a configurable training library + CLI tool. After `pip install -e .` or `uv pip install -e .`, use:
-
-```bash
-frankestein-transformer --help
-frankestein-transformer deploy --help
-frankestein-transformer quantize --help
-frankestein-transformer infer --help
-frankestein-transformer sbert-train --help
-frankestein-transformer sbert-infer --help
-```
-
-Device selection is unified via:
+Common execution device choices:
 
 ```bash
 --device auto|cpu|cuda|mps
 ```
 
-*Note: Ensure you have mounted a RAM disk if your NVMe is slow:*
+## 2. Train Command
+
+Usage pattern:
 
 ```bash
-sudo mount -t tmpfs -o size=64G tmpfs /mnt/ramdisk
+frankestein-transformer train --config-name mini --device auto
+frankestein-transformer train --config path/to/config.yaml --device auto
+frankestein-transformer train --list-configs
 ```
 
-### **🎨 Rendering the Architecture Diagram**
+Key train flags:
 
-The complete architecture diagram is available in `diagram.mermaid`. To render it to PDF for inclusion in the LaTeX paper:
+- `--config`
+- `--config-name`
+- `--list-configs`
+- `--batch-size`
+- `--model-mode` (`frankenstein|mini`)
+- `--device`
 
-**Option 1: Using Mermaid CLI (recommended)**
+## 3. Configuration Schema (`src/training/configs/schema.yaml`)
+
+Top-level required keys:
+
+- `model_class`
+- `model`
+- `training`
+
+### 3.1 `model_class`
+
+Allowed values:
+
+- `frankenstein`
+- `mini`
+
+### 3.2 `model` section
+
+Required fields:
+
+- `vocab_size`
+- `hidden_size`
+- `num_layers`
+- `num_loops`
+- `num_heads`
+- `retention_heads`
+- `num_experts`
+- `top_k_experts`
+- `dropout`
+- `layer_pattern`
+- `ode_solver`
+- `ode_steps`
+- `use_bitnet`
+- `norm_type`
+- `use_factorized_embedding`
+- `factorized_embedding_dim`
+- `use_embedding_conv`
+- `embedding_conv_kernel`
+- `use_hope`
+- `use_moe`
+- `ffn_hidden_size`
+- `ffn_activation`
+
+Model enums/toggles:
+
+- `layer_pattern` items: `retnet`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`
+- `ode_solver`: `rk4`, `euler`
+- `norm_type`: `layer_norm`, `dynamic_tanh`, `derf`
+- `ffn_activation`: `silu`, `gelu`
+
+Optional model keys:
+
+- `hope_base`
+- `hope_damping`
+
+### 3.3 `training` section
+
+Required core fields:
+
+- `batch_size`, `dataloader_workers`, `max_length`, `mlm_probability`
+- `max_samples`, `dataset_batch_size`, `num_workers`, `cache_dir`
+- `use_amp`, `gradient_accumulation_steps`
+- `optimizer`
+- `scheduler_total_steps`, `scheduler_warmup_ratio`, `scheduler_type`
+- `grad_clip_max_norm`, `inf_post_clip_threshold`, `max_nan_retries`
+- `checkpoint_every_n_steps`, `max_rolling_checkpoints`, `num_best_checkpoints`
+- `nan_check_interval`, `log_gradient_stats`, `gradient_log_interval`
+- `csv_log_path`, `csv_rotate_on_schema_change`
+- `gpu_metrics_backend`, `nvml_device_index`, `enable_block_grad_norms`, `telemetry_log_interval`
+- `use_galore`, `galore_rank`, `galore_update_interval`, `galore_scale`, `galore_max_dim`
+
+Optional dataset locality fields:
+
+- `local_parquet_dir`
+- `prefer_local_cache`
+- `stream_local_parquet`
+
+Scheduler enum:
+
+- `cosine`
+- `constant`
+- `linear_warmup_then_constant`
+
+GPU metrics backend enum:
+
+- `nvml`
+- `none`
+
+### 3.4 Optimizer configuration
+
+`training.optimizer` requires:
+
+- `optimizer_class`
+- `parameters`
+
+Allowed `optimizer_class` values:
+
+- `sgd_momentum`
+- `adamw`
+- `adafactor`
+- `galore_adamw`
+- `prodigy`
+- `lion`
+- `sophia`
+- `muon`
+- `turbo_muon`
+- `radam`
+- `adan`
+- `adopt`
+- `ademamix`
+- `mars_adamw`
+- `cautious_adamw`
+- `lamb`
+- `schedulefree_adamw`
+- `shampoo`
+- `soap`
+
+`parameters` keys must use the prefix for the selected optimizer class (enforced by schema `allOf` conditions).
+
+## 4. Deployment Commands
+
+Deploy checkpoint to artifacts:
+
 ```bash
-# Install mermaid-cli if not already installed
-npm install -g @mermaid-js/mermaid-cli
-
-# Render diagram to PDF
-mmdc -i diagram.mermaid -o diagram.pdf -t neutral -b transparent
+frankestein-transformer deploy \
+  --checkpoint path/to/checkpoint.pt \
+  --output deployed_model \
+  --format quantized \
+  --validate \
+  --device auto
 ```
 
-**Option 2: Using online tools**
-- Visit [https://mermaid.live](https://mermaid.live)
-- Paste the contents of `diagram.mermaid`
-- Export as PDF or PNG
+Deploy flags:
 
-Once generated, the diagram can be included in the LaTeX paper by uncommenting the figure block in `paper.tex`.
+- `--checkpoint` (required)
+- `--output` (required)
+- `--format` (`quantized|standard`)
+- `--validate`
+- `--config` (optional JSON)
+- `--device`
 
-## **📚 References & Research Sources**
+Quantize shortcut:
 
-This model implements concepts from the following papers:
+```bash
+frankestein-transformer quantize --checkpoint ckpt.pt --output deployed_model_quantized --validate
+```
 
-1. **BitNet b1.58 (The 1-bit Era)**  
-   * *Wang et al. (Microsoft Research, 2024)*  
-   * "The Era of 1-bit LLMs: All Large Language Models are on 1.58 Bits"  
-   * [arXiv:2402.17764](https://arxiv.org/abs/2402.17764)  
-2. **Neural Ordinary Differential Equations**  
-   * *Chen et al. (NeurIPS 2018)*  
-   * "Neural Ordinary Differential Equations"  
-   * [arXiv:1806.07366](https://arxiv.org/abs/1806.07366)  
-3. **RetNet (Retention Networks)**  
-   * *Sun et al. (Microsoft Research, 2023)*  
-   * "Retentive Network: A Successor to Transformer for Large Language Models"  
-   * [arXiv:2307.08621](https://arxiv.org/abs/2307.08621)  
-4. **Mamba (State Space Models)**  
-   * *Gu & Dao (2023)*  
-   * "Mamba: Linear-Time Sequence Modeling with Selective State Spaces"  
-   * [arXiv:2312.00752](https://arxiv.org/abs/2312.00752)  
-5. **Dynamic Tanh Normalization**
-   * *Zhu et al. (2025)*
-   * "Transformers Can Do Arithmetic with the Right Embeddings"
-6. **Sparse Mixture-of-Experts**
-   * *Fedus et al. (Google, 2022)*
-   * "Switch Transformers: Scaling to Trillion Parameter Models"
+## 5. Inference Command
 
-**Note:** "titan_attn" in the layer pattern refers to real multi-head attention with `HoPE` applied to Q/K.
+```bash
+frankestein-transformer infer --model deployed_model --text "hola" --device auto
+```
 
-## **⚠️ Disclaimer**
+Infer flags:
 
-**This is an experimental research model.**
+- `--model` (required)
+- `--text`
+- `--input`
+- `--output`
+- `--device`
+- `--fp16`
+- `--batch-size`
+- `--benchmark`
 
-* **Stability:** Combining ODEs with BitNet is mathematically risky. If loss goes to NaN, try switching norm\_type to standard LayerNorm or reducing the learning rate.  
-* **Performance:** While optimized for memory (VRAM), the ODE solver (RK4) is compute-intensive. Training will be slower than a vanilla Transformer, but the parameter efficiency is significantly higher.
+## 6. SBERT Commands
+
+### 6.1 `sbert-train`
+
+```bash
+frankestein-transformer sbert-train --output_dir ./output/sbert_model --batch_size 16 --epochs 4 --device auto
+```
+
+Flags:
+
+- `--pretrained`
+- `--output_dir`
+- `--batch_size`
+- `--epochs`
+- `--learning_rate`
+- `--max_train_samples`
+- `--max_eval_samples`
+- `--hidden_size`
+- `--num_layers`
+- `--pooling_mode` (`mean|cls|max`)
+- `--no_amp`
+- `--no_resample`
+- `--resample_std`
+- `--device`
+
+### 6.2 `sbert-infer`
+
+```bash
+frankestein-transformer sbert-infer --model_path ./output/sbert_model --mode similarity --sentence1 "a" --sentence2 "b"
+```
+
+Flags:
+
+- `--model_path` (required)
+- `--mode` (`similarity|search|cluster|encode`) (required)
+- `--sentence1`, `--sentence2`
+- `--query`, `--corpus_file`, `--top_k`
+- `--sentences_file`, `--n_clusters`
+- `--input_file`, `--output_file`
+- `--batch_size`
+- `--device`
+
+## 7. Recommended Workflow
+
+1. Select or create YAML config that validates against `schema.yaml`.
+2. Run `train`.
+3. Export with `deploy` or `quantize`.
+4. Run `infer` for runtime validation and benchmark.
+5. Train/evaluate sentence embeddings via `sbert-train` and `sbert-infer`.

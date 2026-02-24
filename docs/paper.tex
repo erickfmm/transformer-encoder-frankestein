@@ -1,1531 +1,308 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage{amsmath,amssymb,amsthm}
-\usepackage{mathtools}
-\usepackage{graphicx}
-\usepackage{hyperref}
-\usepackage{algorithm}
-\usepackage{algorithmic}
+\usepackage{amsmath,amssymb}
 \usepackage{booktabs}
-\usepackage{multirow}
-\usepackage{xcolor}
-\usepackage{enumitem}
-\usepackage{microtype}
-\usepackage{natbib}
-\usepackage{subcaption}
+\usepackage{longtable}
 \usepackage{tabularx}
-\usepackage{float}
-\usepackage{tikz}
-\usetikzlibrary{shapes.geometric, arrows, positioning, fit, calc, decorations.pathreplacing, backgrounds}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
+\usepackage{array}
+\usepackage[numbers]{natbib}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{geometry}
+\geometry{margin=1in}
 
-% Theorem environments
-\newtheorem{theorem}{Theorem}[section]
-\newtheorem{lemma}[theorem]{Lemma}
-\newtheorem{proposition}[theorem]{Proposition}
-\newtheorem{corollary}[theorem]{Corollary}
-\newtheorem{definition}[theorem]{Definition}
-\newtheorem{remark}[theorem]{Remark}
-
-% Custom commands
-\newcommand{\R}{\mathbb{R}}
-\newcommand{\E}{\mathbb{E}}
-\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
-\newcommand{\softmax}{\mathrm{softmax}}
-\newcommand{\diag}{\mathrm{diag}}
-\DeclareMathOperator{\sign}{sign}
-\DeclareMathOperator{\Var}{Var}
-
-\title{TORMENTED-BERT-Frankenstein: A Hybrid Transformer Architecture \\ Integrating Ternary Quantization, Neural Ordinary Differential Equations, \\ Retention Mechanisms, and Sparse Mixture-of-Experts}
-
+\title{Transformer Encoder Frankenstein: Library, CLI, and Research Grounded Design Notes}
 \author{
 Erick F. Merino M. \\
-Ministerio de Educación, Chile (This work is not affiliated) \\
+This work is not affiliated \\
 \texttt{erickfmm@gmail.com}
 }
-
-\date{January 2026}
+\date{February 2026}
 
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-We introduce \textbf{TORMENTED-BERT-Frankenstein} (\textbf{T}ernary \textbf{O}DE \textbf{R}etention \textbf{M}amba \textbf{E}xperts \textbf{N}eural \textbf{T}anh \textbf{E}ncoder \textbf{D}epth), a novel transformer encoder architecture that synthesizes multiple state-of-the-art techniques into a unified framework optimized for memory-constrained hardware. Our architecture integrates five key innovations: (1) \textbf{BitNet b1.58 quantization} \citep{ma2024era} constraining weights to ternary values $\{-1, 0, +1\}$, achieving approximately 3.5$\times$ memory reduction compared to FP16; (2) \textbf{Neural ODE-based attention} \citep{chen2018neural} modeling hidden state dynamics as continuous-time differential equations solved via 4th-order Runge-Kutta integration; (3) \textbf{Multi-Scale Retention mechanisms} from RetNet \citep{sun2023retentive} enabling $\mathcal{O}(1)$ inference complexity with parallel training; (4) \textbf{Recursive layer processing} where 12 physical layers are traversed twice to achieve 24 layers of logical depth with shared parameters; and (5) \textbf{Sparse Mixture-of-Experts} (MoE) \citep{fedus2022switch} feed-forward networks with top-2 routing among 8 experts. We further incorporate \textbf{Dynamic Tanh normalization} \citep{zhu2025transformers} as a drop-in replacement for LayerNorm, providing bounded activations and improved gradient stability in quantized networks. Through extensive mathematical formulation and implementation analysis, we demonstrate that this ``Frankenstein'' combination of techniques enables training a 2048-dimensional hidden state model on a single 24GB GPU (NVIDIA Tesla P40), where equivalent standard transformers would exceed memory constraints. Our work provides detailed theoretical foundations, algorithmic specifications, and practical considerations for deploying hybrid architectures on resource-constrained hardware.
+This document reframes Transformer Encoder Frankenstein as a configuration-driven software toolkit and research workbench. We present the CLI-first workflow, mathematical descriptions of supported attention and sequence-mixer families, optimizer families mapped to the training schema, deployment quantization mechanics, and SBERT downstream tasks. We also include pseudocode and summary tables to make design trade-offs explicit for implementation and experimentation.
 \end{abstract}
 
 \section{Introduction}
 
-The Transformer architecture \citep{vaswani2017attention} has fundamentally transformed deep learning across natural language processing \citep{devlin2019bert}, computer vision \citep{dosovitskiy2020image}, and multimodal understanding. The self-attention mechanism's ability to model global dependencies with $\mathcal{O}(L^2)$ complexity, where $L$ denotes sequence length, has enabled unprecedented performance on diverse tasks. However, this quadratic scaling presents significant challenges for deployment on resource-constrained hardware, particularly when training or inference must occur on single GPUs with limited VRAM.
+Transformer systems are now a production concern as much as a modeling concern \citep{vaswani_attention_2017,devlin_bert_2019}. In practice, users need a single toolchain that can: (i) define training configurations with strict contracts, (ii) train with multiple optimizer and mixer families, (iii) deploy quantized checkpoints, and (iv) run sentence-embedding workflows inspired by SBERT \citep{reimers_sentence-bert_2019}.
 
-Recent research has introduced several promising directions for addressing these limitations. \textbf{Quantization} approaches, exemplified by BitNet \citep{wang2023bitnet} and its successor BitNet b1.58 \citep{ma2024era}, demonstrate that large language models can achieve competitive performance with ternary weights $\{-1, 0, +1\}$, dramatically reducing memory requirements and enabling efficient integer arithmetic. \textbf{Retention mechanisms} \citep{sun2023retentive} from RetNet provide an alternative to softmax attention that combines the parallelizability of Transformers with the $\mathcal{O}(1)$ inference complexity of recurrent networks. \textbf{State Space Models} (SSMs), particularly the Mamba architecture \citep{gu2023mamba}, offer linear-time sequence modeling with selective state spaces. \textbf{Neural Ordinary Differential Equations} \citep{chen2018neural} model layer transformations as continuous dynamics, enabling parameter-efficient depth modeling. Finally, \textbf{Mixture-of-Experts} (MoE) architectures \citep{fedus2022switch, shazeer2017outrageously} achieve conditional computation by activating only a subset of parameters for each input.
-
-While each technique has been studied in isolation, their combination presents unique challenges and opportunities. In this work, we propose TORMENTED-BERT-Frankenstein, an architecture that synthesizes these disparate innovations into a cohesive framework specifically designed for memory-constrained training on legacy or consumer-grade GPUs.
-
-\subsection{Motivation and Design Philosophy}
-
-Our design philosophy is guided by three principles:
-
-\begin{enumerate}[leftmargin=*]
-    \item \textbf{Memory Efficiency First}: Every architectural decision prioritizes VRAM reduction, enabling training of models that would otherwise exceed hardware constraints.
-    
-    \item \textbf{Polymorphic Processing}: Different input patterns may benefit from different computational mechanisms; our hybrid layer design allows the model to leverage RetNet retention, Neural ODE dynamics, SSM processing, or standard attention as appropriate.
-    
-    \item \textbf{Logical Depth via Physical Reuse}: By recursively processing physical layers, we achieve greater effective depth without proportional parameter growth.
-\end{enumerate}
-
-\subsection{Contributions}
-
-Our main contributions are as follows:
-
-\begin{itemize}[leftmargin=*]
-    \item We present the first unified architecture combining BitNet 1.58-bit quantization with Neural ODE attention, RetNet retention, and Sparse MoE.
-    
-    \item We provide rigorous mathematical formulations for each component and their interactions, including novel stability analyses for quantized ODE solvers.
-    
-    \item We introduce a recursive layer processing scheme that doubles logical depth while sharing parameters, achieving 24 effective layers from 12 physical layer blocks.
-    
-    \item We demonstrate that Dynamic Tanh normalization \citep{zhu2025transformers} provides superior gradient stability compared to LayerNorm when combined with ternary quantization.
-    
-    \item We provide detailed implementation specifications optimized for the NVIDIA Tesla P40 (24GB VRAM, Pascal architecture), enabling reproducibility on legacy hardware.
-\end{itemize}
-
-\subsection{Paper Organization}
-
-The remainder of this paper is organized as follows. Section~\ref{sec:background} provides comprehensive background on each component technique. Section~\ref{sec:architecture} presents the full TORMENTED-BERT-Frankenstein architecture. Sections~\ref{sec:bitnet}--\ref{sec:normalization} provide detailed mathematical formulations for BitNet quantization, hybrid attention mechanisms, MoE feed-forward networks, and normalization strategies. Section~\ref{sec:training} discusses training considerations and optimization challenges. Section~\ref{sec:complexity} analyzes computational and memory complexity. Section~\ref{sec:related} surveys related work. Section~\ref{sec:experiments} outlines experimental methodology. Section~\ref{sec:discussion} discusses implications and limitations, and Section~\ref{sec:conclusion} concludes.
-
-\section{Background and Preliminaries}
-\label{sec:background}
-
-This section provides comprehensive background on the foundational techniques integrated into TORMENTED-BERT-Frankenstein.
-
-\subsection{Transformer Architecture}
-
-The Transformer \citep{vaswani2017attention} processes input sequences $\mathbf{X} \in \R^{L \times d}$ through alternating self-attention and feed-forward layers. The multi-head self-attention (MHSA) mechanism computes:
-\begin{equation}
-    \text{MHSA}(\mathbf{X}) = \text{Concat}(\text{head}_1, \ldots, \text{head}_h)\mathbf{W}^O
-\end{equation}
-where each head computes scaled dot-product attention:
-\begin{equation}
-    \text{head}_i = \text{Attention}(\mathbf{X}\mathbf{W}^Q_i, \mathbf{X}\mathbf{W}^K_i, \mathbf{X}\mathbf{W}^V_i) = \softmax\left(\frac{\mathbf{Q}_i\mathbf{K}_i^\top}{\sqrt{d_k}}\right)\mathbf{V}_i
-\end{equation}
-with $\mathbf{W}^Q_i, \mathbf{W}^K_i, \mathbf{W}^V_i \in \R^{d \times d_k}$ and $\mathbf{W}^O \in \R^{hd_k \times d}$.
-
-BERT \citep{devlin2019bert} adapted this architecture for bidirectional language understanding, achieving state-of-the-art results on numerous NLP benchmarks. Subsequent work has extended BERT to Spanish through models like BETO \citep{canete2023spanish} and RigoBERTa \citep{vaca2022rigoberta}, demonstrating the importance of language-specific pre-training.
-
-\subsection{BitNet and 1.58-bit Quantization}
-
-BitNet \citep{wang2023bitnet} introduced binary quantization for Transformers, replacing standard linear layers with BitLinear operations. The subsequent BitNet b1.58 \citep{ma2024era} extended this to ternary weights, demonstrating that every weight can be constrained to $\{-1, 0, +1\}$ while matching full-precision performance.
-
-\begin{definition}[1.58-bit Representation]
-A ternary weight matrix $\tilde{\mathbf{W}} \in \{-1, 0, +1\}^{m \times n}$ requires $\log_2(3) \approx 1.58$ bits per parameter, compared to 16 bits for FP16 or 32 bits for FP32.
-\end{definition}
-
-The key insight is that ternary operations can be implemented as additions and subtractions, avoiding expensive multiplications:
-\begin{equation}
-    \mathbf{y} = \tilde{\mathbf{W}}\mathbf{x} = \sum_{j: \tilde{W}_{ij}=1} x_j - \sum_{j: \tilde{W}_{ij}=-1} x_j
-\end{equation}
-
-Recent advances include BitNet a4.8 \citep{wang2024bitnet} enabling 4-bit activations and BitNet v2 \citep{wang2025bitnet} with Hadamard transformations for improved quantization.
-
-\subsection{Neural Ordinary Differential Equations}
-
-Neural ODEs \citep{chen2018neural} model the transformation between hidden states as the solution to an initial value problem:
-\begin{equation}
-    \frac{d\mathbf{h}(t)}{dt} = f_\theta(\mathbf{h}(t), t), \quad \mathbf{h}(0) = \mathbf{h}_0
-\end{equation}
-where $f_\theta$ is a neural network parameterizing the dynamics. The output is obtained by integrating from $t=0$ to $t=T$:
-\begin{equation}
-    \mathbf{h}(T) = \mathbf{h}_0 + \int_0^T f_\theta(\mathbf{h}(t), t) \, dt
-\end{equation}
-
-This formulation provides several advantages:
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Continuous depth}: The network depth is determined by integration time rather than discrete layers.
-    \item \textbf{Memory efficiency}: Backpropagation via the adjoint method \citep{chen2018neural} requires $\mathcal{O}(1)$ memory regardless of integration steps.
-    \item \textbf{Adaptive computation}: Adaptive ODE solvers can allocate more computation to complex inputs.
-\end{itemize}
-
-\subsection{Retentive Networks}
-
-RetNet \citep{sun2023retentive} proposes a retention mechanism that achieves the parallelizability of Transformers with the $\mathcal{O}(1)$ inference complexity of recurrent networks. The retention operation is defined as:
-\begin{equation}
-    \text{Retention}(\mathbf{X}) = (\mathbf{Q}\mathbf{K}^\top \odot \mathbf{D}) \mathbf{V}
-\end{equation}
-where $\mathbf{D} \in \R^{L \times L}$ is a causal decay matrix with entries:
-\begin{equation}
-    D_{ij} = \begin{cases}
-        \gamma^{i-j} & \text{if } i \geq j \\
-        0 & \text{otherwise}
-    \end{cases}
-\end{equation}
-and $\gamma \in (0, 1)$ is a learned or fixed decay rate.
-
-The parallel form enables efficient training, while the recurrent form:
-\begin{equation}
-    \mathbf{s}_n = \gamma \mathbf{s}_{n-1} + \mathbf{k}_n^\top \mathbf{v}_n, \quad \mathbf{o}_n = \mathbf{q}_n \mathbf{s}_n
-\end{equation}
-enables $\mathcal{O}(1)$ inference per token.
-
-\subsection{State Space Models and Mamba}
-
-Structured State Space Models (S4) \citep{gu2022efficiently} and their selective variant Mamba \citep{gu2023mamba} provide linear-time sequence modeling. The discrete-time SSM is:
-\begin{align}
-    \mathbf{h}_t &= \bar{\mathbf{A}} \mathbf{h}_{t-1} + \bar{\mathbf{B}} \mathbf{x}_t \\
-    \mathbf{y}_t &= \mathbf{C} \mathbf{h}_t + \mathbf{D} \mathbf{x}_t
-\end{align}
-where $\bar{\mathbf{A}}, \bar{\mathbf{B}}$ are discretized from continuous-time parameters.
-
-Mamba's key innovation is \emph{selective} state spaces, where $\mathbf{B}$, $\mathbf{C}$, and the discretization step $\Delta$ are input-dependent, enabling content-aware processing.
-
-The Jamba architecture \citep{lieber2024jamba, jambateam2024jamba15} successfully combines Transformer attention with Mamba layers in a hybrid design, demonstrating the viability of mixed architectures.
-
-\subsection{Mixture-of-Experts}
-
-Mixture-of-Experts (MoE) \citep{shazeer2017outrageously, fedus2022switch} enables conditional computation by routing each token to a subset of expert networks:
-\begin{equation}
-    \text{MoE}(\mathbf{x}) = \sum_{i=1}^{E} g_i(\mathbf{x}) \cdot \text{Expert}_i(\mathbf{x})
-\end{equation}
-where $g_i(\mathbf{x})$ is the gating weight for expert $i$. The Switch Transformer \citep{fedus2022switch} demonstrated scaling to trillion-parameter models with top-1 routing.
-
-\subsection{Positional Embeddings}
-
-Rotary Position Embedding (RoPE) \citep{su2021roformer} encodes positional information through rotation matrices applied to query and key vectors:
-\begin{equation}
-    \text{RoPE}(\mathbf{x}_m, m) = \mathbf{R}_m \mathbf{x}_m
-\end{equation}
-where $\mathbf{R}_m$ is a block-diagonal rotation matrix with angle $m\theta_i$ for the $i$-th block, and $\theta_i = 10000^{-2i/d}$.
-
-Our HOPE (Hyperspherical Orbit Positional Embedding) extends RoPE to higher-dimensional manifolds for improved extrapolation properties.
-
-\subsection{Normalization Techniques}
-
-Layer Normalization \citep{ba2016layer} stabilizes training by normalizing activations:
-\begin{equation}
-    \text{LayerNorm}(\mathbf{x}) = \gamma \odot \frac{\mathbf{x} - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta
-\end{equation}
-where $\mu, \sigma^2$ are computed over the feature dimension.
-
-RMSNorm \citep{zhang2019root} simplifies this by removing mean-centering:
-\begin{equation}
-    \text{RMSNorm}(\mathbf{x}) = \gamma \odot \frac{\mathbf{x}}{\sqrt{\frac{1}{d}\sum_{i=1}^d x_i^2 + \epsilon}}
-\end{equation}
-
-Recent work by \citet{zhu2025transformers} introduced Dynamic Tanh (DyT) as a normalization-free alternative:
-\begin{equation}
-    \text{DyT}(\mathbf{x}) = \tanh(\alpha \mathbf{x})
-\end{equation}
-where $\alpha$ is a learnable scalar, providing bounded activations without explicit normalization.
-
-\subsection{Recursive Loop Mechanism}
-
-Unlike traditional stacked transformers, we employ a recursive processing strategy:
-
-\begin{algorithm}[H]
-\caption{Recursive Layer Processing}
-\label{alg:recursive}
-\begin{algorithmic}
-\STATE \textbf{Input:} $\mathbf{x} \in \mathbb{R}^{B \times L \times d}$, physical layers $\{\mathcal{L}_i\}_{i=1}^{N_{\text{phys}}}$, number of loops $K$
-\STATE $\mathbf{h}^{(0)} \leftarrow \mathbf{x}$
-\FOR{$k = 1$ to $K$}
-    \FOR{$i = 1$ to $N_{\text{phys}}$}
-        \STATE $\ell \leftarrow N_{\text{phys}} \cdot (k-1) + i$ \COMMENT{Logical layer index}
-        \STATE $\mathbf{h}^{(\ell)} \leftarrow \mathcal{L}_i(\mathbf{h}^{(\ell-1)}, \ell)$ \COMMENT{Pass logical index for layer-aware processing}
-    \ENDFOR
-\ENDFOR
-\STATE \textbf{Return:} $\mathbf{h}^{(N_{\text{phys}} \cdot K)}$
-\end{algorithmic}
-\end{algorithm}
-
-This design achieves $N_{\text{phys}} \cdot K = 12 \times 2 = 24$ layers of processing depth while maintaining only 12 sets of trainable parameters, trading computation for memory efficiency. The logical layer index $\ell$ is passed to each layer, enabling layer-aware computations such as varying decay rates in retention mechanisms.
-
-\begin{theorem}[Memory Reduction via Recursive Processing]
-\label{thm:recursive_memory}
-For a model with $P$ parameters per layer and $N$ total logical layers, recursive processing with $K$ loops reduces parameter count from $N \cdot P$ to $(N/K) \cdot P$, a factor of $K$ reduction.
-\end{theorem}
-
-\begin{proof}
-With $K$ recursive loops over $N/K$ physical layers, the total logical depth is $(N/K) \cdot K = N$. The parameter count is $(N/K) \cdot P$, while a non-recursive model with depth $N$ requires $N \cdot P$ parameters. The ratio is $(N \cdot P) / ((N/K) \cdot P) = K$.
-\end{proof}
-
-\section{TORMENTED-BERT-Frankenstein Architecture}
-\label{sec:architecture}
-
-\subsection{Global Structure}
-
-TORMENTED-BERT-Frankenstein processes input sequences through the following pipeline:
-\begin{equation}
-    \mathbf{X} \xrightarrow{\text{Embed}} \mathbf{E} \xrightarrow{\text{Dropout}} \mathbf{H}_0 \xrightarrow{\text{Recursive}^K} \mathbf{H}_L \xrightarrow{\text{DyTNorm}} \hat{\mathbf{H}} \xrightarrow{\text{BitLinear}} \mathbf{Y}
-\end{equation}
-
-The complete architecture is illustrated in Figure~\ref{fig:architecture_detailed}, which shows the flow through the recursive loop structure with the stable 6-layer pattern. A comprehensive flowchart diagram (including training pipeline, checkpointing strategy, and safety monitoring) is available in the \texttt{diagram.mermaid} file in the repository, which can be rendered using:
-
+The project command surface is:
 \begin{center}
-\texttt{mmdc -i diagram.mermaid -o diagram.pdf -t neutral -b transparent}
+\texttt{frankestein-transformer}
 \end{center}
+with subcommands:
+\texttt{train}, \texttt{deploy}, \texttt{quantize}, \texttt{infer}, \texttt{sbert-train}, \texttt{sbert-infer}.
 
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[
-    node distance=0.8cm,
-    block/.style={rectangle, draw, rounded corners, minimum width=2.8cm, minimum height=0.7cm, font=\footnotesize, align=center},
-    embed/.style={block, fill=yellow!20},
-    norm/.style={block, fill=purple!15},
-    mixer/.style={block, fill=green!15},
-    moe/.style={block, fill=orange!15},
-    output/.style={block, fill=blue!15},
-    arrow/.style={->, thick, >=stealth},
-    loop/.style={dashed, thick, rounded corners}
-]
-    % Input
-    \node[embed] (input) {Input IDs\\$\mathbf{X} \in \mathbb{Z}^{B \times L}$};
-    \node[embed, below=of input] (emb) {Word Embedding\\$50000 \to 1024$};
-    \node[block, below=of emb] (drop) {Dropout (0.1)};
-    
-    % Recursive loop box
-    \node[below=0.6cm of drop] (loop_start) {};
-    
-    % Layer block
-    \node[norm, below=1.2cm of drop] (norm1) {DyTNorm};
-    \node[mixer, below=of norm1] (mixer) {Mixer Block\\(Pattern-based)};
-    \node[block, below=of mixer] (res1) {Residual Add};
-    \node[norm, below=of res1] (norm2) {DyTNorm};
-    \node[moe, below=of norm2] (moe) {Sparse MoE\\(4 experts, top-2)};
-    \node[block, below=of moe] (res2) {Residual Add};
-    
-    % Output
-    \node[norm, below=1.2cm of res2] (final_norm) {Final DyTNorm};
-    \node[output, below=of final_norm] (head) {BitLinear Head\\$1024 \to 50000$};
-    \node[output, below=of head] (out) {Output Logits\\$\mathbf{Y} \in \mathbb{R}^{B \times L \times V}$};
-    
-    % Arrows
-    \draw[arrow] (input) -- (emb);
-    \draw[arrow] (emb) -- (drop);
-    \draw[arrow] (drop) -- (norm1);
-    \draw[arrow] (norm1) -- (mixer);
-    \draw[arrow] (mixer) -- (res1);
-    \draw[arrow] (res1) -- (norm2);
-    \draw[arrow] (norm2) -- (moe);
-    \draw[arrow] (moe) -- (res2);
-    \draw[arrow] (res2) -- (final_norm);
-    \draw[arrow] (final_norm) -- (head);
-    \draw[arrow] (head) -- (out);
-    
-    % Loop annotations
-    \draw[loop, ->] (res2.east) -- ++(1.2,0) |- node[right, font=\scriptsize, pos=0.25] {$\times 12$ layers} (norm1.east);
-    \draw[loop, ->, blue] ([xshift=1.5cm]res2.east) -- ++(0.8,0) |- node[right, font=\scriptsize, blue, pos=0.25] {$\times 2$ loops} ([xshift=1.5cm]norm1.east);
-    
-    % Brace for hybrid layer
-    \draw[decorate, decoration={brace, amplitude=8pt}] 
-        ([xshift=-3.5cm]norm1.north) -- ([xshift=-3.5cm]res2.south) 
-        node[midway, left=10pt, font=\footnotesize, align=right] {Hybrid\\Layer\\$\times 12$};
-\end{tikzpicture}
-\caption{TORMENTED-BERT-Frankenstein (\textbf{T}ernary \textbf{O}DE \textbf{R}etention \textbf{M}amba \textbf{E}xperts \textbf{N}eural \textbf{T}anh \textbf{E}ncoder \textbf{D}epth) global architecture. Input tokens pass through embedding, 12 hybrid layers (processed in 2 recursive loops for 24 logical layers), and a BitLinear output head. Each hybrid layer cycles through RetNet, Titan Attention, Mamba, and ODE blocks with sparse MoE feed-forward networks.}
-\label{fig:architecture_detailed}
-\end{figure}
+\section{Configuration-Centric Architecture}
 
-% Complete flowchart diagram including training pipeline
-% To include the rendered Mermaid diagram (after converting diagram.mermaid to PDF):
-% \begin{figure}[H]
-% \centering
-% \includegraphics[width=\textwidth,keepaspectratio]{diagram.pdf}
-% \caption{Complete TORMENTED-BERT-Frankenstein training pipeline including recursive loop structure, stable 6-layer pattern, checkpointing strategy, NaN detection, and safety monitoring. The diagram shows the full data flow from input through the hybrid architecture to output, along with the training infrastructure components.}
-% \label{fig:complete_pipeline}
-% \end{figure}
-
-\begin{table}[H]
-\centering
-\caption{TORMENTED-BERT-Frankenstein Configuration (Updated for Stability)}
-\label{tab:config}
-\begin{tabular}{@{}ll@{}}
-\toprule
-\textbf{Component} & \textbf{Specification} \\
-\midrule
-Hidden dimension ($d$) & 1024 \\
-Physical layers ($N_{\text{phys}}$) & 12 \\
-Recursive loops ($K$) & 2 \\
-Logical depth & $12 \times 2 = 24$ \\
-Attention heads ($h$) & 16 \\
-Retention heads & 8 \\
-Head dimension ($d_k$) & $1024 / 16 = 64$ \\
-FFN intermediate dimension & $2 \times 1024 = 2048$ \\
-MoE experts ($E$) & 4 \\
-Active experts (top-$k$) & 2 \\
-Vocabulary size ($V$) & 50,000 \\
-Maximum sequence length ($L$) & 512 \\
-Quantization & BitNet b1.58 (ternary) \\
-Normalization & Dynamic Tanh \\
-ODE Solver & RK4 (2 steps) \\
-Layer Pattern & Stable 6-layer (Table~\ref{tab:stable_pattern}) \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{Note}: A detailed Mermaid diagram of the complete architecture is available in \texttt{docs/v2/diagram.mermaid} and can be rendered to \texttt{diagram.png} using any Mermaid-compatible tool.
-
-\subsection{Embedding Layer}
-
-The embedding layer transforms discrete token indices to continuous representations:
-\begin{equation}
-    \mathbf{E} = \text{BitEmbedding}(\mathbf{X}) \in \R^{B \times L \times d}
-\end{equation}
-
-Unlike standard embeddings, we employ BitLinear quantization on the embedding matrix $\mathbf{W}_E \in \R^{V \times d}$, reducing embedding storage from $V \cdot d \cdot 16$ bits to approximately $V \cdot d \cdot 1.58$ bits.
-
-\subsection{Hyperspherical Orbit Positional Embedding (HOPE)}
-
-HOPE extends Rotary Position Embedding \citep{su2021roformer} to hyperspherical manifolds. For position $m$ and dimension pair $(2i, 2i+1)$:
-\begin{equation}
-    \mathbf{R}_m^{(i)} = \begin{pmatrix}
-        \cos(m\theta_i) & -\sin(m\theta_i) \\
-        \sin(m\theta_i) & \cos(m\theta_i)
-    \end{pmatrix}
-\end{equation}
-where $\theta_i = b^{-2i/d}$ with base $b = 10000$.
-
-The full rotation matrix is block-diagonal:
-\begin{equation}
-    \mathbf{R}_m = \diag(\mathbf{R}_m^{(1)}, \mathbf{R}_m^{(2)}, \ldots, \mathbf{R}_m^{(d/2)})
-\end{equation}
-
-HOPE applies this rotation with additional spherical projections for improved length extrapolation.
-
-\section{Hybrid Layer Architecture}
-
-Each hybrid layer $\mathcal{L}_i$ follows a pre-normalization residual design with polymorphic mixing:
-
-\begin{align}
-    \mathbf{z}_1 &= \mathbf{x} + \text{Mixer}_i(\text{DyTNorm}(\mathbf{x})) \\
-    \mathbf{z}_2 &= \mathbf{z}_1 + \text{MoE}_i(\text{DyTNorm}(\mathbf{z}_1))
-\end{align}
-
-The mixer type follows a \textbf{stable 6-layer pattern} designed for training stability, rather than simple cyclic assignment.
-
-\subsection{Polymorphic Mixer Selection}
-
-Layers are assigned one of four mixer types based on a \textbf{stable 6-layer pattern} optimized for training stability. Unlike simple cyclic assignment (modulo 4), our pattern prioritizes stability through strategic layer ordering:
-
-\begin{table}[H]
-\centering
-\caption{Stable 6-Layer Pattern Assignment}
-\label{tab:stable_pattern}
-\begin{tabular}{@{}cclp{6cm}@{}}
-\toprule
-\textbf{Position} & \textbf{Mixer Type} & \textbf{Role} & \textbf{Stability Rationale} \\
-\midrule
-1 & RetNet & Anchor & Stable gradient flow at initialization \\
-2 & Titan Attention & Bridge & Proven stable attention mechanism \\
-3 & RetNet & Anchor & Reinforces stability before Mamba \\
-4 & Mamba/SSM & Processing & Sandwiched between stable layers \\
-5 & Titan Attention & Bridge & Local pattern capture \\
-6 & Neural ODE & Dynamics & End position for stable gradients \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-This 6-layer pattern repeats twice to fill 12 physical layers, yielding the sequence:
-\begin{equation}
-\text{Pattern} = [\underbrace{\text{RetNet} \to \text{Titan} \to \text{RetNet} \to \text{Mamba} \to \text{Titan} \to \text{ODE}}_{\text{Cycle 1}}]_{\times 2}
-\end{equation}
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[
-    layer/.style={rectangle, draw, rounded corners, minimum width=1.8cm, minimum height=0.7cm, font=\footnotesize},
-    retnet/.style={layer, fill=green!20},
-    titan/.style={layer, fill=pink!30},
-    mamba/.style={layer, fill=orange!20},
-    ode/.style={layer, fill=blue!15},
-    arrow/.style={->, thick, >=stealth}
-]
-    % First cycle
-    \node[retnet] (r1) at (0, 0) {RetNet};
-    \node[titan] (t1) at (2.2, 0) {Titan};
-    \node[retnet] (r2) at (4.4, 0) {RetNet};
-    \node[mamba] (m1) at (6.6, 0) {Mamba};
-    \node[titan] (t2) at (8.8, 0) {Titan};
-    \node[ode] (o1) at (11, 0) {ODE};
-    
-    % Arrows
-    \draw[arrow] (r1) -- (t1);
-    \draw[arrow] (t1) -- (r2);
-    \draw[arrow] (r2) -- (m1);
-    \draw[arrow] (m1) -- (t2);
-    \draw[arrow] (t2) -- (o1);
-    
-    % Labels
-    \node[above=0.2cm of r1, font=\scriptsize] {L1};
-    \node[above=0.2cm of t1, font=\scriptsize] {L2};
-    \node[above=0.2cm of r2, font=\scriptsize] {L3};
-    \node[above=0.2cm of m1, font=\scriptsize] {L4};
-    \node[above=0.2cm of t2, font=\scriptsize] {L5};
-    \node[above=0.2cm of o1, font=\scriptsize] {L6};
-    
-    % Cycle indicator
-    \draw[decorate, decoration={brace, amplitude=8pt, mirror}] 
-        (-0.7, -0.6) -- (11.7, -0.6) node[midway, below=10pt, font=\footnotesize] {Cycle 1 (repeats for Layers 7--12)};
-\end{tikzpicture}
-\caption{Stable 6-Layer Pattern: RetNet anchors at positions 1,3 provide stability; Mamba is sandwiched between stable layers; ODE at position 6 benefits from stable gradients from above.}
-\label{fig:layer_pattern}
-\end{figure}
-
-The design rationale is based on research from hybrid architectures (TransMamba, SST, Jamba):
+The authoritative contract is \texttt{src/training/configs/schema.yaml}. It enforces three top-level objects:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{RetNet anchors (2$\times$)}: Most stable for gradient flow and long-range dependencies
-    \item \textbf{Titan Attention (2$\times$)}: Proven stable standard attention mechanism  
-    \item \textbf{Mamba (1$\times$)}: Efficient but can struggle with certain patterns; sandwiched for safety
-    \item \textbf{ODE (1$\times$)}: Continuous dynamics placed at pattern end where gradients are more stable
+    \item \texttt{model\_class}
+    \item \texttt{model}
+    \item \texttt{training}
 \end{itemize}
 
-\subsection{RetNet Multi-Scale Retention}
-\label{sec:retnet}
+The \texttt{model.layer\_pattern} supports:
+\[
+\{\texttt{retnet}, \texttt{mamba}, \texttt{ode}, \texttt{titan\_attn}, \texttt{standard\_attn}, \texttt{sigmoid\_attn}\}
+\]
+which corresponds to current attention and sequence-mixer literature \citep{sun_retentive_2023,gu_mamba_2023,zhang_continuous_2021,behrouz_titans_2025,ramapuram_theory_2024,vaswani_attention_2017}.
 
-The retention mechanism \citep{sun2023retentive} computes:
-\begin{equation}
-    \text{Retention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = (\mathbf{Q}\mathbf{K}^\top \odot \mathbf{D}) \mathbf{V}
-\end{equation}
+The \texttt{training.optimizer.optimizer\_class} supports a broad optimizer family:
+\texttt{adamw}, \texttt{adafactor}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{schedulefree\_adamw}, \texttt{lion}, \texttt{sophia}, \texttt{prodigy}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{shampoo}, \texttt{soap}, and others.
 
-where $\mathbf{D}$ is the causal decay matrix:
-\begin{equation}
-    D_{nm} = \begin{cases}
-        \gamma^{n-m} & \text{if } n \geq m \\
-        0 & \text{otherwise}
-    \end{cases}
-\end{equation}
-
-For multi-scale retention, different heads use different decay rates $\gamma_h$:
-\begin{equation}
-    \gamma_h = 1 - 2^{-(5 + h/H \cdot 7)}
-\end{equation}
-ranging from approximately 0.97 to 0.999, capturing both short and long-range dependencies.
-
-\begin{proposition}[Retention Complexity]
-The parallel retention computation has time complexity $\mathcal{O}(L^2 d)$ and space complexity $\mathcal{O}(L^2 + Ld)$. The recurrent form achieves $\mathcal{O}(d^2)$ per-token inference.
-\end{proposition}
-
-In our implementation, all projection matrices $\mathbf{W}^Q, \mathbf{W}^K, \mathbf{W}^V \in \R^{d \times d}$ are BitLinear layers with ternary weights.
-
-\subsection{Neural ODE Attention}
-\label{sec:ode}
-
-We formulate attention as a continuous dynamical system. Let $\mathbf{z}(t) \in \R^{L \times d}$ denote the hidden state at time $t$. The dynamics are:
-\begin{equation}
-    \frac{d\mathbf{z}}{dt} = f_\theta(\mathbf{z}(t), t) = \text{BitLinearAttn}(\mathbf{z}(t), t)
-\end{equation}
-
-where $\text{BitLinearAttn}$ computes attention with quantized projections:
-\begin{equation}
-    \text{BitLinearAttn}(\mathbf{z}, t) = \softmax\left(\frac{\tilde{\mathbf{W}}^Q(t)\mathbf{z} \cdot (\tilde{\mathbf{W}}^K(t)\mathbf{z})^\top}{\sqrt{d_k}}\right) \tilde{\mathbf{W}}^V(t)\mathbf{z}
-\end{equation}
-
-The time-dependent projections incorporate positional information:
-\begin{equation}
-    \tilde{\mathbf{W}}^Q(t) = \tilde{\mathbf{W}}^Q \odot (1 + \alpha_t \sin(\omega t))
-\end{equation}
-
-\subsubsection{Runge-Kutta 4 Solver}
-
-We integrate using the classical RK4 method with $N_{\text{steps}}$ steps from $t=0$ to $t=T=1$:
-
-\begin{algorithm}[H]
-\caption{RK4 Integration for Neural ODE Attention}
-\begin{algorithmic}
-\STATE \textbf{Input:} Initial state $\mathbf{z}_0$, dynamics $f_\theta$, steps $N$
-\STATE $\Delta t \leftarrow T / N$
-\STATE $\mathbf{z} \leftarrow \mathbf{z}_0$
-\FOR{$i = 0$ to $N-1$}
-    \STATE $t \leftarrow i \cdot \Delta t$
-    \STATE $\mathbf{k}_1 \leftarrow f_\theta(\mathbf{z}, t)$
-    \STATE $\mathbf{k}_2 \leftarrow f_\theta(\mathbf{z} + \frac{\Delta t}{2}\mathbf{k}_1, t + \frac{\Delta t}{2})$
-    \STATE $\mathbf{k}_3 \leftarrow f_\theta(\mathbf{z} + \frac{\Delta t}{2}\mathbf{k}_2, t + \frac{\Delta t}{2})$
-    \STATE $\mathbf{k}_4 \leftarrow f_\theta(\mathbf{z} + \Delta t \cdot \mathbf{k}_3, t + \Delta t)$
-    \STATE $\mathbf{z} \leftarrow \mathbf{z} + \frac{\Delta t}{6}(\mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4)$
-\ENDFOR
-\STATE \textbf{Return:} $\mathbf{z}$
-\end{algorithmic}
-\end{algorithm}
-
-\begin{theorem}[RK4 Error Bound]
-For Lipschitz-continuous dynamics $f_\theta$ with constant $L_f$, the RK4 method achieves local truncation error $\mathcal{O}(\Delta t^5)$ and global error $\mathcal{O}(\Delta t^4)$.
-\end{theorem}
-
-\subsubsection{Stability with Quantized Weights}
-
-The combination of ternary weights and ODE integration introduces unique stability considerations.
-
-\begin{lemma}[Bounded Dynamics]
-\label{lem:bounded}
-If $\tilde{\mathbf{W}} \in \{-1, 0, +1\}^{m \times n}$ and $\mathbf{x} \in [-M, M]^n$, then $\norm{\tilde{\mathbf{W}}\mathbf{x}}_\infty \leq n \cdot M$.
-\end{lemma}
-
-This boundedness ensures that the ODE dynamics remain stable even with quantized projections, as the attention output is further bounded by the softmax normalization.
-
-\subsection{Mamba/Titan Memory Block}
-\label{sec:mamba}
-
-For SSM layers, we implement a simplified Mamba-style block:
-\begin{align}
-    \mathbf{h}_t &= \bar{\mathbf{A}} \mathbf{h}_{t-1} + \bar{\mathbf{B}}_t \mathbf{x}_t \\
-    \mathbf{y}_t &= \mathbf{C}_t \mathbf{h}_t
-\end{align}
-
-where $\bar{\mathbf{A}} = \exp(\Delta \mathbf{A})$ and $\bar{\mathbf{B}}_t = \Delta_t \mathbf{B}_t$ are discretized parameters, and $\Delta_t, \mathbf{B}_t, \mathbf{C}_t$ are input-dependent (selective).
-
-Following the Titan memory concept \citep{behrouz2025titan}, we augment this with a fast-weight memory module:
-\begin{equation}
-    \mathbf{M}_t = \alpha \mathbf{M}_{t-1} + (1-\alpha) \mathbf{k}_t \mathbf{v}_t^\top
-\end{equation}
-where $\mathbf{k}_t, \mathbf{v}_t$ are key-value pairs computed from the current input. Memory retrieval:
-\begin{equation}
-    \mathbf{r}_t = \mathbf{M}_t \mathbf{q}_t
-\end{equation}
-augments the SSM output with dynamically stored context.
+\section{Attention and Sequence-Mixer Families}
 
 \subsection{Standard Attention}
-\label{sec:standard}
+Given projected matrices $(Q,K,V)$:
+\[
+\text{Attn}(Q,K,V)=\text{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
+\]
+This is the baseline mechanism for content routing \citep{vaswani_attention_2017}.
 
-For standard attention layers, we use scaled dot-product attention with BitLinear projections:
-\begin{equation}
-    \text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \softmax\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}}\right)\mathbf{V}
-\end{equation}
+\subsection{Sigmoid Attention}
+Sigmoid attention removes row-wise probability normalization:
+\[
+\text{SigmoidAttn}(Q,K,V)=\sigma\left(\frac{QK^\top}{\sqrt{d_k}}+b\right)V
+\]
+and has different training stability requirements, often with additional normalization \citep{ramapuram_theory_2024}.
 
-with $\mathbf{Q} = \tilde{\mathbf{W}}^Q \mathbf{X}$, $\mathbf{K} = \tilde{\mathbf{W}}^K \mathbf{X}$, $\mathbf{V} = \tilde{\mathbf{W}}^V \mathbf{X}$.
+\subsection{Retentive Formulation}
+RetNet uses retention with decay matrix $D$:
+\[
+\text{Retention}(Q,K,V)=\left(QK^\top \odot D\right)V
+\]
+with recurrent form:
+\[
+S_n=\gamma S_{n-1}+k_n^\top v_n,\qquad o_n=q_n S_n
+\]
+enabling low-cost recurrent inference \citep{sun_retentive_2023,yang_survey_2025}.
 
-For efficiency, we employ Grouped Query Attention (GQA) \citep{ainslie2023gqa} with 4 key-value groups serving 16 query heads, reducing KV cache requirements by 4$\times$.
+\subsection{Selective SSM (Mamba)}
+Discrete selective state-space recurrence is:
+\[
+h_t=\bar{A}_t h_{t-1}+\bar{B}_t x_t,\qquad y_t=C_t h_t
+\]
+where $(\bar{A}_t,\bar{B}_t,C_t)$ depend on input, preserving linear-time scaling with hardware-aware scan \citep{gu_mamba_2023,hwang_hydra_2024}.
 
-\section{BitNet Quantization}
-\label{sec:bitnet}
+\subsection{ODE-style Continuous Updates}
+Continuous-depth framing:
+\[
+\frac{dh(t)}{dt}=f_\theta(h(t),t)
+\]
+with practical RK integrators for discrete execution \citep{zhang_continuous_2021}.
 
-\subsection{1.58-Bit Weight Representation}
+\subsection{Test-time Memory (Titans)}
+A memory-augmented update can be written:
+\[
+M_t=(1-\alpha_t)M_{t-1}+S_t,\qquad
+S_t=\eta_t S_{t-1}-\theta_t\nabla \ell(M_{t-1};x_t)
+\]
+to adapt memory at inference time \citep{behrouz_titans_2025,behrouz_titans_2024}.
 
-Following BitNet b1.58 \citep{ma2024era}, we constrain all linear layer weights to ternary values. The quantization function is:
-\begin{equation}
-    \tilde{\mathbf{W}} = \sign(\mathbf{W}) \odot \mathbbm{1}_{|\mathbf{W}| > \tau}
-\end{equation}
-where $\tau$ is a threshold typically set to $\tau = \E[|\mathbf{W}|]$ or a fixed percentile.
-
-\begin{definition}[Absmean Quantization]
-The absmean quantization function computes:
-\begin{equation}
-    \tilde{\mathbf{W}} = \text{round}\left(\frac{\mathbf{W}}{\gamma}\right), \quad \gamma = \frac{1}{mn}\sum_{i,j}|W_{ij}|
-\end{equation}
-clamped to $\{-1, 0, +1\}$.
-\end{definition}
-
-\subsection{Activation Quantization}
-
-Activations are quantized to 8-bit integers after normalization:
-\begin{equation}
-    \tilde{\mathbf{x}} = \text{Quant}_8\left(\frac{\mathbf{x}}{\max(|\mathbf{x}|)} \cdot 127\right)
-\end{equation}
-
-The full BitLinear forward pass is:
-
-\begin{algorithm}[H]
-\caption{BitLinear Forward Pass}
-\begin{algorithmic}
-\STATE \textbf{Input:} $\mathbf{x} \in \R^{B \times L \times d_{\text{in}}}$, weights $\mathbf{W} \in \R^{d_{\text{out}} \times d_{\text{in}}}$
-\STATE $\mathbf{x}_{\text{norm}} \leftarrow \text{RMSNorm}(\mathbf{x})$ \COMMENT{Pre-quantization normalization}
-\STATE $\tilde{\mathbf{W}} \leftarrow \text{Ternarize}(\mathbf{W})$ \COMMENT{$\{-1, 0, +1\}$}
-\STATE $\gamma_w \leftarrow \frac{1}{d_{\text{out}} \cdot d_{\text{in}}}\sum_{i,j}|W_{ij}|$ \COMMENT{Weight scaling factor}
-\STATE $\tilde{\mathbf{x}} \leftarrow \text{Quant}_8(\mathbf{x}_{\text{norm}})$ \COMMENT{8-bit activation quantization}
-\STATE $\gamma_x \leftarrow \frac{\max(|\mathbf{x}_{\text{norm}}|)}{127}$ \COMMENT{Activation scaling factor}
-\STATE $\mathbf{y} \leftarrow \gamma_w \cdot \gamma_x \cdot (\tilde{\mathbf{x}} \cdot \tilde{\mathbf{W}}^\top)$ \COMMENT{Rescaled output}
-\STATE \textbf{Return:} $\mathbf{y}$
+\begin{algorithm}[t]
+\caption{Pattern-Driven Mixer Forward (Conceptual)}
+\begin{algorithmic}[1]
+\Require Hidden states $H$, pattern $P$, layer index $\ell$
+\State $m \gets P[\ell \bmod |P|]$
+\If{$m=\texttt{standard\_attn}$}
+    \State $H \gets \text{softmax-attention}(H)$
+\ElsIf{$m=\texttt{sigmoid\_attn}$}
+    \State $H \gets \text{sigmoid-attention}(H)$
+\ElsIf{$m=\texttt{retnet}$}
+    \State $H \gets \text{retention}(H)$
+\ElsIf{$m=\texttt{mamba}$}
+    \State $H \gets \text{selective-ssm}(H)$
+\ElsIf{$m=\texttt{ode}$}
+    \State $H \gets \text{rk-step}(H)$
+\Else
+    \State $H \gets \text{memory-augmented-attn}(H)$
+\EndIf
+\State \Return $H$
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{Straight-Through Estimator for Training}
+\section{Optimizer Families and Training Dynamics}
 
-Since quantization is non-differentiable, we employ the Straight-Through Estimator (STE) \citep{bengio2013estimating}:
-\begin{equation}
-    \frac{\partial \mathcal{L}}{\partial \mathbf{W}} \approx \frac{\partial \mathcal{L}}{\partial \tilde{\mathbf{W}}}
-\end{equation}
+\subsection{Core Adaptive Form}
+Many supported optimizers share moment tracking:
+\[
+m_t=\beta_1 m_{t-1} + (1-\beta_1)g_t,\quad
+v_t=\beta_2 v_{t-1} + (1-\beta_2)g_t^2
+\]
+followed by preconditioned updates (e.g., AdamW) \citep{loshchilov_decoupled_2017}.
 
-This allows gradients to flow through the quantization operation during backpropagation while maintaining ternary weights in the forward pass.
-
-\subsection{Memory Analysis}
-
-\begin{proposition}[Memory Reduction]
-For a weight matrix $\mathbf{W} \in \R^{m \times n}$:
-\begin{itemize}
-    \item FP32 storage: $32mn$ bits
-    \item FP16 storage: $16mn$ bits  
-    \item BitNet b1.58 storage: $\lceil\log_2(3)\rceil \cdot mn \approx 1.58mn$ bits
-\end{itemize}
-The memory reduction compared to FP16 is approximately $16/1.58 \approx 10.1\times$.
-\end{proposition}
-
-In practice, we achieve approximately $3-4\times$ memory reduction due to overhead from scaling factors, activation storage, and optimizer states during training.
-
-\section{Sparse Mixture-of-Experts}
-\label{sec:moe}
-
-We replace the standard dense feed-forward network with a Sparse Mixture-of-Experts (MoE) layer, following the paradigm established by Switch Transformers \citep{fedus2022switch} and refined in subsequent work \citep{lepikhin2020gshard}.
-
-\subsection{Architecture}
-
-The MoE layer consists of $N_E = 4$ expert networks (reduced from 8 for stability) and a trainable gating function $g: \R^d \to \R^{N_E}$:
-\begin{equation}
-    g(\mathbf{x}) = \softmax(\mathbf{W}_g \mathbf{x})
-\end{equation}
-where $\mathbf{W}_g \in \R^{N_E \times d}$ is the gating weight matrix (no bias for simplicity).
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[
-    node distance=0.6cm,
-    block/.style={rectangle, draw, rounded corners, minimum width=1.8cm, minimum height=0.6cm, font=\scriptsize, align=center},
-    expert/.style={block, fill=orange!20},
-    gate/.style={block, fill=red!15},
-    arrow/.style={->, thick, >=stealth},
-    darrow/.style={->, dashed, >=stealth}
-]
-    % Input
-    \node[block] (input) {Input $\mathbf{x}$};
-    
-    % Router
-    \node[gate, right=1.5cm of input] (router) {Router\\$\mathbf{W}_g$};
-    \node[block, right=of router] (softmax) {Softmax};
-    \node[block, right=of softmax] (topk) {Top-$K$\\($K=2$)};
-    
-    % Experts (below)
-    \node[expert, below=1.5cm of input] (e1) {Expert 1\\BitLinear};
-    \node[expert, right=0.4cm of e1] (e2) {Expert 2\\BitLinear};
-    \node[expert, right=0.4cm of e2] (e3) {Expert 3\\BitLinear};
-    \node[expert, right=0.4cm of e3] (e4) {Expert 4\\BitLinear};
-    
-    % Weighted sum
-    \node[block, below=0.8cm of e2, xshift=0.5cm] (sum) {Weighted Sum};
-    
-    % Output
-    \node[block, below=0.6cm of sum] (output) {Output};
-    
-    % Arrows from input
-    \draw[arrow] (input) -- (router);
-    \draw[arrow] (router) -- (softmax);
-    \draw[arrow] (softmax) -- (topk);
-    
-    % Arrows to experts (only active ones)
-    \draw[arrow] (input.south) -- ++(0,-0.5) -| (e1.north);
-    \draw[arrow] (input.south) -- ++(0,-0.5) -| (e2.north);
-    \draw[darrow, gray] (input.south) -- ++(0,-0.5) -| (e3.north);
-    \draw[darrow, gray] (input.south) -- ++(0,-0.5) -| (e4.north);
-    
-    % Weights from topk
-    \draw[arrow, blue] (topk.south) -- ++(0,-0.3) -| node[pos=0.8, right, font=\tiny, blue] {$w_1$} (e1.east);
-    \draw[arrow, blue] (topk.south) -- ++(0,-0.3) -| node[pos=0.8, left, font=\tiny, blue] {$w_2$} (e2.west);
-    
-    % Experts to sum
-    \draw[arrow] (e1.south) -- (sum.north west);
-    \draw[arrow] (e2.south) -- (sum.north);
-    \draw[darrow, gray] (e3.south) -- (sum.north);
-    \draw[darrow, gray] (e4.south) -- (sum.north east);
-    
-    \draw[arrow] (sum) -- (output);
-    
-    % Labels
-    \node[right=0.3cm of topk, font=\tiny, align=left] {Select top-2\\experts};
-\end{tikzpicture}
-\caption{Sparse MoE with top-2 routing. Only 2 of 4 experts are activated per token (solid arrows), reducing computation while maintaining model capacity.}
-\label{fig:moe}
-\end{figure}
-
-\subsection{Top-K Expert Selection}
-
-For each token, we select the top $K=2$ experts with highest gate values:
-\begin{equation}
-    \mathcal{E}(\mathbf{x}) = \text{TopK}(g(\mathbf{x}), K) = \{(i_1, g_{i_1}), (i_2, g_{i_2})\}
-\end{equation}
-
-The output is a sparse weighted combination:
-\begin{equation}
-    \text{MoE}(\mathbf{x}) = \sum_{(i, g_i) \in \mathcal{E}(\mathbf{x})} \bar{g}_i \cdot E_i(\mathbf{x})
-\end{equation}
-where $\bar{g}_i = g_i / \sum_{(j, g_j) \in \mathcal{E}(\mathbf{x})} g_j$ are renormalized gate values.
-
-\subsection{Expert Network Design}
-
-Each expert $E_i$ is a two-layer feed-forward network with GELU activation \citep{hendrycks2016gaussian}:
-\begin{equation}
-    E_i(\mathbf{x}) = \tilde{\mathbf{W}}_i^{(\text{down})} \cdot \text{GELU}(\tilde{\mathbf{W}}_i^{(\text{up})} \mathbf{x})
-\end{equation}
-where $\tilde{\mathbf{W}}_i^{(\text{up})} \in \R^{d_{\text{ff}} \times d}$ and $\tilde{\mathbf{W}}_i^{(\text{down})} \in \R^{d \times d_{\text{ff}}}$ are ternary BitLinear weights.
-
-\subsection{Load Balancing Auxiliary Loss}
-
-To prevent expert collapse and ensure balanced utilization, we add an auxiliary loss \citep{fedus2022switch}:
-\begin{equation}
-    \mathcal{L}_{\text{balance}} = \alpha_{\text{aux}} \cdot N_E \cdot \sum_{i=1}^{N_E} f_i \cdot P_i
-\end{equation}
-
-where:
-\begin{align}
-    f_i &= \frac{1}{T}\sum_{t=1}^{T} \mathbbm{1}[\argmax g(\mathbf{x}_t) = i] \label{eq:fraction} \\
-    P_i &= \frac{1}{T}\sum_{t=1}^{T} g_i(\mathbf{x}_t) \label{eq:probability}
-\end{align}
-
-Here, $T$ is the number of tokens in the batch, $f_i$ is the fraction of tokens routed to expert $i$, and $P_i$ is the average routing probability for expert $i$.
-
-\begin{proposition}[Optimal Balance]
-The auxiliary loss is minimized when $f_i = P_i = 1/N_E$ for all experts. The scaling factor $N_E$ normalizes the loss to remain bounded in $[1/N_E, 1]$.
-\end{proposition}
-
-\subsection{Capacity Factor and Overflow}
-
-We set the expert capacity to handle potential routing imbalance:
-\begin{equation}
-    C_i = \left\lceil \text{CF} \cdot \frac{T}{N_E} \right\rceil
-\end{equation}
-where $\text{CF} \geq 1$ is the capacity factor (we use $\text{CF} = 1.25$). Tokens exceeding capacity are passed through a residual connection without expert processing.
-
-\section{Dynamic Tanh Normalization}
-\label{sec:dyt}
-
-Recent work by \citet{zhu2025transformers} demonstrates that Layer Normalization can be replaced entirely with a simpler element-wise operation called Dynamic Tanh (DyT). We adopt this approach for improved training stability with quantized weights.
-
-\subsection{Motivation}
-
-Standard Layer Normalization \citep{ba2016layer} computes:
-\begin{equation}
-    \text{LN}(\mathbf{x}) = \gamma \odot \frac{\mathbf{x} - \mu}{\sigma + \epsilon} + \beta
-\end{equation}
-where $\mu = \E[\mathbf{x}]$ and $\sigma = \sqrt{\text{Var}[\mathbf{x}]}$. This requires computing statistics across the hidden dimension, which can be unstable with quantized weights.
-
-\subsection{Dynamic Tanh Formulation}
-
-DyT replaces normalization with a learned scaling and tanh nonlinearity:
-\begin{equation}
-    \text{DyT}(\mathbf{x}) = \gamma \odot \tanh(\alpha \mathbf{x}) + \beta
-\end{equation}
-
-where:
+\subsection{Examples from the Supported Set}
 \begin{itemize}[leftmargin=*]
-    \item $\alpha \in \R^d$ is a learned scaling parameter initialized to $0.5$
-    \item $\gamma, \beta \in \R^d$ are the standard affine parameters
-    \item $\tanh$ naturally bounds outputs to $(-1, 1)$
+    \item \textbf{RAdam}: variance rectification for early-step instability \citep{liu_variance_2019}.
+    \item \textbf{Adan}: adaptive Nesterov momentum for faster convergence \citep{xie_adan_2022}.
+    \item \textbf{ADOPT}: modified Adam order yielding stronger convergence guarantees \citep{taniguchi_adopt_2024}.
+    \item \textbf{AdEMAMix}: dual-EMA history mixing \citep{pagliardini_ademamix_2024}.
+    \item \textbf{MARS}: variance reduction in preconditioned optimization \citep{yuan_mars_2024}.
+    \item \textbf{Cautious optimizers}: sign-consistent masking of momentum updates \citep{liang_cautious_2024}.
+    \item \textbf{Schedule-free}: remove explicit scheduler dependence \citep{defazio_road_2024}.
+    \item \textbf{Shampoo/SOAP}: matrix preconditioning families \citep{gupta_shampoo_2018,vyas_soap_2024}.
+    \item \textbf{Adafactor/GaLore}: memory reduction via factorization or low-rank projection \citep{shazeer_adafactor_2018,zhao_galore_2024}.
+    \item \textbf{Prodigy/Lion/Sophia}: parameter-free adaptation, sign momentum, and clipped second-order scaling \citep{mishchenko_prodigy_2023,chen_symbolic_2023,liu_sophia_2023}.
+    \item \textbf{Muon/Turbo-Muon}: orthogonality-oriented updates with acceleration \citep{shen_convergence_2025,boissin_turbo-muon_2025}.
 \end{itemize}
 
-\begin{proposition}[Gradient Bounds]
-The gradient of DyT with respect to input is bounded:
-\begin{equation}
-    \left\|\frac{\partial \text{DyT}(\mathbf{x})}{\partial \mathbf{x}}\right\|_\infty = \|\gamma \odot \alpha \odot (1 - \tanh^2(\alpha \mathbf{x}))\|_\infty \leq \|\gamma \odot \alpha\|_\infty
-\end{equation}
-This provides implicit gradient clipping without additional mechanisms.
-\end{proposition}
+\begin{algorithm}[t]
+\caption{Schema-Routed Optimizer Step (Conceptual)}
+\begin{algorithmic}[1]
+\Require Parameters $\theta$, gradients $g$, optimizer class $c$, parameter map $\Pi$
+\State Read optimizer-specific hyperparameters from prefixed keys in $\Pi$
+\If{$c=\texttt{adamw}$} \State apply AdamW step \citep{loshchilov_decoupled_2017}
+\ElsIf{$c=\texttt{radam}$} \State apply rectified adaptive step \citep{liu_variance_2019}
+\ElsIf{$c=\texttt{adan}$} \State apply Adan three-moment step \citep{xie_adan_2022}
+\ElsIf{$c=\texttt{adopt}$} \State apply ADOPT update ordering \citep{taniguchi_adopt_2024}
+\ElsIf{$c=\texttt{galore\_adamw}$} \State project gradients to low-rank subspace then step \citep{zhao_galore_2024}
+\Else \State dispatch to selected optimizer implementation
+\EndIf
+\State \Return updated $\theta$
+\end{algorithmic}
+\end{algorithm}
 
-\subsection{Benefits for BitNet Integration}
+\section{Quantization and Deployment}
 
-The DyT formulation offers several advantages for quantized architectures:
-\begin{enumerate}
-    \item \textbf{No running statistics}: Unlike BatchNorm, DyT requires no batch-level computation
-    \item \textbf{Bounded activations}: The tanh nonlinearity prevents activation explosion
-    \item \textbf{Reduced computation}: Eliminates variance computation required by LN/RMSNorm
-    \item \textbf{Quantization-friendly}: Bounded outputs are more amenable to 8-bit activation quantization
-\end{enumerate}
+The deploy stack uses ternary weight packing plus INT8 activation quantization for efficient artifacts.
 
-\subsection{Initialization Strategy}
+\subsection{Ternary Quantization}
+Given weight tensor $W$, a practical scaling is:
+\[
+s=\text{mean}(|W|),\qquad
+\tilde{W}=\text{clip}\left(\text{round}\left(\frac{W}{s}\right),-1,1\right)
+\]
+which approximates BitNet-style low-bit updates \citep{wang_bitnet_2023}. The packed mapping uses two bits per weight symbol for storage efficiency.
 
-Following \citet{zhu2025transformers}, we initialize:
-\begin{align}
-    \alpha_i &= 0.5, \quad \forall i \in \{1, \ldots, d\} \\
-    \gamma_i &= 1.0, \quad \beta_i = 0.0
-\end{align}
+\subsection{Activation Quantization}
+For activations $x$:
+\[
+q=\text{round}\left(x\cdot\frac{127}{\max(|x|)+\epsilon}\right),\qquad q\in[-128,127]
+\]
+with dequantization $x\approx q/\alpha$.
 
-This ensures DyT initially approximates identity for small inputs while providing nonlinear compression for large values.
+\subsection{Size Estimates}
+For $N$ parameters:
+\[
+\text{FP32 size}\approx 4N,\quad \text{FP16 size}\approx 2N,\quad \text{1.58-bit size}\approx \frac{1.58}{8}N
+\]
+before metadata and packing overhead. This aligns with lightweight deployment goals \citep{samson_lightweight_2026,bravin_embbert_2026}.
 
-\section{Training Methodology}
-\label{sec:training}
+\section{SBERT Downstream Tasks}
 
-\subsection{Loss Function}
+Sentence embedding is built on Siamese-style training \citep{reimers_sentence-bert_2019}. For sentence pair $(s_1,s_2)$ with embeddings $(e_1,e_2)$:
+\[
+\text{cos}(e_1,e_2)=\frac{e_1^\top e_2}{\|e_1\|\|e_2\|}
+\]
+and regression-style cosine loss:
+\[
+\mathcal{L}_{\text{cos}}=\left(\text{cos}(e_1,e_2)-y\right)^2
+\]
+with $y\in[-1,1]$ in this pipeline.
 
-The total training loss combines multiple objectives:
-\begin{equation}
-    \mathcal{L} = \mathcal{L}_{\text{MLM}} + \lambda_{\text{bal}} \mathcal{L}_{\text{balance}} + \lambda_{\text{ode}} \mathcal{L}_{\text{ODE-reg}}
-\end{equation}
-
-where:
+Supported downstream modes:
 \begin{itemize}[leftmargin=*]
-    \item $\mathcal{L}_{\text{MLM}}$ is the masked language modeling cross-entropy loss
-    \item $\mathcal{L}_{\text{balance}}$ is the MoE load balancing auxiliary loss (Section \ref{sec:moe})
-    \item $\mathcal{L}_{\text{ODE-reg}}$ regularizes ODE dynamics to prevent divergence
+    \item \textbf{Similarity}: pairwise score between two sentences.
+    \item \textbf{Search}: top-$k$ nearest neighbors over a corpus.
+    \item \textbf{Cluster}: grouping embeddings (e.g., k-means).
+    \item \textbf{Encode}: persistent embedding export for later retrieval.
 \end{itemize}
 
-\subsection{ODE Regularization}
+\begin{algorithm}[t]
+\caption{SBERT Inference Mode Router}
+\begin{algorithmic}[1]
+\Require mode $m$, model $E$, inputs $X$
+\If{$m=\texttt{similarity}$}
+    \State return $\cos(E(x_1),E(x_2))$
+\ElsIf{$m=\texttt{search}$}
+    \State return top-$k$ by dot-product/cosine against corpus embeddings
+\ElsIf{$m=\texttt{cluster}$}
+    \State return clustering labels over $E(X)$
+\Else
+    \State return serialized embeddings $E(X)$
+\EndIf
+\end{algorithmic}
+\end{algorithm}
 
-We penalize large ODE derivatives to ensure stable integration:
-\begin{equation}
-    \mathcal{L}_{\text{ODE-reg}} = \frac{1}{N_{\text{steps}}} \sum_{k=1}^{N_{\text{steps}}} \left\|f_\theta(\mathbf{z}(t_k), t_k)\right\|_2^2
-\end{equation}
+\section{Summary Tables}
 
-\subsection{Optimization}
-
-We use AdamW \citep{loshchilov2017decoupled} with component-specific learning rates for the hybrid architecture:
-
-\begin{table}[H]
-\centering
-\caption{Training Hyperparameters with Component-Specific Learning Rates}
-\label{tab:hyperparams}
-\begin{tabular}{@{}ll@{}}
+\subsection{Attention and Sequence-Mixer Summary}
+\small
+\begin{longtable}{p{2.4cm}p{3.2cm}p{2.0cm}p{2.0cm}p{4.8cm}}
 \toprule
-\textbf{Parameter} & \textbf{Value} \\
+\textbf{Type} & \textbf{Core Equation} & \textbf{Train} & \textbf{Infer} & \textbf{Notes} \\
 \midrule
-\multicolumn{2}{l}{\textit{Component-Specific Learning Rates}} \\
-Embeddings & $1 \times 10^{-4}$ \\
-Normalization layers & $2 \times 10^{-4}$ \\
-ODE components & $5 \times 10^{-5}$ (lower for stability) \\
-RetNet components & $1.5 \times 10^{-4}$ \\
-Mamba components & $1 \times 10^{-4}$ \\
-Attention components & $1 \times 10^{-4}$ \\
-\midrule
-\multicolumn{2}{l}{\textit{Global Settings}} \\
-Weight decay & $0.01$ (norms: $0.001$) \\
-$\beta_1, \beta_2$ & $0.9, 0.95$ \\
-Warmup ratio & 10\% of total steps \\
-LR schedule & Cosine decay \\
-Batch size & 2 sequences (with gradient accumulation $\times 4$) \\
-Effective batch size & 8 sequences \\
-Sequence length & 512 tokens \\
-Gradient clipping & 1.0 \\
-Mixed precision & FP16 with GradScaler \\
+\endhead
+Standard Attention & $\text{softmax}(QK^\top/\sqrt{d_k})V$ & $\mathcal{O}(n^2d)$ & $\mathcal{O}(n)$/step & Baseline expressive global routing \citep{vaswani_attention_2017}. \\
+Sigmoid Attention & $\sigma(QK^\top/\sqrt{d_k}+b)V$ & $\mathcal{O}(n^2d)$ & $\mathcal{O}(n)$/step & Element-wise gating; often needs stabilization norm \citep{ramapuram_theory_2024}. \\
+RetNet & $(QK^\top\odot D)V$ & $\mathcal{O}(n^2d)$ or chunkwise & $\mathcal{O}(1)$/step & Parallel/recurrent dual form with decay retention \citep{sun_retentive_2023}. \\
+Mamba & $h_t=\bar{A}_t h_{t-1}+\bar{B}_t x_t$ & $\mathcal{O}(nd)$ & $\mathcal{O}(1)$/step & Selective state-space with hardware-aware scan \citep{gu_mamba_2023}. \\
+ODE-style block & $\frac{dh}{dt}=f_\theta(h,t)$ & solver-dependent & solver-dependent & Continuous-depth interpretation; RK integration \citep{zhang_continuous_2021}. \\
+Titans memory & $M_t=(1-\alpha_t)M_{t-1}+S_t$ & approx.\ $\mathcal{O}(nd)$ & retrieval-centric & Test-time memory updates with surprise-driven dynamics \citep{behrouz_titans_2025}. \\
 \bottomrule
-\end{tabular}
-\end{table}
+\end{longtable}
+\normalsize
 
-\subsection{Training Infrastructure}
-
-We implement a robust training infrastructure with comprehensive monitoring and checkpointing:
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[
-    node distance=1.5cm,
-    block/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.8cm, font=\footnotesize, align=center},
-    decision/.style={diamond, draw, aspect=2, minimum width=1.5cm, font=\footnotesize, align=center},
-    arrow/.style={->, thick, >=stealth},
-    checkpoint/.style={block, fill=blue!15},
-    monitor/.style={block, fill=green!15},
-    error/.style={block, fill=red!20},
-]
-    % Training loop
-    \node[block, fill=yellow!20] (batch) {Load Batch};
-    \node[block, below=0.8cm of batch] (forward) {Forward Pass\\(Mixed Precision)};
-    \node[decision, below=0.8cm of forward] (nancheck) {NaN?};
-    \node[block, below left=0.6cm and 1.5cm of nancheck] (backward) {Backward +\\Grad Clip};
-    \node[error, below right=0.6cm and 1.5cm of nancheck] (emergency) {Emergency Stop\\+ Debug Logs};
-    
-    % Logging
-    \node[monitor, below=0.8cm of backward] (csv) {CSV Logger\\(loss, lr, acc)};
-    
-    % Checkpoints
-    \node[decision, below=0.8cm of csv] (stepcheck) {Step \%\\500 = 0?};
-    \node[checkpoint, right=1.5cm of stepcheck] (rolling) {Rolling\\Checkpoint};
-    
-    \node[decision, below=0.8cm of stepcheck] (bestcheck) {New Best\\Loss?};
-    \node[checkpoint, right=1.5cm of bestcheck] (best) {Best Model\\Checkpoint};
-    
-    \node[block, below=0.8cm of bestcheck] (next) {Next Batch};
-    
-    % Arrows
-    \draw[arrow] (batch) -- (forward);
-    \draw[arrow] (forward) -- (nancheck);
-    \draw[arrow] (nancheck) -- node[left, font=\scriptsize] {No} (backward);
-    \draw[arrow] (nancheck) -- node[above, font=\scriptsize] {Yes} (emergency);
-    \draw[arrow] (backward) -- (csv);
-    \draw[arrow] (csv) -- (stepcheck);
-    \draw[arrow] (stepcheck) -- node[above, font=\scriptsize] {Yes} (rolling);
-    \draw[arrow] (stepcheck) -- node[left, font=\scriptsize] {No} (bestcheck);
-    \draw[arrow] (rolling) |- (bestcheck);
-    \draw[arrow] (bestcheck) -- node[above, font=\scriptsize] {Yes} (best);
-    \draw[arrow] (bestcheck) -- node[left, font=\scriptsize] {No} (next);
-    \draw[arrow] (best) |- (next);
-    \draw[arrow] (next.west) -- ++(-2.5,0) |- (batch.west);
-\end{tikzpicture}
-\caption{Training loop with NaN detection, CSV logging, and multi-tier checkpointing.}
-\label{fig:training_loop}
-\end{figure}
-
-\subsubsection{Checkpointing Strategy}
-
-We implement a three-tier checkpointing strategy to balance storage efficiency with training robustness:
-
-\begin{table}[H]
-\centering
-\caption{Checkpointing Strategy}
-\label{tab:checkpoints}
-\begin{tabular}{@{}llll@{}}
+\subsection{Optimizer Summary}
+\small
+\begin{longtable}{p{2.2cm}p{2.8cm}p{2.0cm}p{5.4cm}p{1.8cm}}
 \toprule
-\textbf{Type} & \textbf{Frequency} & \textbf{Retention} & \textbf{Purpose} \\
+\textbf{Optimizer} & \textbf{Family} & \textbf{State Cost} & \textbf{Key Idea} & \textbf{Ref} \\
 \midrule
-Rolling & Every 500 steps & Keep last 3 & Regular progress backup \\
-Best Model & On loss improvement & Keep top $K=2$ & Preserve best performing models \\
-Epoch End & Each epoch & Keep all & Milestone checkpoints \\
-Emergency & On NaN/error & Single & Debugging and recovery \\
+\endhead
+AdamW & Adaptive first/second moment & High & Decoupled weight decay baseline & \citep{loshchilov_decoupled_2017} \\
+RAdam & Adaptive variance-corrected & High & Rectifies early adaptive variance & \citep{liu_variance_2019} \\
+Adan & Momentum + variance reduction & High & Nesterov-style adaptive update & \citep{xie_adan_2022} \\
+ADOPT & Adam variant & High & Reordered updates with improved convergence guarantees & \citep{taniguchi_adopt_2024} \\
+AdEMAMix & Multi-EMA adaptive & High & Mixes short and long horizon EMAs & \citep{pagliardini_ademamix_2024} \\
+MARS & Variance-reduced preconditioned & High & Recursive momentum correction & \citep{yuan_mars_2024} \\
+Cautious AdamW & Masked momentum & High & Apply updates only on sign-consistent directions & \citep{liang_cautious_2024} \\
+Schedule-free AdamW & Scheduler-free adaptive & High & Remove explicit LR schedule dependence & \citep{defazio_road_2024} \\
+Adafactor & Memory-efficient adaptive & Medium & Factorized second moments for matrix tensors & \citep{shazeer_adafactor_2018} \\
+GaLore AdamW & Low-rank gradient projection & Medium & Optimize in projected low-rank gradient space & \citep{zhao_galore_2024} \\
+Prodigy & Parameter-free adaptation & Medium & Distance-adaptive step calibration & \citep{mishchenko_prodigy_2023} \\
+Lion & Sign momentum & Low & Momentum sign update, reduced state & \citep{chen_symbolic_2023} \\
+Sophia & Approx.\ second-order & Medium & Diagonal Hessian preconditioning with clipping & \citep{liu_sophia_2023} \\
+Shampoo & Matrix preconditioner & High & Kronecker-structured second-order statistics & \citep{gupta_shampoo_2018} \\
+SOAP & Shampoo + Adam basis & High & Adam-like tracking in preconditioner eigenbasis & \citep{vyas_soap_2024} \\
+Muon & Orthogonality-based & Medium & Orthogonalized matrix updates & \citep{shen_convergence_2025} \\
+Turbo-Muon & Accelerated orthogonalization & Medium & Preconditioned Newton-Schulz speedup & \citep{boissin_turbo-muon_2025} \\
 \bottomrule
-\end{tabular}
-\end{table}
-
-\subsubsection{CSV Metrics Logging}
-
-Every training step logs comprehensive metrics to a CSV file for analysis:
-
-\begin{table}[H]
-\centering
-\caption{CSV Log Fields}
-\begin{tabular}{@{}ll@{}}
-\toprule
-\textbf{Field} & \textbf{Description} \\
-\midrule
-\texttt{timestamp} & ISO 8601 timestamp \\
-\texttt{epoch}, \texttt{step}, \texttt{global\_step} & Training progress indices \\
-\texttt{loss} & Current batch loss \\
-\texttt{accuracy} & MLM prediction accuracy \\
-\texttt{learning\_rate} & Current learning rate \\
-\texttt{grad\_norm} & Gradient L2 norm after clipping \\
-\texttt{scaler\_scale} & GradScaler scale factor \\
-\texttt{gpu\_memory\_gb} & Allocated GPU memory \\
-\texttt{gpu\_cached\_gb} & Cached GPU memory \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsubsection{NaN Detection and Debugging}
-
-When NaN is detected in the loss, training stops immediately with comprehensive debugging output:
-
-\begin{itemize}[leftmargin=*]
-    \item Learning rates for each parameter group
-    \item Parameters with NaN/Inf gradients (identifying problematic layers)
-    \item Parameters with unusually large gradients ($>1000$)
-    \item Model weights with NaN/Inf values
-    \item Input batch statistics (shape, dtype, min/max values)
-    \item GPU memory state
-    \item Configuration values affecting stability (BitNet, ODE, layer pattern)
-\end{itemize}
-
-\subsection{Gradient Challenges}
-
-The recursive architecture presents unique gradient flow challenges:
-
-\begin{enumerate}
-    \item \textbf{Depth amplification}: With $N_{\text{loops}} = 2$, effective depth doubles, potentially causing vanishing/exploding gradients
-    \item \textbf{Quantization noise}: STE introduces gradient estimation error that accumulates
-    \item \textbf{ODE integration}: Backpropagation through RK4 steps requires adjoint sensitivity methods \citep{chen2018neural}
-\end{enumerate}
-
-We address these through:
-\begin{itemize}[leftmargin=*]
-    \item Gradient checkpointing to reduce memory during backpropagation
-    \item Careful initialization following \citet{zhang2019improving} for residual connections
-    \item Per-component learning rate scaling for different mixer types
-\end{itemize}
-
-\section{Computational Complexity Analysis}
-\label{sec:complexity}
-
-\subsection{Parameter Count}
-
-Let $d$ denote the hidden dimension, $d_{\text{ff}} = 4d$ the feed-forward intermediate dimension, $H$ the number of attention heads, $N_E = 8$ the number of experts, and $L_{\text{phys}} = 12$ the number of physical layers.
-
-\begin{table}[H]
-\centering
-\caption{Parameter Count by Component}
-\begin{tabular}{@{}lll@{}}
-\toprule
-\textbf{Component} & \textbf{Parameters per Layer} & \textbf{Formula} \\
-\midrule
-Mixer (averaged) & $\approx 4d^2$ & $\mathbf{W}^Q, \mathbf{W}^K, \mathbf{W}^V, \mathbf{W}^O$ \\
-MoE (4 experts) & $N_E \cdot 2 d \cdot d_{\text{ff}} = 16 d^2$ & $4 \times$ (up + down projections) \\
-Gating & $N_E \cdot d = 4d$ & Router weights \\
-DyT normalization & $3d$ & $\alpha, \gamma, \beta$ \\
-\midrule
-\textbf{Per layer total} & $\approx 20 d^2 + 7d$ & \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-For the stable configuration with $d = 1024$:
-\begin{equation}
-    \text{Params}_{\text{total}} = 12 \times (20 \times 1024^2 + 7 \times 1024) + \text{Embeddings} \approx 303\text{M parameters}
-\end{equation}
-
-\subsection{BitNet Memory Reduction}
-
-With ternary weights, effective storage is:
-\begin{equation}
-    \text{Memory}_{\text{BitNet}} = \frac{1.58}{16} \times \text{Memory}_{\text{FP16}} \approx 0.099 \times \text{Memory}_{\text{FP16}}
-\end{equation}
-
-\begin{theorem}[Effective Model Size]
-For a model with $P$ FP16 parameters, the equivalent BitNet storage is:
-\begin{equation}
-    \text{Size}_{\text{eff}} = \frac{1.58 P}{8} + \mathcal{O}(d) \text{ bytes}
-\end{equation}
-where $\mathcal{O}(d)$ accounts for scaling factors stored per layer.
-\end{theorem}
-
-\subsection{Time Complexity}
-
-\begin{table}[H]
-\centering
-\caption{Time Complexity per Mixer Type}
-\begin{tabular}{@{}llll@{}}
-\toprule
-\textbf{Mixer} & \textbf{Training} & \textbf{Inference (parallel)} & \textbf{Inference (recurrent)} \\
-\midrule
-RetNet & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(d^2)$ per token \\
-Neural ODE & $\mathcal{O}(K L^2 d)$ & $\mathcal{O}(K L^2 d)$ & N/A \\
-Mamba/SSM & $\mathcal{O}(L d N)$ & $\mathcal{O}(L d N)$ & $\mathcal{O}(d N)$ per token \\
-Standard Attn & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L^2 d)$ & $\mathcal{O}(L d)$ per token \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Here $L$ is sequence length, $d$ is hidden dimension, $K$ is the number of RK4 steps, and $N$ is the SSM state dimension.
-
-\subsection{Memory Footprint During Training}
-
-The peak memory consumption during training is dominated by:
-\begin{enumerate}
-    \item Activation storage: $\mathcal{O}(B L d \cdot N_{\text{loops}} \cdot L_{\text{phys}})$
-    \item Gradient checkpointing reduces this to $\mathcal{O}(\sqrt{L_{\text{phys}}} \cdot B L d)$
-    \item Optimizer states: $2 \times$ parameter count for AdamW moments
-\end{enumerate}
-
-For our target hardware (NVIDIA Tesla P40, 24GB VRAM), the configuration supports batch size 4 with sequence length 512 using gradient checkpointing.
-
-\section{Related Work}
-\label{sec:related}
-
-\subsection{Efficient Transformer Architectures}
-
-The original Transformer \citep{vaswani2017attention} suffers from quadratic complexity in sequence length. Numerous works have addressed this limitation:
-
-\textbf{Linear Attention:} \citet{katharopoulos2020transformers} reformulated attention using kernel feature maps, achieving $\mathcal{O}(L d^2)$ complexity. Performers \citep{choromanski2020rethinking} use random feature approximations.
-
-\textbf{Sparse Attention:} Longformer \citep{beltagy2020longformer} combines local and global attention patterns. BigBird \citep{zaheer2020bigbird} uses random sparse attention.
-
-\textbf{State Space Models:} S4 \citep{gu2021efficiently} and Mamba \citep{gu2023mamba} achieve linear complexity through structured state spaces with selective mechanisms.
-
-\textbf{Retention Networks:} RetNet \citep{sun2023retentive} provides a unified framework supporting parallel, recurrent, and chunkwise computation modes with multi-scale exponential decay.
-
-\subsection{Neural ODEs and Continuous-Depth Models}
-
-\citet{chen2018neural} introduced Neural Ordinary Differential Equations, enabling continuous-depth networks with memory-efficient training via the adjoint sensitivity method. Applications include normalizing flows \citep{grathwohl2018ffjord}, time-series modeling, and image classification \citep{dupont2019augmented}. We adapt this framework to sequence modeling with quantized projections.
-
-\subsection{Quantized Neural Networks}
-
-Low-precision training has progressed from 16-bit \citep{micikevicius2017mixed} to ternary weights:
-
-\textbf{Binary/Ternary Networks:} BinaryConnect \citep{courbariaux2015binaryconnect} and Ternary Weight Networks \citep{li2016ternary} pioneered extreme quantization. XOR-Net \citep{rastegari2016xnor} enabled efficient binary convolutions.
-
-\textbf{BitNet:} \citet{wang2023bitnet} demonstrated that transformer language models can be trained with 1-bit weights from scratch. BitNet b1.58 \citep{ma2024era} improved this with ternary weights $\{-1, 0, +1\}$, achieving near-lossless compression with 3× memory reduction.
-
-\subsection{Mixture-of-Experts}
-
-Conditional computation through MoE enables scaling model capacity without proportional compute increase:
-
-\textbf{Sparse Gating:} \citet{shazeer2017outrageously} introduced sparsely-gated MoE layers. GShard \citep{lepikhin2020gshard} scaled this to 600B parameters.
-
-\textbf{Switch Transformers:} \citet{fedus2022switch} simplified routing to top-1 expert selection, training trillion-parameter models efficiently.
-
-\textbf{Hybrid Architectures:} Jamba \citep{lieber2024jamba,team2024jamba} combines Transformer, Mamba, and MoE components in a hybrid architecture for improved efficiency.
-
-\subsection{Spanish Language Models}
-
-BERT-based models for Spanish include BETO \citep{canete2020spanish} trained on Spanish Wikipedia and corpora. MarIA \citep{gutierrez2022maria} scaled Spanish BERT variants. RoBERTuito \citep{perez2022robertuito} focused on Spanish social media text.
-
-\subsection{Normalization Techniques}
-
-Layer Normalization \citep{ba2016layer} stabilizes training by normalizing across features. RMSNorm \citep{zhang2019root} simplifies this by removing mean centering. Recent work by \citet{zhu2025transformers} demonstrates that normalization can be replaced entirely by Dynamic Tanh (DyT), eliminating the need for statistics computation while maintaining or improving performance.
-
-\section{Experiments}
-\label{sec:experiments}
-
-\subsection{Experimental Setup}
-
-\subsubsection{Hardware}
-All experiments are conducted on a single NVIDIA Tesla P40 GPU (24GB VRAM, Pascal architecture) to validate efficiency claims under constrained resources.
-
-\subsubsection{Datasets}
-
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Pre-training:} RedPajama Spanish subset (35B tokens), streamed via HuggingFace datasets
-    \item \textbf{Tokenizer:} SentencePiece \citep{kudo2018sentencepiece} unigram model, 50K vocabulary
-    \item \textbf{Evaluation:} Spanish GLUE equivalents (XNLI, PAWS-X, STS-B)
-\end{itemize}
-
-\subsubsection{Baselines}
-
-\begin{enumerate}
-    \item BETO-Base \citep{canete2020spanish}: Spanish BERT, 110M parameters
-    \item MarIA-Base: Spanish RoBERTa variant
-    \item BitNet-BERT: Our reproduction of BitNet-style BERT
-    \item Standard Transformer encoder: Full-precision baseline
-\end{enumerate}
-
-\subsection{Implementation Details}
-
-\begin{table}[H]
-\centering
-\caption{TORMENTED-BERT-Frankenstein Experimental Configuration}
-\label{tab:exp_config}
-\begin{tabular}{@{}ll@{}}
-\toprule
-\textbf{Hyperparameter} & \textbf{Value} \\
-\midrule
-\multicolumn{2}{l}{\textit{Model Architecture}} \\
-Hidden dimension ($d$) & 1024 \\
-Physical layers & 12 \\
-Recursive loops & 2 \\
-Effective depth & 24 \\
-Attention heads & 16 \\
-Retention heads & 8 \\
-MoE experts & 4 \\
-Top-K routing & 2 \\
-RK4 integration steps & 2 \\
-Layer pattern & Stable 6-layer (Table~\ref{tab:stable_pattern}) \\
-\midrule
-\multicolumn{2}{l}{\textit{Training Configuration}} \\
-Batch size & 2 (effective 8 with accumulation) \\
-Gradient accumulation & 4 steps \\
-Sequence length & 512 \\
-Learning rate (base) & $1 \times 10^{-4}$ \\
-Learning rate (ODE) & $5 \times 10^{-5}$ \\
-Warmup ratio & 10\% \\
-LR schedule & Cosine decay \\
-Weight decay & 0.01 \\
-Gradient clipping & 1.0 \\
-Mixed precision & FP16 (GradScaler) \\
-\midrule
-\multicolumn{2}{l}{\textit{Checkpointing}} \\
-Rolling checkpoints & Every 500 steps, keep 3 \\
-Best model checkpoints & Top $K=2$ by loss \\
-CSV logging & Every training step \\
-NaN detection & Enabled with debug logs \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{Results}
-
-\textit{Note: This section presents the experimental framework. Full empirical results are pending completion of training runs.}
-
-\subsubsection{Pre-training Efficiency}
-
-We report training throughput, memory consumption, and loss curves comparing:
-\begin{itemize}[leftmargin=*]
-    \item Tokens per second across model variants
-    \item Peak GPU memory with and without gradient checkpointing
-    \item Convergence behavior of the hybrid architecture
-\end{itemize}
-
-\subsubsection{Downstream Task Performance}
-
-Planned evaluations include:
-\begin{itemize}[leftmargin=*]
-    \item XNLI (cross-lingual natural language inference) accuracy
-    \item PAWS-X (paraphrase identification) accuracy
-    \item STS-B (semantic textual similarity) Pearson/Spearman correlation
-\end{itemize}
+\end{longtable}
+\normalsize
 
 \section{Discussion}
-\label{sec:discussion}
 
-\subsection{Architectural Synergies}
+From an engineering perspective, the toolkit couples modern research ideas with reproducible interfaces:
+\begin{itemize}[leftmargin=*]
+    \item Explicit schema contracts lower configuration ambiguity.
+    \item Multiple attention/mixer families let users tune for context length, latency, and memory.
+    \item Broad optimizer support enables controlled studies over convergence and stability.
+    \item Quantized deployment reduces artifact size and improves portability.
+    \item SBERT workflows cover practical retrieval and semantic similarity tasks.
+\end{itemize}
 
-The combination of diverse components yields potential synergies:
-
-\begin{enumerate}
-    \item \textbf{Complementary inductive biases}: RetNet captures local patterns efficiently, Neural ODEs model smooth transformations, Mamba provides linear-complexity sequence modeling, and standard attention enables flexible global interactions.
-    
-    \item \textbf{Quantization robustness}: DyT normalization's bounded outputs complement BitNet's quantized activations, reducing the accumulation of quantization error.
-    
-    \item \textbf{Capacity scaling}: MoE enables parameter scaling without proportional compute increase, partially offsetting the overhead from ODE integration.
-\end{enumerate}
-
-\subsection{Limitations}
-
-\begin{enumerate}
-    \item \textbf{Implementation complexity}: The heterogeneous architecture requires careful engineering and debugging.
-    
-    \item \textbf{Hyperparameter sensitivity}: Multiple component types introduce numerous hyperparameters requiring joint optimization.
-    
-    \item \textbf{ODE computational overhead}: RK4 integration with $K=2$ steps increases attention cost by $2\times$ for those layers.
-    
-    \item \textbf{Training instability}: Combining aggressive quantization with recursive depth and ODE dynamics presents stability challenges. We mitigate this through the stable 6-layer pattern (Section~\ref{tab:stable_pattern}), component-specific learning rates, and comprehensive NaN detection.
-    
-    \item \textbf{Limited empirical validation}: Full-scale training and evaluation remain ongoing.
-\end{enumerate}
-
-\subsection{Stability Considerations}
-
-The stable 6-layer pattern addresses key instability sources:
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[
-    node distance=0.4cm,
-    issue/.style={rectangle, draw, rounded corners, fill=red!10, minimum width=3cm, minimum height=0.6cm, font=\footnotesize, align=center},
-    solution/.style={rectangle, draw, rounded corners, fill=green!10, minimum width=3cm, minimum height=0.6cm, font=\footnotesize, align=center},
-    arrow/.style={->, thick, >=stealth}
-]
-    % Issues
-    \node[issue] (i1) {ODE gradient\\explosion};
-    \node[issue, below=0.6cm of i1] (i2) {Mamba pattern\\struggles};
-    \node[issue, below=0.6cm of i2] (i3) {Quantization\\noise accumulation};
-    \node[issue, below=0.6cm of i3] (i4) {Deep network\\vanishing gradients};
-    
-    % Solutions
-    \node[solution, right=2cm of i1] (s1) {Place ODE at pattern end\\+ lower LR ($5\times10^{-5}$)};
-    \node[solution, right=2cm of i2] (s2) {Sandwich Mamba between\\RetNet anchors};
-    \node[solution, right=2cm of i3] (s3) {DyT bounded activations\\+ careful initialization};
-    \node[solution, right=2cm of i4] (s4) {RetNet anchors +\\stable gradient flow};
-    
-    % Arrows
-    \draw[arrow] (i1) -- (s1);
-    \draw[arrow] (i2) -- (s2);
-    \draw[arrow] (i3) -- (s3);
-    \draw[arrow] (i4) -- (s4);
-    
-    % Labels
-    \node[above=0.3cm of i1, font=\small\bfseries] {Stability Issues};
-    \node[above=0.3cm of s1, font=\small\bfseries] {Mitigations};
-\end{tikzpicture}
-\caption{Stability issues and their mitigations in the TORMENTED-BERT-Frankenstein architecture.}
-\label{fig:stability}
-\end{figure}
-
-\subsection{Ablation Study Design}
-
-To understand component contributions, we propose ablations:
-
-\begin{table}[H]
-\centering
-\caption{Planned Ablation Configurations}
-\begin{tabular}{@{}lcccc@{}}
-\toprule
-\textbf{Variant} & \textbf{Mixer} & \textbf{BitNet} & \textbf{MoE} & \textbf{Recursive} \\
-\midrule
-Full model & Hybrid & \checkmark & \checkmark & \checkmark \\
-Single mixer & Attn only & \checkmark & \checkmark & \checkmark \\
-FP16 & Hybrid & $\times$ & \checkmark & \checkmark \\
-Dense FFN & Hybrid & \checkmark & $\times$ & \checkmark \\
-Non-recursive & Hybrid & \checkmark & \checkmark & $\times$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{Future Directions}
-
-\begin{enumerate}
-    \item \textbf{Learned mixer routing}: Replace fixed cyclic assignment with content-dependent mixer selection.
-    
-    \item \textbf{Decoder extension}: Adapt the architecture for autoregressive generation tasks.
-    
-    \item \textbf{Hardware kernels}: Develop fused CUDA kernels for BitLinear operations and ODE integration.
-    
-    \item \textbf{Scaling laws}: Investigate how the hybrid architecture scales with compute budget.
-    
-    \item \textbf{Multilingual training}: Extend beyond Spanish to evaluate cross-lingual transfer.
-\end{enumerate}
+The design also aligns with multilingual and compact-model directions in the literature \citep{canete_spanish_2023,sun_mobilebert_2020,bui_knowledge_2024,gillin_bert-jepa_2026}.
 
 \section{Conclusion}
-\label{sec:conclusion}
 
-We presented TORMENTED-BERT-Frankenstein (\textbf{T}ernary \textbf{O}DE \textbf{R}etention \textbf{M}amba \textbf{E}xperts \textbf{N}eural \textbf{T}anh \textbf{E}ncoder \textbf{D}epth), an experimental transformer encoder architecture that synthesizes recent advances in efficient sequence modeling. By combining BitNet b1.58 quantization \citep{ma2024era}, recursive depth processing, polymorphic attention mechanisms (RetNet \citep{sun2023retentive}, Neural ODEs \citep{chen2018neural}, Mamba \citep{gu2023mamba}, and standard attention), sparse Mixture-of-Experts \citep{fedus2022switch}, and Dynamic Tanh normalization \citep{zhu2025transformers}, we explore the frontiers of what is possible within constrained hardware budgets.
+Transformer Encoder Frankenstein is positioned as a practical experimentation platform: a strict configuration schema, extensible optimizer and attention families, deploy-time quantization, and sentence embedding workflows in one CLI. This makes it suitable for both rapid iteration and reproducible model operations.
 
-While this ``Frankenstein'' approach to architecture design is admittedly unconventional, it serves as a testbed for understanding how cutting-edge techniques interact and whether their benefits compose. Our preliminary analysis suggests that careful integration can yield memory-efficient models with diverse computational capabilities.
-
-The architecture is specifically designed for Spanish NLP on modest hardware (24GB VRAM), demonstrating that sophisticated model designs remain accessible to researchers without massive compute resources. We hope this work inspires further exploration of hybrid architectures that challenge conventional design principles.
-
-\section*{Acknowledgments}
-
-We acknowledge the foundational contributions of the research teams behind BitNet, RetNet, Neural ODEs, Mamba, Switch Transformers, and Dynamic Tanh. This work was conducted independently as an architectural exploration without institutional affiliation.
+% Include all requested bibliography collections.
+\nocite{zhang_continuous_2021,sun_mobilebert_2020,yang_looped_2024,reimers_sentence-bert_2019,wang_bitnet_2023,devlin_bert_2019,canete_spanish_2023,cai_survey_2025,yang_survey_2025,behrouz_titans_2024,gillin_bert-jepa_2026,bui_knowledge_2024,samson_lightweight_2026,zhu_transformers_2025,chen_stronger_2025,yongueng_holonorm_2025,bravin_embbert_2026,hwang_hydra_2024,dai_hope_2025,sun_retentive_2023,gu_mamba_2024,zhang_why_2020}
+\nocite{loshchilov_decoupled_2017,liu_variance_2019,xie_adan_2022,taniguchi_adopt_2024,pagliardini_ademamix_2024,yuan_mars_2024,liang_cautious_2024,defazio_road_2024,gupta_shampoo_2018,vyas_soap_2024,shazeer_adafactor_2018,zhao_galore_2024,mishchenko_prodigy_2023,chen_symbolic_2023,liu_sophia_2023,shen_convergence_2025,boissin_turbo-muon_2025}
+\nocite{behrouz_titans_2025,gu_mamba_2023,ramapuram_theory_2024,vaswani_attention_2017}
 
 \bibliographystyle{plainnat}
-\bibliography{references}
-
-% Inline bibliography for self-contained document
-\begin{thebibliography}{50}
-
-\bibitem[Ba et~al.(2016)]{ba2016layer}
-Ba, J.~L., Kiros, J.~R., and Hinton, G.~E. (2016).
-\newblock Layer normalization.
-\newblock \textit{arXiv preprint arXiv:1607.06450}.
-
-\bibitem[Beltagy et~al.(2020)]{beltagy2020longformer}
-Beltagy, I., Peters, M.~E., and Cohan, A. (2020).
-\newblock Longformer: The long-document transformer.
-\newblock \textit{arXiv preprint arXiv:2004.05150}.
-
-\bibitem[Bengio et~al.(2013)]{bengio2013estimating}
-Bengio, Y., L{\'e}onard, N., and Courville, A. (2013).
-\newblock Estimating or propagating gradients through stochastic neurons for conditional computation.
-\newblock \textit{arXiv preprint arXiv:1308.3432}.
-
-\bibitem[Ca{\~n}ete et~al.(2020)]{canete2020spanish}
-Ca{\~n}ete, J., Chaperon, G., Fuentes, R., Ho, J.-H., Kang, H., and P{\'e}rez, J. (2020).
-\newblock Spanish pre-trained BERT model and evaluation data.
-\newblock \textit{LREC Workshop on PML4DC}.
-
-\bibitem[Chen et~al.(2018)]{chen2018neural}
-Chen, R.~T.~Q., Rubanova, Y., Bettencourt, J., and Duvenaud, D.~K. (2018).
-\newblock Neural ordinary differential equations.
-\newblock In \textit{Advances in Neural Information Processing Systems (NeurIPS)}.
-
-\bibitem[Choromanski et~al.(2020)]{choromanski2020rethinking}
-Choromanski, K., Likhosherstov, V., Dohan, D., Song, X., Gane, A., Sarlos, T., Hawkins, P., Davis, J., Mohiuddin, A., Kaiser, L., et~al. (2020).
-\newblock Rethinking attention with performers.
-\newblock \textit{arXiv preprint arXiv:2009.14794}.
-
-\bibitem[Courbariaux et~al.(2015)]{courbariaux2015binaryconnect}
-Courbariaux, M., Bengio, Y., and David, J.-P. (2015).
-\newblock BinaryConnect: Training deep neural networks with binary weights during propagations.
-\newblock In \textit{Advances in Neural Information Processing Systems (NeurIPS)}.
-
-\bibitem[Devlin et~al.(2019)]{devlin2019bert}
-Devlin, J., Chang, M.-W., Lee, K., and Toutanova, K. (2019).
-\newblock BERT: Pre-training of deep bidirectional transformers for language understanding.
-\newblock In \textit{NAACL-HLT}.
-
-\bibitem[Dupont et~al.(2019)]{dupont2019augmented}
-Dupont, E., Doucet, A., and Teh, Y.~W. (2019).
-\newblock Augmented neural ODEs.
-\newblock In \textit{Advances in Neural Information Processing Systems (NeurIPS)}.
-
-\bibitem[Fedus et~al.(2022)]{fedus2022switch}
-Fedus, W., Zoph, B., and Shazeer, N. (2022).
-\newblock Switch transformers: Scaling to trillion parameter models with simple and efficient sparsity.
-\newblock \textit{Journal of Machine Learning Research}, 23(120):1--39.
-
-\bibitem[Grathwohl et~al.(2018)]{grathwohl2018ffjord}
-Grathwohl, W., Chen, R.~T.~Q., Bettencourt, J., Sutskever, I., and Duvenaud, D. (2018).
-\newblock FFJORD: Free-form continuous dynamics for scalable reversible generative models.
-\newblock \textit{arXiv preprint arXiv:1810.01367}.
-
-\bibitem[Gu and Dao(2023)]{gu2023mamba}
-Gu, A. and Dao, T. (2023).
-\newblock Mamba: Linear-time sequence modeling with selective state spaces.
-\newblock \textit{arXiv preprint arXiv:2312.00752}.
-
-\bibitem[Gu et~al.(2021)]{gu2021efficiently}
-Gu, A., Goel, K., and R{\'e}, C. (2021).
-\newblock Efficiently modeling long sequences with structured state spaces.
-\newblock \textit{arXiv preprint arXiv:2111.00396}.
-
-\bibitem[Guti{\'e}rrez-Fandi{\~n}o et~al.(2022)]{gutierrez2022maria}
-Guti{\'e}rrez-Fandi{\~n}o, A., Armengol-Estap{\'e}, J., P{\`a}mies, M., Llop-Palao, J., Silveira-Ocampo, J., Carrino, C.~P., Gonzalez-Agirre, A., Armentano-Oller, C., Rodriguez-Penagos, C., and Villegas, M. (2022).
-\newblock MarIA: Spanish language models.
-\newblock \textit{Procesamiento del Lenguaje Natural}, 68:39--60.
-
-\bibitem[Hendrycks and Gimpel(2016)]{hendrycks2016gaussian}
-Hendrycks, D. and Gimpel, K. (2016).
-\newblock Gaussian error linear units (GELUs).
-\newblock \textit{arXiv preprint arXiv:1606.08415}.
-
-\bibitem[Katharopoulos et~al.(2020)]{katharopoulos2020transformers}
-Katharopoulos, A., Vyas, A., Pappas, N., and Fleuret, F. (2020).
-\newblock Transformers are RNNs: Fast autoregressive transformers with linear attention.
-\newblock In \textit{International Conference on Machine Learning (ICML)}.
-
-\bibitem[Kudo and Richardson(2018)]{kudo2018sentencepiece}
-Kudo, T. and Richardson, J. (2018).
-\newblock SentencePiece: A simple and language independent subword tokenizer and detokenizer for neural text processing.
-\newblock In \textit{EMNLP: System Demonstrations}.
-
-\bibitem[Lepikhin et~al.(2020)]{lepikhin2020gshard}
-Lepikhin, D., Lee, H., Xu, Y., Chen, D., Firat, O., Huang, Y., Krikun, M., Shazeer, N., and Chen, Z. (2020).
-\newblock GShard: Scaling giant models with conditional computation and automatic sharding.
-\newblock \textit{arXiv preprint arXiv:2006.16668}.
-
-\bibitem[Li et~al.(2016)]{li2016ternary}
-Li, F., Zhang, B., and Liu, B. (2016).
-\newblock Ternary weight networks.
-\newblock \textit{arXiv preprint arXiv:1605.04711}.
-
-\bibitem[Lieber et~al.(2024)]{lieber2024jamba}
-Lieber, O., Lenz, B., Bata, H., Cohen, G., Osin, J., Dalmedigos, I., Safahi, E., Meirom, S., Belinkov, Y., Shalev-Shwartz, S., et~al. (2024).
-\newblock Jamba: A hybrid transformer-mamba language model.
-\newblock \textit{arXiv preprint arXiv:2403.19887}.
-
-\bibitem[Loshchilov and Hutter(2017)]{loshchilov2017decoupled}
-Loshchilov, I. and Hutter, F. (2017).
-\newblock Decoupled weight decay regularization.
-\newblock \textit{arXiv preprint arXiv:1711.05101}.
-
-\bibitem[Ma et~al.(2024)]{ma2024era}
-Ma, S., Wang, H., Ma, L., Wang, L., Wang, W., Huang, S., Dong, L., Wang, R., Xue, J., and Wei, F. (2024).
-\newblock The era of 1-bit LLMs: All large language models are in 1.58 bits.
-\newblock \textit{arXiv preprint arXiv:2402.17764}.
-
-\bibitem[Micikevicius et~al.(2017)]{micikevicius2017mixed}
-Micikevicius, P., Narang, S., Alben, J., Diamos, G., Elsen, E., Garcia, D., Ginsburg, B., Houston, M., Kuchaiev, O., Venkatesh, G., et~al. (2017).
-\newblock Mixed precision training.
-\newblock \textit{arXiv preprint arXiv:1710.03740}.
-
-\bibitem[P{\'e}rez et~al.(2022)]{perez2022robertuito}
-P{\'e}rez, J.~M., Furman, D.~A., Alemany, L.~A., and Luque, F.~M. (2022).
-\newblock RoBERTuito: A pre-trained language model for social media text in Spanish.
-\newblock In \textit{LREC}.
-
-\bibitem[Rastegari et~al.(2016)]{rastegari2016xnor}
-Rastegari, M., Ordonez, V., Redmon, J., and Farhadi, A. (2016).
-\newblock XNOR-Net: ImageNet classification using binary convolutional neural networks.
-\newblock In \textit{European Conference on Computer Vision (ECCV)}.
-
-\bibitem[Shazeer et~al.(2017)]{shazeer2017outrageously}
-Shazeer, N., Mirhoseini, A., Maziarz, K., Davis, A., Le, Q., Hinton, G., and Dean, J. (2017).
-\newblock Outrageously large neural networks: The sparsely-gated mixture-of-experts layer.
-\newblock In \textit{International Conference on Learning Representations (ICLR)}.
-
-\bibitem[Su et~al.(2024)]{su2024roformer}
-Su, J., Ahmed, M., Lu, Y., Pan, S., Bo, W., and Liu, Y. (2024).
-\newblock RoFormer: Enhanced transformer with rotary position embedding.
-\newblock \textit{Neurocomputing}, 568:127063.
-
-\bibitem[Sun et~al.(2023)]{sun2023retentive}
-Sun, Y., Dong, L., Huang, S., Ma, S., Xia, Y., Xue, J., Wang, J., and Wei, F. (2023).
-\newblock Retentive network: A successor to transformer for large language models.
-\newblock \textit{arXiv preprint arXiv:2307.08621}.
-
-\bibitem[Team et~al.(2024)]{team2024jamba}
-Team, A. (2024).
-\newblock Jamba-1.5: Hybrid transformer-mamba models at scale.
-\newblock \textit{arXiv preprint arXiv:2408.12570}.
-
-\bibitem[Vaswani et~al.(2017)]{vaswani2017attention}
-Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.~N., Kaiser, {\L}., and Polosukhin, I. (2017).
-\newblock Attention is all you need.
-\newblock In \textit{Advances in Neural Information Processing Systems (NeurIPS)}.
-
-\bibitem[Wang et~al.(2023)]{wang2023bitnet}
-Wang, H., Ma, S., Dong, L., Huang, S., Wang, H., Ma, L., Yang, F., Wang, R., Wu, Y., and Wei, F. (2023).
-\newblock BitNet: Scaling 1-bit transformers for large language models.
-\newblock \textit{arXiv preprint arXiv:2310.11453}.
-
-\bibitem[Zaheer et~al.(2020)]{zaheer2020bigbird}
-Zaheer, M., Guruganesh, G., Dubey, K.~A., Ainslie, J., Alberti, C., Ontanon, S., Pham, P., Ravula, A., Wang, Q., Yang, L., et~al. (2020).
-\newblock BigBird: Transformers for longer sequences.
-\newblock In \textit{Advances in Neural Information Processing Systems (NeurIPS)}.
-
-\bibitem[Zhang and Sennrich(2019)]{zhang2019root}
-Zhang, B. and Sennrich, R. (2019).
-\newblock Root mean square layer normalization.
-\newblock In \textit{Advances in Neural Information Processing Systems (NeurIPS)}.
-
-\bibitem[Zhang et~al.(2019)]{zhang2019improving}
-Zhang, H., Dauphin, Y.~N., and Ma, T. (2019).
-\newblock Fixup initialization: Residual learning without normalization.
-\newblock In \textit{International Conference on Learning Representations (ICLR)}.
-
-\bibitem[Zhu et~al.(2025)]{zhu2025transformers}
-Zhu, J., LeCun, Y., et~al. (2025).
-\newblock Transformers without normalization.
-\newblock \textit{arXiv preprint arXiv:2503.10622}.
-
-\end{thebibliography}
+\bibliography{bibliography/other,bibliography/optimizers,bibliography/attention_types}
 
 \end{document}
