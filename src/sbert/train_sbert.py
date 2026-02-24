@@ -6,11 +6,9 @@ Dataset: erickfmm/agentlans__multilingual-sentences__paired_10_sts
 """
 
 import os
-import sys
 import torch
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Optional, Dict, Any
 
 from datasets import load_dataset
@@ -24,10 +22,12 @@ from sentence_transformers import (
 from torch.utils.data import DataLoader
 import numpy as np
 
-# Add parent directories to path
-sys.path.append(str(Path(__file__).parent.parent))
-
-from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+try:
+    from ..model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+except ImportError:
+    from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
 # Setup logging
 logging.basicConfig(
@@ -45,7 +45,8 @@ class TormentedBertSentenceTransformer:
         model_config: Optional[UltraConfig] = None,
         pretrained_path: Optional[str] = None,
         max_seq_length: int = 512,
-        pooling_mode: str = "mean"
+        pooling_mode: str = "mean",
+        device: str = "auto"
     ):
         """
         Initialize SBERT model with TormentedBert base.
@@ -58,6 +59,7 @@ class TormentedBertSentenceTransformer:
         """
         self.max_seq_length = max_seq_length
         self.pooling_mode = pooling_mode
+        self.device = resolve_torch_device(device)
         
         # Initialize or load base model
         if pretrained_path and os.path.exists(pretrained_path):
@@ -83,6 +85,8 @@ class TormentedBertSentenceTransformer:
             logger.info("Initializing model from scratch")
             config = model_config or self._get_default_config()
             self.base_model = TormentedBertFrankenstein(config)
+
+        self.base_model.to(self.device)
         
         self.config = config
         self.model = self._build_sentence_transformer()
@@ -152,7 +156,8 @@ class TormentedBertSentenceTransformer:
         
         # Build sentence transformer
         model = SentenceTransformer(
-            modules=[word_embedding_model, pooling_model, normalize]
+            modules=[word_embedding_model, pooling_model, normalize],
+            device=self.device,
         )
         
         return model
@@ -434,7 +439,7 @@ class SBERTTrainer:
         return final_score
 
 
-def main():
+def main(argv=None):
     """Main training script"""
     import argparse
     
@@ -454,8 +459,17 @@ def main():
                        help="Don't resample dataset (default: undersample to normal distribution centered at 0)")
     parser.add_argument("--resample_std", type=float, default=0.3,
                        help="Target std for resampled normal distribution (default: 0.3)")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=SUPPORTED_DEVICE_CHOICES,
+        help="Device to run SBERT training on"
+    )
     
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    resolved_device = resolve_torch_device(args.device)
+    logger.info(f"SBERT train device requested='{args.device}', resolved='{resolved_device}'")
     
     # Setup
     logger.info("=" * 80)
@@ -466,7 +480,8 @@ def main():
     if args.pretrained:
         model_wrapper = TormentedBertSentenceTransformer(
             pretrained_path=args.pretrained,
-            pooling_mode=args.pooling_mode
+            pooling_mode=args.pooling_mode,
+            device=resolved_device,
         )
     else:
         config = UltraConfig(
@@ -479,7 +494,8 @@ def main():
         )
         model_wrapper = TormentedBertSentenceTransformer(
             model_config=config,
-            pooling_mode=args.pooling_mode
+            pooling_mode=args.pooling_mode,
+            device=resolved_device,
         )
     
     model = model_wrapper.get_model()

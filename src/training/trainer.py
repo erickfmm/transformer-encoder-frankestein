@@ -17,9 +17,14 @@ from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
 import torch.nn.functional as F
 
-from utils.storage_manager import StorageManager
-from model.optimizer.factory import build_optimizer
-from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+try:
+    from ..utils.storage_manager import StorageManager
+    from ..model.optimizer.factory import build_optimizer
+    from ..model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+except ImportError:
+    from utils.storage_manager import StorageManager
+    from model.optimizer.factory import build_optimizer
+    from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 
 
 # ==================== TRAINING CONFIGURATION ====================
@@ -87,7 +92,7 @@ class TitanTrainer:
         self.model = model
         self.config = config
         self.training_config = training_config or TrainingConfig()
-        self.device = device or "cuda" if torch.cuda.is_available() else "cpu" # device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
         self.use_amp = (
             bool(self.training_config.use_amp)
             and torch.cuda.is_available()

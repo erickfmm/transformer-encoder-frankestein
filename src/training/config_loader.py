@@ -4,8 +4,12 @@ from typing import Dict, Tuple, Any
 
 import yaml
 
-from training.trainer import TrainingConfig
-from model.tormented_bert_frankestein import UltraConfig
+try:
+    from .trainer import TrainingConfig
+    from ..model.tormented_bert_frankestein import UltraConfig
+except ImportError:
+    from training.trainer import TrainingConfig
+    from model.tormented_bert_frankestein import UltraConfig
 
 
 def _field_names(cls) -> set:

@@ -188,7 +188,7 @@ stable_layer_pattern = [
 Run the high-throughput trainer optimized for Xeon CPUs:
 
 ```bash
-python3 src/training/v2/main.py
+frankestein-transformer train --config-name mini --device auto
 ```
 
 ### **Training in Mini mode (roadmap preset)**
@@ -203,13 +203,32 @@ Use the Mini variant with stable defaults:
 - stable pattern: `[retnet, titan_attn, retnet, mamba, titan_attn, ode]`
 
 ```bash
-python src/training/main.py --model-mode mini
+frankestein-transformer train --model-mode mini --device auto
 ```
 
 For original Frankenstein mode:
 
 ```bash
-python src/training/main.py --model-mode frankenstein
+frankestein-transformer train --model-mode frankenstein --device auto
+```
+
+### **CLI-first workflow**
+
+The repository now ships as a configurable training library + CLI tool. After `pip install -e .` or `uv pip install -e .`, use:
+
+```bash
+frankestein-transformer --help
+frankestein-transformer deploy --help
+frankestein-transformer quantize --help
+frankestein-transformer infer --help
+frankestein-transformer sbert-train --help
+frankestein-transformer sbert-infer --help
+```
+
+Device selection is unified via:
+
+```bash
+--device auto|cpu|cuda|mps
 ```
 
 *Note: Ensure you have mounted a RAM disk if your NVMe is slow:*

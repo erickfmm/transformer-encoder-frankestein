@@ -20,15 +20,18 @@ import logging
 from pathlib import Path
 import json
 from typing import List, Optional, Union
-import sys
 import time
 
-# Add parent directories to path
-sys.path.append(str(Path(__file__).parent.parent.parent))
-
-from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
-from deploy.quantization import load_quantized_checkpoint
-from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+try:
+    from ..model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from .quantization import load_quantized_checkpoint
+    from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+    from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+except ImportError:
+    from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from deploy.quantization import load_quantized_checkpoint
+    from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+    from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,7 +48,7 @@ class TormentedBertInference:
     def __init__(
         self,
         model_dir: str,
-        device: str = 'cuda',
+        device: str = 'auto',
         use_half_precision: bool = False
     ):
         """
@@ -53,11 +56,11 @@ class TormentedBertInference:
         
         Args:
             model_dir: Directory containing deployment artifacts
-            device: 'cuda' or 'cpu'
+            device: 'auto', 'cuda', 'mps', or 'cpu'
             use_half_precision: Use FP16 for faster inference (GPU only)
         """
         self.model_dir = Path(model_dir)
-        self.device = device if torch.cuda.is_available() else 'cpu'
+        self.device = resolve_torch_device(device)
         self.use_half_precision = use_half_precision and self.device == 'cuda'
         
         logger.info(f"Initializing inference engine on {self.device}")
@@ -368,7 +371,7 @@ def interactive_mode(engine: TormentedBertInference):
             traceback.print_exc()
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description='TORMENTED-BERT Inference Engine'
     )
@@ -396,8 +399,8 @@ def main():
     parser.add_argument(
         '--device',
         type=str,
-        choices=['cuda', 'cpu'],
-        default='cuda',
+        choices=SUPPORTED_DEVICE_CHOICES,
+        default='auto',
         help='Device to run inference on'
     )
     parser.add_argument(
@@ -417,12 +420,14 @@ def main():
         help='Run benchmark'
     )
     
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    resolved_device = resolve_torch_device(args.device)
+    logger.info(f"Inference device requested='{args.device}', resolved='{resolved_device}'")
     
     # Initialize engine
     engine = TormentedBertInference(
         args.model,
-        device=args.device,
+        device=resolved_device,
         use_half_precision=args.fp16
     )
     

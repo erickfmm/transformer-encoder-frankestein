@@ -4,7 +4,10 @@ import logging
 import sentencepiece as spm
 from datasets import load_dataset
 
-from utils.storage_manager import StorageManager
+try:
+    from ..utils.storage_manager import StorageManager
+except ImportError:
+    from utils.storage_manager import StorageManager
 
 # ==================== SPM TOKENIZER ====================
 class SpanishSPMTokenizer:

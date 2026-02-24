@@ -13,18 +13,25 @@ import logging
 from pathlib import Path
 import json
 from typing import Optional
-import sys
 
-# Add parent directories to path
-sys.path.append(str(Path(__file__).parent.parent.parent))
-
-from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
-from deploy.quantization import (
-    save_quantized_checkpoint,
-    load_quantized_checkpoint,
-    estimate_model_size,
-    BitNetQuantizer
-)
+try:
+    from ..model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from .quantization import (
+        save_quantized_checkpoint,
+        load_quantized_checkpoint,
+        estimate_model_size,
+        BitNetQuantizer,
+    )
+    from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+except ImportError:
+    from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from deploy.quantization import (
+        save_quantized_checkpoint,
+        load_quantized_checkpoint,
+        estimate_model_size,
+        BitNetQuantizer,
+    )
+    from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,8 +45,9 @@ class ModelDeployer:
     Handles conversion of trained models to deployment-ready format.
     """
     
-    def __init__(self, config: UltraConfig):
+    def __init__(self, config: UltraConfig, device: str = "cpu"):
         self.config = config
+        self.device = device
         self.model = None
         
     def load_training_checkpoint(self, checkpoint_path: str) -> None:
@@ -51,7 +59,7 @@ class ModelDeployer:
         """
         logger.info(f"Loading training checkpoint: {checkpoint_path}")
         
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
         
         # Extract config if saved with checkpoint
         if 'config' in checkpoint:
@@ -64,6 +72,7 @@ class ModelDeployer:
         
         # Initialize model
         self.model = TormentedBertFrankenstein(self.config)
+        self.model.to(self.device)
         
         # Load state dict
         if 'model_state_dict' in checkpoint:
@@ -186,6 +195,7 @@ class ModelDeployer:
             
             # Initialize model
             model = TormentedBertFrankenstein(config)
+            model.to(self.device)
             
             # Load weights
             model_files = list(deployment_path.glob("model*.pt"))
@@ -205,7 +215,7 @@ class ModelDeployer:
             logger.info("Testing forward pass...")
             model.eval()
             with torch.no_grad():
-                test_input = torch.randint(0, config.vocab_size, (2, 64))
+                test_input = torch.randint(0, config.vocab_size, (2, 64), device=self.device)
                 output = model(test_input)
                 logger.info(f"Output shape: {output.shape}")
             
@@ -219,7 +229,7 @@ class ModelDeployer:
             return False
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description='Deploy TORMENTED-BERT model for production'
     )
@@ -252,8 +262,17 @@ def main():
         type=str,
         help='Optional: Path to config JSON (if not in checkpoint)'
     )
-    
-    args = parser.parse_args()
+    parser.add_argument(
+        '--device',
+        type=str,
+        choices=SUPPORTED_DEVICE_CHOICES,
+        default='auto',
+        help='Device to run deployment conversion on'
+    )
+
+    args = parser.parse_args(argv)
+    resolved_device = resolve_torch_device(args.device)
+    logger.info(f"Deployment device requested='{args.device}', resolved='{resolved_device}'")
     
     # Load or create config
     if args.config:
@@ -265,7 +284,7 @@ def main():
         config = UltraConfig()
     
     # Create deployer
-    deployer = ModelDeployer(config)
+    deployer = ModelDeployer(config, device=resolved_device)
     
     # Load training checkpoint
     deployer.load_training_checkpoint(args.checkpoint)

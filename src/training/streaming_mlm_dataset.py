@@ -13,8 +13,12 @@ from concurrent.futures import ProcessPoolExecutor
 import multiprocessing as mp
 import os
 
-from utils.storage_manager import StorageManager
-from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+try:
+    from ..utils.storage_manager import StorageManager
+    from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+except ImportError:
+    from utils.storage_manager import StorageManager
+    from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
 
 
 # ==================== PARALLEL PROCESSING FUNCTIONS ====================

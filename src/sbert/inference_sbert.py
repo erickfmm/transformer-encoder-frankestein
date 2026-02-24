@@ -5,7 +5,6 @@ Compute sentence embeddings and similarity scores using fine-tuned SBERT model.
 """
 
 import os
-import sys
 import torch
 import logging
 import numpy as np
@@ -16,6 +15,10 @@ from dataclasses import dataclass
 from sentence_transformers import SentenceTransformer
 from scipy.spatial.distance import cosine
 import json
+try:
+    from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+except ImportError:
+    from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
 # Setup logging
 logging.basicConfig(
@@ -61,12 +64,8 @@ class SBERTInference:
         """
         self.model_path = model_path
         self.batch_size = batch_size
-        
-        # Auto-detect device if not specified
-        if device is None:
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        else:
-            self.device = device
+        requested_device = device if device is not None else "auto"
+        self.device = resolve_torch_device(requested_device)
         
         # Load model
         logger.info(f"Loading SBERT model from {model_path}")
@@ -346,7 +345,7 @@ class SBERTInference:
         return embeddings, sentences, metadata
 
 
-def main():
+def main(argv=None):
     """Main inference script with CLI"""
     import argparse
     
@@ -375,14 +374,22 @@ def main():
     
     # General
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--device", type=str, default=None, choices=["cuda", "cpu"])
-    
-    args = parser.parse_args()
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=SUPPORTED_DEVICE_CHOICES,
+        help="Device to run SBERT inference on"
+    )
+
+    args = parser.parse_args(argv)
+    resolved_device = resolve_torch_device(args.device)
+    logger.info(f"SBERT infer device requested='{args.device}', resolved='{resolved_device}'")
     
     # Initialize inference engine
     inference = SBERTInference(
         model_path=args.model_path,
-        device=args.device,
+        device=resolved_device,
         batch_size=args.batch_size
     )
     

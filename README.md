@@ -11,6 +11,8 @@
 
 A research playground for building **unconventional, "Frankenstein" Transformer encoders** that combine cutting-edge techniques like **Mixture of Experts (MoE)**, **BitNet 1.58-bit quantization**, **Neural ODEs**, **RetNet retention mechanisms**, and **Titan neural memory**—all optimized for training on **consumer-grade or legacy GPUs** like the Nvidia Tesla P40.
 
+The project goal is to provide a highly configurable training library with a unified CLI for training, quantization/deployment, and SBERT workflows.
+
 ---
 
 ## 📋 Table of Contents
@@ -55,6 +57,7 @@ Like Dr. Frankenstein's creation, this model is assembled from various "parts":
 - 💾 **Memory-efficient**: Designed for GPUs with 20-24GB VRAM
 - 🧪 **Research-oriented**: Easy to experiment with architectural variants
 - 📦 **Self-contained**: Custom tokenizer, model, and training pipeline
+- 🧰 **CLI-first library**: Installable package with `frankestein-transformer` command
 - ⚙️ **YAML-first training**: run experiments with `--config-name` presets or custom `--config` files
 - 🧭 **HoPE Attention**: Real multi-head attention with HoPE applied to Q/K
 - 🔀 **Attention variants**: `titan_attn`, `standard_attn`, and `sigmoid_attn` blocks
@@ -199,7 +202,7 @@ pip install -e ".[train]"
 ### Verify Installation
 
 ```bash
-python -c "from src.model.tormented_bert_frankestein import TormentedBertFrankenstein; print('✅ Model loaded')"
+frankestein-transformer --help
 ```
 
 ---
@@ -210,17 +213,39 @@ python -c "from src.model.tormented_bert_frankestein import TormentedBertFranken
 
 ```bash
 # Run the trainer
-python src/training/main.py --config-name mini
+frankestein-transformer train --config-name mini
 
 # List available YAML configs
-python src/training/main.py --list-configs
+frankestein-transformer train --list-configs
 
 # Use a specific preset
-python src/training/main.py --config-name frankenstein
+frankestein-transformer train --config-name frankenstein
 
 # Use a custom YAML file
-python src/training/main.py --config src/training/configs/standard_hope.yaml
+frankestein-transformer train --config src/training/configs/standard_hope.yaml
 ```
+
+### CLI Commands
+
+```bash
+frankestein-transformer train ...
+frankestein-transformer deploy ...
+frankestein-transformer quantize ...
+frankestein-transformer infer ...
+frankestein-transformer sbert-train ...
+frankestein-transformer sbert-infer ...
+```
+
+### Device Selection
+
+All CLI commands that execute models support:
+
+```bash
+--device auto|cpu|cuda|mps
+```
+
+- `auto` (default): picks `cuda`, then `mps`, then `cpu`.
+- Explicit device requests fail fast when unavailable.
 
 ### Inference Example
 
@@ -303,17 +328,24 @@ Production pipeline (see [`src/deploy/README.md`](src/deploy/README.md)):
 
 ```bash
 # Convert a training checkpoint into deployment artifacts
-python src/deploy/deploy.py \
+frankestein-transformer deploy \
   --checkpoint src/checkpoints/titan_best_loss_10.938040_step_29.pt \
   --output deployed_model \
   --format quantized \
-  --validate
+  --validate \
+  --device auto
 
 # Run inference on text
-python src/deploy/inference.py --model deployed_model --text "Tu texto en español aquí"
+frankestein-transformer infer --model deployed_model --text "Tu texto en español aquí" --device auto
 
 # Benchmark deployed model
-python src/deploy/inference.py --model deployed_model --benchmark
+frankestein-transformer infer --model deployed_model --benchmark --device auto
+
+# Quantization-only shortcut (equivalent to deploy --format quantized)
+frankestein-transformer quantize \
+  --checkpoint src/checkpoints/titan_best_loss_10.938040_step_29.pt \
+  --output deployed_model_quantized \
+  --validate
 ```
 
 ---
@@ -329,17 +361,19 @@ Sentence embedding workflow (see [`src/sbert/README.md`](src/sbert/README.md)):
 
 ```bash
 # Train SBERT
-python src/sbert/train_sbert.py \
+frankestein-transformer sbert-train \
   --output_dir ./output/sbert_tormented \
   --batch_size 16 \
-  --epochs 4
+  --epochs 4 \
+  --device auto
 
 # Compare two sentences
-python src/sbert/inference_sbert.py \
+frankestein-transformer sbert-infer \
   --model_path ./output/sbert_tormented \
   --mode similarity \
   --sentence1 "El gato está en la casa" \
-  --sentence2 "Un felino se encuentra en el hogar"
+  --sentence2 "Un felino se encuentra en el hogar" \
+  --device auto
 ```
 
 ---

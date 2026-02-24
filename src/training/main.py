@@ -31,14 +31,23 @@ import logging
 import torch
 from torch.utils.data import DataLoader
 
-from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
-from training.streaming_mlm_dataset import StreamingMLMDataset
-from training.trainer import TitanTrainer
-from training.config_loader import load_training_config, list_config_paths
-from model.tormented_bert_frankestein import TormentedBertFrankenstein, TormentedBertMini, UltraConfig
+try:
+    from ..tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+    from .streaming_mlm_dataset import StreamingMLMDataset
+    from .trainer import TitanTrainer
+    from .config_loader import load_training_config, list_config_paths
+    from ..model.tormented_bert_frankestein import TormentedBertFrankenstein, TormentedBertMini, UltraConfig
+    from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+except ImportError:
+    from tokenizer.spm_spa_redpajama35 import SpanishSPMTokenizer
+    from training.streaming_mlm_dataset import StreamingMLMDataset
+    from training.trainer import TitanTrainer
+    from training.config_loader import load_training_config, list_config_paths
+    from model.tormented_bert_frankestein import TormentedBertFrankenstein, TormentedBertMini, UltraConfig
+    from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
 
 # ==================== MAIN EXECUTION ====================
-def main():
+def main(argv=None):
     """Main training pipeline for TORMENTED-BERT-Frankenstein"""
     parser = argparse.ArgumentParser(description="Train models from YAML configs")
     parser.add_argument(
@@ -70,7 +79,13 @@ def main():
         default=None,
         help="Deprecated: use --config-name instead"
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--device",
+        choices=SUPPORTED_DEVICE_CHOICES,
+        default="auto",
+        help="Device to run training on (default: auto)"
+    )
+    args = parser.parse_args(argv)
 
     # Setup logging
     logging.basicConfig(
@@ -80,6 +95,8 @@ def main():
     
     logging.info("⚡ Starting TORMENTED-BERT-Frankenstein training ⚡")
     logging.info(f"Current directory: {os.getcwd()}")
+    resolved_device = resolve_torch_device(args.device)
+    logging.info(f"Training device requested='{args.device}', resolved='{resolved_device}'")
 
     try:
         import psutil
@@ -233,7 +250,7 @@ def main():
         batch_size=batch_size,
         shuffle=True,
         num_workers=dataloader_workers,
-        pin_memory=torch.cuda.is_available(),
+        pin_memory=resolved_device.startswith("cuda"),
         drop_last=True
     )
     
@@ -249,7 +266,7 @@ def main():
     logging.info("="*60)
     
     # Configure training behavior from YAML
-    trainer = TitanTrainer(model, config, training_config=training_config)
+    trainer = TitanTrainer(model, config, training_config=training_config, device=resolved_device)
     
     num_epochs = 5  # Increased for better convergence
     nan_detected = False
@@ -320,8 +337,7 @@ def main():
         with torch.no_grad():
             # Test forward pass
             test_input = torch.randint(0, 50000, (1, 512))
-            if torch.cuda.is_available():
-                test_input = test_input.to("cuda")
+            test_input = test_input.to(resolved_device)
             
             logging.info("🔍 Testing final model...")
             test_output = model(test_input)
