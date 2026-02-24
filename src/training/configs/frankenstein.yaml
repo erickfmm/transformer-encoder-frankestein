@@ -82,6 +82,12 @@ training:
   nan_check_interval: 10
   log_gradient_stats: true
   gradient_log_interval: 10
+  csv_log_path: "training_metrics.csv"
+  csv_rotate_on_schema_change: true
+  gpu_metrics_backend: nvml
+  nvml_device_index: 0
+  enable_block_grad_norms: true
+  telemetry_log_interval: 1
   use_galore: false
   galore_rank: 64
   galore_update_interval: 1

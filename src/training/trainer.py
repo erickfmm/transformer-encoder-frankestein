@@ -4,6 +4,9 @@ import torch
 import logging
 import math
 import heapq
+import time
+import re
+import subprocess
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, List, Tuple, Optional, Dict
@@ -25,6 +28,11 @@ class TrainingConfig:
     """Configuration for training behavior and checkpointing"""
     # CSV Logging
     csv_log_path: str = "training_metrics.csv"
+    csv_rotate_on_schema_change: bool = True
+    gpu_metrics_backend: str = "nvml"
+    nvml_device_index: int = 0
+    enable_block_grad_norms: bool = True
+    telemetry_log_interval: int = 1
     
     # Rolling Checkpoints
     checkpoint_every_n_steps: int = 500  # Save every N steps
@@ -118,6 +126,14 @@ class TitanTrainer:
         # === NEW: CSV Logger ===
         self.csv_file = None
         self.csv_writer = None
+        self.csv_columns = self._get_csv_columns()
+
+        # Optional NVML state (best-effort telemetry)
+        self._nvml_module = None
+        self._nvml_handle = None
+        self._nvml_disabled = False
+        self._nvml_warning_logged = False
+
         self._init_csv_logger()
         
         # === NEW: Rolling checkpoint tracking ===
@@ -138,35 +154,239 @@ class TitanTrainer:
         self.non_improving_epochs = 0
         
         self._log_setup()
+
+    def _get_csv_columns(self) -> List[str]:
+        """CSV schema for step-level training metrics."""
+        return [
+            'timestamp', 'epoch', 'step', 'global_step',
+            'loss', 'accuracy', 'learning_rate', 'grad_norm',
+            'scaler_scale', 'gpu_memory_gb', 'gpu_cached_gb',
+            'has_nan', 'has_inf', 'has_zero', 'repair_action',
+            'gpu_temp_c', 'gpu_power_w', 'gpu_util_pct', 'gpu_mem_used_mib',
+            'grad_norm_embeddings', 'grad_norm_attention', 'grad_norm_ffn',
+            'grad_norm_experts', 'grad_norm_router', 'grad_norm_ode',
+            'grad_norm_retnet', 'grad_norm_mamba', 'grad_norm_norms',
+            'grad_norm_head', 'grad_norm_other',
+            'step_time_ms', 'tokens_per_sec', 'clip_ratio', 'effective_batch_size'
+        ]
+
+    def _get_default_gpu_telemetry(self) -> Dict[str, float]:
+        return {
+            "gpu_temp_c": 0.0,
+            "gpu_power_w": 0.0,
+            "gpu_util_pct": 0.0,
+            "gpu_mem_used_mib": 0.0,
+        }
+
+    def _get_default_block_grad_norms(self) -> Dict[str, float]:
+        return {
+            "embeddings": 0.0,
+            "attention": 0.0,
+            "ffn": 0.0,
+            "experts": 0.0,
+            "router": 0.0,
+            "ode": 0.0,
+            "retnet": 0.0,
+            "mamba": 0.0,
+            "norms": 0.0,
+            "head": 0.0,
+            "other": 0.0,
+        }
+
+    def _read_csv_header(self, csv_path: str) -> Optional[List[str]]:
+        if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
+            return None
+        with open(csv_path, 'r', newline='', encoding='utf-8') as handle:
+            reader = csv.reader(handle)
+            return next(reader, None)
     
     def _init_csv_logger(self):
         """Initialize CSV file for metrics logging"""
         csv_path = self.training_config.csv_log_path
+        csv_dir = os.path.dirname(csv_path)
+        if csv_dir:
+            os.makedirs(csv_dir, exist_ok=True)
+
         file_exists = os.path.exists(csv_path)
-        
+        if file_exists:
+            existing_header = self._read_csv_header(csv_path)
+            if existing_header is not None and existing_header != self.csv_columns:
+                if self.training_config.csv_rotate_on_schema_change:
+                    base, ext = os.path.splitext(csv_path)
+                    if not ext:
+                        ext = ".csv"
+                    rotated_path = f"{base}.{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+                    os.replace(csv_path, rotated_path)
+                    logging.info(
+                        f"CSV schema changed. Rotated previous log to: {rotated_path}"
+                    )
+                    file_exists = False
+                else:
+                    raise RuntimeError(
+                        "CSV schema mismatch for existing metrics file. "
+                        "Enable csv_rotate_on_schema_change or remove the old CSV."
+                    )
+
         self.csv_file = open(csv_path, 'a', newline='', encoding='utf-8')
         self.csv_writer = csv.writer(self.csv_file)
-        
-        # Write header if new file
-        if not file_exists:
-            self.csv_writer.writerow([
-                'timestamp', 'epoch', 'step', 'global_step', 
-                'loss', 'accuracy', 'learning_rate', 'grad_norm',
-                'scaler_scale', 'gpu_memory_gb', 'gpu_cached_gb',
-                'has_nan', 'has_inf', 'has_zero', 'repair_action'
-            ])
+
+        # Write header for new or empty file
+        should_write_header = (not file_exists) or os.path.getsize(csv_path) == 0
+        if should_write_header:
+            self.csv_writer.writerow(self.csv_columns)
             self.csv_file.flush()
+
+    def _get_gpu_telemetry(self) -> Dict[str, float]:
+        """Collect GPU telemetry with best-effort NVML fallback."""
+        telemetry = self._get_default_gpu_telemetry()
+        if not torch.cuda.is_available():
+            return telemetry
+
+        backend = str(self.training_config.gpu_metrics_backend).strip().lower()
+        if backend == "none":
+            return telemetry
+        if backend != "nvml":
+            return telemetry
+        if self._nvml_disabled:
+            return self._get_gpu_telemetry_from_nvidia_smi()
+
+        if self._nvml_module is None or self._nvml_handle is None:
+            try:
+                import pynvml  # type: ignore
+
+                pynvml.nvmlInit()
+                idx = int(self.training_config.nvml_device_index)
+                self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
+                self._nvml_module = pynvml
+            except Exception as exc:
+                self._nvml_disabled = True
+                if not self._nvml_warning_logged:
+                    logging.warning(f"NVML telemetry unavailable, falling back to nvidia-smi: {exc}")
+                    self._nvml_warning_logged = True
+                return self._get_gpu_telemetry_from_nvidia_smi()
+
+        try:
+            pynvml = self._nvml_module
+            handle = self._nvml_handle
+            utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            telemetry["gpu_temp_c"] = float(
+                pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            )
+            telemetry["gpu_power_w"] = float(pynvml.nvmlDeviceGetPowerUsage(handle)) / 1000.0
+            telemetry["gpu_util_pct"] = float(utilization.gpu)
+            telemetry["gpu_mem_used_mib"] = float(memory_info.used) / (1024.0 ** 2)
+        except Exception as exc:
+            if not self._nvml_warning_logged:
+                logging.warning(f"Failed reading NVML telemetry, falling back to nvidia-smi: {exc}")
+                self._nvml_warning_logged = True
+            return self._get_gpu_telemetry_from_nvidia_smi()
+        return telemetry
+
+    def _parse_smi_value(self, raw: str) -> float:
+        value = raw.strip()
+        if not value or value.lower() in {"n/a", "[not supported]"}:
+            return 0.0
+        match = re.search(r"[-+]?\d*\.?\d+", value)
+        if match is None:
+            return 0.0
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return 0.0
+
+    def _get_gpu_telemetry_from_nvidia_smi(self) -> Dict[str, float]:
+        telemetry = self._get_default_gpu_telemetry()
+        cmd = [
+            "nvidia-smi",
+            "--query-gpu=temperature.gpu,power.draw,utilization.gpu,memory.used",
+            "--format=csv,noheader,nounits",
+            "-i",
+            str(int(self.training_config.nvml_device_index)),
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            line = result.stdout.strip().splitlines()[0]
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 4:
+                telemetry["gpu_temp_c"] = self._parse_smi_value(parts[0])
+                telemetry["gpu_power_w"] = self._parse_smi_value(parts[1])
+                telemetry["gpu_util_pct"] = self._parse_smi_value(parts[2])
+                telemetry["gpu_mem_used_mib"] = self._parse_smi_value(parts[3])
+        except Exception:
+            # Best-effort fallback: keep zeros if nvidia-smi is unavailable/unreadable.
+            pass
+        return telemetry
+
+    def _bucket_for_param_name(self, param_name: str) -> str:
+        name = param_name.lower()
+        if "router" in name:
+            return "router"
+        if "experts" in name:
+            return "experts"
+        if "embed" in name or ".emb." in name or "factorized_embedding" in name:
+            return "embeddings"
+        if "ode" in name:
+            return "ode"
+        if "retnet" in name or "retention" in name:
+            return "retnet"
+        if "mamba" in name:
+            return "mamba"
+        if "ffn" in name:
+            return "ffn"
+        if "norm" in name:
+            return "norms"
+        if name.startswith("head") or ".head." in name:
+            return "head"
+        if (
+            "attn" in name
+            or "attention" in name
+            or "q_proj" in name
+            or "k_proj" in name
+            or "v_proj" in name
+            or "out_proj" in name
+        ):
+            return "attention"
+        return "other"
+
+    def _collect_block_grad_norms(self) -> Dict[str, float]:
+        """Collect L2 gradient norms by fixed logical component buckets."""
+        bucket_sq_sums = {k: 0.0 for k in self._get_default_block_grad_norms().keys()}
+        if not self.training_config.enable_block_grad_norms:
+            return self._get_default_block_grad_norms()
+
+        for name, param in self.model.named_parameters():
+            if param.grad is None:
+                continue
+            grad = param.grad.detach()
+            bucket = self._bucket_for_param_name(name)
+            bucket_sq_sums[bucket] += float((grad.float().pow(2).sum()).item())
+
+        return {key: math.sqrt(max(val, 0.0)) for key, val in bucket_sq_sums.items()}
     
     def _log_step_to_csv(self, epoch: int, step: int, loss: float, accuracy: float,
                          lr: float, grad_norm: float = 0.0,
                          has_nan: bool = False, has_inf: bool = False,
-                         has_zero: bool = False, repair_action: str = "none"):
+                         has_zero: bool = False, repair_action: str = "none",
+                         gpu_telemetry: Optional[Dict[str, float]] = None,
+                         block_grad_norms: Optional[Dict[str, float]] = None,
+                         step_time_ms: float = 0.0, tokens_per_sec: float = 0.0,
+                         clip_ratio: float = 0.0, effective_batch_size: int = 0):
         """Log a single training step to CSV"""
         gpu_memory = 0.0
         gpu_cached = 0.0
         if torch.cuda.is_available():
             gpu_memory = torch.cuda.memory_allocated() / 1024**3
             gpu_cached = torch.cuda.memory_reserved() / 1024**3
+
+        telemetry = gpu_telemetry or self._get_default_gpu_telemetry()
+        grad_buckets = block_grad_norms or self._get_default_block_grad_norms()
         
         self.csv_writer.writerow([
             datetime.now().isoformat(),
@@ -183,7 +403,26 @@ class TitanTrainer:
             int(has_nan),
             int(has_inf),
             int(has_zero),
-            repair_action
+            repair_action,
+            f"{float(telemetry['gpu_temp_c']):.2f}",
+            f"{float(telemetry['gpu_power_w']):.2f}",
+            f"{float(telemetry['gpu_util_pct']):.2f}",
+            f"{float(telemetry['gpu_mem_used_mib']):.2f}",
+            f"{float(grad_buckets['embeddings']):.6f}",
+            f"{float(grad_buckets['attention']):.6f}",
+            f"{float(grad_buckets['ffn']):.6f}",
+            f"{float(grad_buckets['experts']):.6f}",
+            f"{float(grad_buckets['router']):.6f}",
+            f"{float(grad_buckets['ode']):.6f}",
+            f"{float(grad_buckets['retnet']):.6f}",
+            f"{float(grad_buckets['mamba']):.6f}",
+            f"{float(grad_buckets['norms']):.6f}",
+            f"{float(grad_buckets['head']):.6f}",
+            f"{float(grad_buckets['other']):.6f}",
+            f"{float(step_time_ms):.2f}",
+            f"{float(tokens_per_sec):.2f}",
+            f"{float(clip_ratio):.6f}",
+            int(effective_batch_size),
         ])
         self.csv_file.flush()
     
@@ -611,6 +850,7 @@ class TitanTrainer:
         )
         
         self.optimizer.zero_grad(set_to_none=True)
+        optimizer_window_start = time.perf_counter()
         
         for batch_idx, batch in enumerate(progress_bar):
             try:
@@ -687,6 +927,20 @@ class TitanTrainer:
                             max_norm=self.training_config.grad_clip_max_norm
                         )
                         grad_norm_value = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else float(grad_norm)
+                        clip_ratio = grad_norm_value / max(float(self.training_config.grad_clip_max_norm), 1e-12)
+
+                        telemetry_interval = max(int(self.training_config.telemetry_log_interval), 1)
+                        should_log_heavy = ((self.global_step + 1) % telemetry_interval == 0)
+                        gpu_telemetry = self._get_gpu_telemetry() if should_log_heavy else self._get_default_gpu_telemetry()
+                        block_grad_norms = (
+                            self._collect_block_grad_norms()
+                            if should_log_heavy
+                            else self._get_default_block_grad_norms()
+                        )
+                        step_time_ms = (time.perf_counter() - optimizer_window_start) * 1000.0
+                        effective_batch_size = int(batch['input_ids'].shape[0]) * self.gradient_accumulation_steps
+                        token_count = effective_batch_size * int(batch['input_ids'].shape[1])
+                        tokens_per_sec = float(token_count) / max(step_time_ms / 1000.0, 1e-9)
 
                         post_clip_bad = (not math.isfinite(grad_norm_value)) or (
                             grad_norm_value > self.training_config.inf_post_clip_threshold
@@ -697,7 +951,6 @@ class TitanTrainer:
                             self.current_epoch_had_inf = True
                             repair_action = "inf_skip_step_lr_half"
                             self._scale_learning_rate(0.5)
-                            self.optimizer.zero_grad(set_to_none=True)
 
                             self.global_step += 1
                             current_lr = self.scheduler.get_last_lr()[0]
@@ -712,7 +965,15 @@ class TitanTrainer:
                                 has_inf=True,
                                 has_zero=grad_stats["has_zero"],
                                 repair_action=repair_action,
+                                gpu_telemetry=gpu_telemetry,
+                                block_grad_norms=block_grad_norms,
+                                step_time_ms=step_time_ms,
+                                tokens_per_sec=tokens_per_sec,
+                                clip_ratio=clip_ratio,
+                                effective_batch_size=effective_batch_size,
                             )
+                            self.optimizer.zero_grad(set_to_none=True)
+                            optimizer_window_start = time.perf_counter()
                             batch_done = True
                             continue
 
@@ -739,7 +1000,14 @@ class TitanTrainer:
                             has_inf=grad_stats["has_inf"],
                             has_zero=grad_stats["has_zero"],
                             repair_action=repair_action,
+                            gpu_telemetry=gpu_telemetry,
+                            block_grad_norms=block_grad_norms,
+                            step_time_ms=step_time_ms,
+                            tokens_per_sec=tokens_per_sec,
+                            clip_ratio=clip_ratio,
+                            effective_batch_size=effective_batch_size,
                         )
+                        optimizer_window_start = time.perf_counter()
 
                         if self.global_step % self.training_config.checkpoint_every_n_steps == 0:
                             self._save_rolling_checkpoint(epoch)

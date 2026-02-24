@@ -1,35 +1,30 @@
 model_class: mini
 model:
   vocab_size: 50000
-  hidden_size: 384
-  num_layers: 6
-  num_loops: 2
-  num_heads: 6
-  retention_heads: 6
-  num_experts: 4
-  top_k_experts: 2
+  hidden_size: 128
+  num_layers: 4
+  num_loops: 1
+  num_heads: 1
+  retention_heads: 1
+  num_experts: 2
+  top_k_experts: 1
   dropout: 0.1
   ode_solver: rk4
   ode_steps: 2
   use_bitnet: false
-  norm_type: derf
+  norm_type: layer_norm
   layer_pattern:
-    - retnet
-    - titan_attn
-    - retnet
-    - mamba
-    - titan_attn
-    - ode
+    - standard_attn
   use_factorized_embedding: true
-  factorized_embedding_dim: 128
+  factorized_embedding_dim: 16
   use_embedding_conv: true
-  embedding_conv_kernel: 3
-  use_hope: true
-  use_moe: true
-  ffn_hidden_size: 768
-  ffn_activation: silu
+  embedding_conv_kernel: 32
+  use_hope: false
+  use_moe: false
+  ffn_hidden_size: 512
+  ffn_activation: gelu
 training:
-  batch_size: 8
+  batch_size: 64
   dataloader_workers: 2
   max_length: 512
   mlm_probability: 0.15
@@ -37,52 +32,58 @@ training:
   dataset_batch_size: 25000
   num_workers: 8
   cache_dir: "./temp_data/v2_dataset_cache"
-  use_amp: false
-  gradient_accumulation_steps: 4
+  use_amp: true
+  gradient_accumulation_steps: 2
   optimizer:
-    optimizer_class: adamw
+    optimizer_class: lamb
     parameters:
-      adamw-lr_embeddings: 1e-6
-      adamw-lr_norms: 5e-6
-      adamw-lr_ode: 1e-7
-      adamw-lr_retnet: 5e-6
-      adamw-lr_mamba: 2e-6
-      adamw-lr_attention: 3e-6
-      adamw-lr_other: 2e-6
-      adamw-wd_embeddings: 0.01
-      adamw-wd_norms: 0.001
-      adamw-wd_ode: 0.01
-      adamw-wd_retnet: 0.01
-      adamw-wd_mamba: 0.01
-      adamw-wd_attention: 0.01
-      adamw-wd_other: 0.01
-      adamw-betas_embeddings: [0.9, 0.95]
-      adamw-betas_norms: [0.9, 0.95]
-      adamw-betas_ode: [0.9, 0.95]
-      adamw-betas_retnet: [0.9, 0.95]
-      adamw-betas_mamba: [0.9, 0.95]
-      adamw-betas_attention: [0.9, 0.95]
-      adamw-betas_other: [0.9, 0.95]
-      adamw-eps_embeddings: 1e-8
-      adamw-eps_norms: 1e-8
-      adamw-eps_ode: 1e-8
-      adamw-eps_retnet: 1e-8
-      adamw-eps_mamba: 1e-8
-      adamw-eps_attention: 1e-8
-      adamw-eps_other: 1e-8
+      lamb-lr_embeddings: 1e-6
+      lamb-lr_norms: 5e-6
+      lamb-lr_ode: 1e-7
+      lamb-lr_retnet: 5e-6
+      lamb-lr_mamba: 2e-6
+      lamb-lr_attention: 3e-6
+      lamb-lr_other: 2e-6
+      lamb-wd_embeddings: 0.01
+      lamb-wd_norms: 0.001
+      lamb-wd_ode: 0.01
+      lamb-wd_retnet: 0.01
+      lamb-wd_mamba: 0.01
+      lamb-wd_attention: 0.01
+      lamb-wd_other: 0.01
+      lamb-betas_embeddings: [0.9, 0.95]
+      lamb-betas_norms: [0.9, 0.95]
+      lamb-betas_ode: [0.9, 0.95]
+      lamb-betas_retnet: [0.9, 0.95]
+      lamb-betas_mamba: [0.9, 0.95]
+      lamb-betas_attention: [0.9, 0.95]
+      lamb-betas_other: [0.9, 0.95]
+      lamb-eps_embeddings: 1e-8
+      lamb-eps_norms: 1e-8
+      lamb-eps_ode: 1e-8
+      lamb-eps_retnet: 1e-8
+      lamb-eps_mamba: 1e-8
+      lamb-eps_attention: 1e-8
+      lamb-eps_other: 1e-8
   scheduler_total_steps: 10000
   scheduler_warmup_ratio: 0.1
   scheduler_type: cosine
   grad_clip_max_norm: 5.0
   inf_post_clip_threshold: 100.0
-  max_nan_retries: 3
-  checkpoint_every_n_steps: 500
+  max_nan_retries: 5
+  checkpoint_every_n_steps: 50
   max_rolling_checkpoints: 3
   num_best_checkpoints: 2
-  nan_check_interval: 10
+  nan_check_interval: 1
   log_gradient_stats: true
-  gradient_log_interval: 10
-  use_galore: false
+  gradient_log_interval: 1
+  csv_log_path: "training_metrics.csv"
+  csv_rotate_on_schema_change: true
+  gpu_metrics_backend: nvml
+  nvml_device_index: 0
+  enable_block_grad_norms: true
+  telemetry_log_interval: 1
+  use_galore: true
   galore_rank: 64
   galore_update_interval: 1
   galore_scale: 1.0

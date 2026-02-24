@@ -100,6 +100,12 @@ training:
   nan_check_interval: 10
   log_gradient_stats: true
   gradient_log_interval: 10
+  csv_log_path: "training_metrics.csv"
+  csv_rotate_on_schema_change: true
+  gpu_metrics_backend: nvml
+  nvml_device_index: 0
+  enable_block_grad_norms: true
+  telemetry_log_interval: 1
   use_galore: false
   galore_rank: 64
   galore_update_interval: 1
@@ -227,6 +233,12 @@ Examples:
 - `nan_check_interval`: NaN/Inf check interval.
 - `log_gradient_stats`: enable gradient logging.
 - `gradient_log_interval`: gradient logging interval.
+- `csv_log_path`: CSV path for training metrics.
+- `csv_rotate_on_schema_change`: rotate old CSV when header schema changes.
+- `gpu_metrics_backend`: GPU telemetry backend (`nvml` or `none`).
+- `nvml_device_index`: GPU index for NVML metrics.
+- `enable_block_grad_norms`: include fixed per-block grad norm columns.
+- `telemetry_log_interval`: interval in optimizer steps for heavy telemetry fields.
 - `use_galore`: enable GaLore.
 - `galore_rank`: low-rank projection rank.
 - `galore_update_interval`: projection update frequency.
@@ -242,3 +254,4 @@ This is a hard migration. Legacy top-level optimizer keys (`lr_*`, `wd_*`, `beta
 - `ffn_hidden_size` is required to match BERT/TinyBERT/EmbBERT.
 - `embedding_conv_kernel` allows replicating EmbBERT with kernel 32.
 - `standard_attn` and `sigmoid_attn` are compatible with `use_hope=false`.
+- Full GPU temperature/power/utilization metrics require `pynvml`; when unavailable, telemetry falls back to zero values without interrupting training.

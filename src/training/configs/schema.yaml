@@ -197,6 +197,12 @@ properties:
       - nan_check_interval
       - log_gradient_stats
       - gradient_log_interval
+      - csv_log_path
+      - csv_rotate_on_schema_change
+      - gpu_metrics_backend
+      - nvml_device_index
+      - enable_block_grad_norms
+      - telemetry_log_interval
       - use_galore
       - galore_rank
       - galore_update_interval
@@ -468,6 +474,33 @@ properties:
         minimum: 1
         description: "Gradient logging interval."
         examples: [10]
+      csv_log_path:
+        type: string
+        description: "CSV path for step-level training metrics."
+        examples: ["training_metrics.csv"]
+      csv_rotate_on_schema_change:
+        type: boolean
+        description: "Rotate existing CSV when logging schema changes."
+        examples: [true]
+      gpu_metrics_backend:
+        type: string
+        enum: [nvml, none]
+        description: "GPU telemetry backend."
+        examples: [nvml]
+      nvml_device_index:
+        type: integer
+        minimum: 0
+        description: "GPU index used for NVML telemetry."
+        examples: [0]
+      enable_block_grad_norms:
+        type: boolean
+        description: "Enable per-block gradient norm aggregation in CSV logs."
+        examples: [true]
+      telemetry_log_interval:
+        type: integer
+        minimum: 1
+        description: "Interval (optimizer steps) for heavy telemetry and block grad norms."
+        examples: [1]
       use_galore:
         type: boolean
         description: "Enable GaLore."
@@ -839,6 +872,12 @@ examples:
       nan_check_interval: 10
       log_gradient_stats: true
       gradient_log_interval: 10
+      csv_log_path: "training_metrics.csv"
+      csv_rotate_on_schema_change: true
+      gpu_metrics_backend: nvml
+      nvml_device_index: 0
+      enable_block_grad_norms: true
+      telemetry_log_interval: 1
       use_galore: false
       galore_rank: 64
       galore_update_interval: 1
