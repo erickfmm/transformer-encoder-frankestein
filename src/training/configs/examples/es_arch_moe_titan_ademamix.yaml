@@ -1,0 +1,98 @@
+model_class: frankenstein
+model:
+  vocab_size: 50000
+  hidden_size: 768
+  num_layers: 10
+  num_loops: 1
+  num_heads: 12
+  retention_heads: 12
+  num_experts: 8
+  top_k_experts: 2
+  dropout: 0.1
+  layer_pattern: [titan_attn, retnet]
+  ode_solver: rk4
+  ode_steps: 2
+  use_bitnet: false
+  norm_type: layer_norm
+  use_factorized_embedding: false
+  factorized_embedding_dim: 128
+  use_embedding_conv: false
+  embedding_conv_kernel: 3
+  hope_base: 10000.0
+  hope_damping: 0.01
+  use_hope: true
+  use_moe: true
+  ffn_hidden_size: 3072
+  ffn_activation: silu
+training:
+  task: mlm
+  num_epochs: 4
+  batch_size: 2
+  dataloader_workers: 2
+  max_length: 256
+  mlm_probability: 0.15
+  max_samples: 6000000
+  dataset_batch_size: 15000
+  num_workers: 6
+  cache_dir: "./temp_data/v2_dataset_cache"
+  local_parquet_dir: "/home/erickfmm/.cache/huggingface/hub/datasets--erickfmm--red_pajama_es_hq_35/snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/train/"
+  prefer_local_cache: true
+  stream_local_parquet: true
+  join_temp_data_context_window: 0
+  join_temp_data_min_remainder_tokens: 128
+  use_amp: false
+  gradient_accumulation_steps: 16
+  optimizer:
+    optimizer_class: ademamix
+    parameters:
+      ademamix-lr_embeddings: 1e-6
+      ademamix-lr_norms: 5e-6
+      ademamix-lr_ode: 1e-7
+      ademamix-lr_retnet: 5e-6
+      ademamix-lr_mamba: 2e-6
+      ademamix-lr_attention: 3e-6
+      ademamix-lr_other: 2e-6
+      ademamix-wd_embeddings: 0.01
+      ademamix-wd_norms: 0.001
+      ademamix-wd_ode: 0.01
+      ademamix-wd_retnet: 0.01
+      ademamix-wd_mamba: 0.01
+      ademamix-wd_attention: 0.01
+      ademamix-wd_other: 0.01
+      ademamix-betas_embeddings: [0.9, 0.95]
+      ademamix-betas_norms: [0.9, 0.95]
+      ademamix-betas_ode: [0.9, 0.95]
+      ademamix-betas_retnet: [0.9, 0.95]
+      ademamix-betas_mamba: [0.9, 0.95]
+      ademamix-betas_attention: [0.9, 0.95]
+      ademamix-betas_other: [0.9, 0.95]
+      ademamix-eps_embeddings: 1e-8
+      ademamix-eps_norms: 1e-8
+      ademamix-eps_ode: 1e-8
+      ademamix-eps_retnet: 1e-8
+      ademamix-eps_mamba: 1e-8
+      ademamix-eps_attention: 1e-8
+      ademamix-eps_other: 1e-8
+  scheduler_total_steps: 12000
+  scheduler_warmup_ratio: 0.10
+  scheduler_type: cosine
+  grad_clip_max_norm: 5.0
+  inf_post_clip_threshold: 100.0
+  max_nan_retries: 4
+  checkpoint_every_n_steps: 500
+  max_rolling_checkpoints: 3
+  num_best_checkpoints: 2
+  nan_check_interval: 10
+  log_gradient_stats: true
+  gradient_log_interval: 10
+  csv_log_path: "training_metrics_es_arch_moe_titan_ademamix.csv"
+  csv_rotate_on_schema_change: true
+  gpu_metrics_backend: nvml
+  nvml_device_index: 0
+  enable_block_grad_norms: true
+  telemetry_log_interval: 5
+  use_galore: false
+  galore_rank: 64
+  galore_update_interval: 1
+  galore_scale: 1.0
+  galore_max_dim: 4096

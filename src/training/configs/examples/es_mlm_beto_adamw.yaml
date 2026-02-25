@@ -1,27 +1,27 @@
-base_model: answerdotai/ModernBERT-base
+base_model: dccuchile/bert-base-spanish-wwm-cased
 tokenizer:
-  name_or_path: answerdotai/ModernBERT-base
+  name_or_path: dccuchile/bert-base-spanish-wwm-cased
   use_fast: true
   trust_remote_code: false
 training:
   task: mlm
-  num_epochs: 5
+  num_epochs: 4
   batch_size: 4
   dataloader_workers: 2
   max_length: 512
   mlm_probability: 0.15
-  max_samples: 20000000
-  dataset_batch_size: 25000
-  num_workers: 8
+  max_samples: 8000000
+  dataset_batch_size: 20000
+  num_workers: 6
   cache_dir: "./temp_data/v2_dataset_cache"
   local_parquet_dir: "/home/erickfmm/.cache/huggingface/hub/datasets--erickfmm--red_pajama_es_hq_35/snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/train/"
   prefer_local_cache: true
   stream_local_parquet: true
-  join_temp_data_context_window: 8192
-  join_temp_data_min_remainder_tokens: 512
-  hf_output_dir: "checkpoints/hf_modernbert_final"
+  join_temp_data_context_window: 0
+  join_temp_data_min_remainder_tokens: 128
+  hf_output_dir: "checkpoints/es_mlm_beto_adamw"
   use_amp: false
-  gradient_accumulation_steps: 4
+  gradient_accumulation_steps: 8
   optimizer:
     optimizer_class: adamw
     parameters:
@@ -53,8 +53,8 @@ training:
       adamw-eps_mamba: 1e-8
       adamw-eps_attention: 1e-8
       adamw-eps_other: 1e-8
-  scheduler_total_steps: 10000
-  scheduler_warmup_ratio: 0.1
+  scheduler_total_steps: 9000
+  scheduler_warmup_ratio: 0.10
   scheduler_type: cosine
   grad_clip_max_norm: 5.0
   inf_post_clip_threshold: 100.0
@@ -65,12 +65,12 @@ training:
   nan_check_interval: 10
   log_gradient_stats: true
   gradient_log_interval: 10
-  csv_log_path: "training_metrics.csv"
+  csv_log_path: "training_metrics_es_mlm_beto_adamw.csv"
   csv_rotate_on_schema_change: true
   gpu_metrics_backend: nvml
   nvml_device_index: 0
   enable_block_grad_norms: true
-  telemetry_log_interval: 1
+  telemetry_log_interval: 5
   use_galore: false
   galore_rank: 64
   galore_update_interval: 1

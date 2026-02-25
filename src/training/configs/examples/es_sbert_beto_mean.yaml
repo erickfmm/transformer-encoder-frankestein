@@ -1,18 +1,19 @@
-base_model: answerdotai/ModernBERT-base
+base_model: dccuchile/bert-base-spanish-wwm-cased
 training:
   task: sbert
   sbert:
     dataset_name: "erickfmm/agentlans__multilingual-sentences__paired_10_sts"
-    output_dir: "./output/sbert_modernbert"
+    output_dir: "./output/es_sbert_beto_mean"
     batch_size: 16
     epochs: 4
     warmup_steps: 1000
     evaluation_steps: 5000
     learning_rate: 2e-5
-    max_train_samples: null
+    max_train_samples: 500000
     max_eval_samples: 10000
-    max_seq_length: 8192
+    max_seq_length: 512
     pooling_mode: mean
-    use_amp: true
+    trust_remote_code: false
+    use_amp: false
     resample_balanced: true
     resample_std: 0.3

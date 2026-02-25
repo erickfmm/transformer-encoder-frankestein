@@ -1,0 +1,82 @@
+base_model: PlanTL-GOB-ES/roberta-base-bne
+tokenizer:
+  name_or_path: PlanTL-GOB-ES/roberta-base-bne
+  use_fast: true
+  trust_remote_code: false
+training:
+  task: mlm
+  num_epochs: 4
+  batch_size: 4
+  dataloader_workers: 2
+  max_length: 512
+  mlm_probability: 0.15
+  max_samples: 8000000
+  dataset_batch_size: 20000
+  num_workers: 6
+  cache_dir: "./temp_data/v2_dataset_cache"
+  local_parquet_dir: "/home/erickfmm/.cache/huggingface/hub/datasets--erickfmm--red_pajama_es_hq_35/snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/train/"
+  prefer_local_cache: true
+  stream_local_parquet: true
+  join_temp_data_context_window: 0
+  join_temp_data_min_remainder_tokens: 128
+  hf_output_dir: "checkpoints/es_mlm_maria_roberta_adafactor"
+  use_amp: false
+  gradient_accumulation_steps: 8
+  optimizer:
+    optimizer_class: adafactor
+    parameters:
+      adafactor-lr_embeddings: 1e-6
+      adafactor-lr_norms: 5e-6
+      adafactor-lr_ode: 1e-7
+      adafactor-lr_retnet: 5e-6
+      adafactor-lr_mamba: 2e-6
+      adafactor-lr_attention: 3e-6
+      adafactor-lr_other: 2e-6
+      adafactor-wd_embeddings: 0.01
+      adafactor-wd_norms: 0.001
+      adafactor-wd_ode: 0.01
+      adafactor-wd_retnet: 0.01
+      adafactor-wd_mamba: 0.01
+      adafactor-wd_attention: 0.01
+      adafactor-wd_other: 0.01
+      adafactor-betas_embeddings: [0.9, 0.95]
+      adafactor-betas_norms: [0.9, 0.95]
+      adafactor-betas_ode: [0.9, 0.95]
+      adafactor-betas_retnet: [0.9, 0.95]
+      adafactor-betas_mamba: [0.9, 0.95]
+      adafactor-betas_attention: [0.9, 0.95]
+      adafactor-betas_other: [0.9, 0.95]
+      adafactor-eps_embeddings: 1e-8
+      adafactor-eps_norms: 1e-8
+      adafactor-eps_ode: 1e-8
+      adafactor-eps_retnet: 1e-8
+      adafactor-eps_mamba: 1e-8
+      adafactor-eps_attention: 1e-8
+      adafactor-eps_other: 1e-8
+      adafactor-beta2_decay: 0.8
+      adafactor-clip_threshold: 1.0
+      adafactor-eps1: 1e-30
+      adafactor-eps2: 1e-3
+  scheduler_total_steps: 9000
+  scheduler_warmup_ratio: 0.08
+  scheduler_type: linear_warmup_then_constant
+  grad_clip_max_norm: 5.0
+  inf_post_clip_threshold: 100.0
+  max_nan_retries: 3
+  checkpoint_every_n_steps: 500
+  max_rolling_checkpoints: 3
+  num_best_checkpoints: 2
+  nan_check_interval: 10
+  log_gradient_stats: true
+  gradient_log_interval: 10
+  csv_log_path: "training_metrics_es_mlm_maria_roberta_adafactor.csv"
+  csv_rotate_on_schema_change: true
+  gpu_metrics_backend: nvml
+  nvml_device_index: 0
+  enable_block_grad_norms: true
+  telemetry_log_interval: 5
+  use_galore: false
+  galore_rank: 64
+  galore_update_interval: 1
+  galore_scale: 1.0
+  galore_max_dim: 4096

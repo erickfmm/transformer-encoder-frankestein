@@ -1,0 +1,102 @@
+model_class: frankenstein
+model:
+  vocab_size: 50000
+  hidden_size: 768
+  num_layers: 12
+  num_loops: 1
+  num_heads: 12
+  retention_heads: 12
+  num_experts: 4
+  top_k_experts: 2
+  dropout: 0.1
+  layer_pattern: [retnet, titan_attn, mamba, ode]
+  ode_solver: rk4
+  ode_steps: 2
+  use_bitnet: false
+  norm_type: layer_norm
+  use_factorized_embedding: false
+  factorized_embedding_dim: 128
+  use_embedding_conv: false
+  embedding_conv_kernel: 3
+  hope_base: 10000.0
+  hope_damping: 0.01
+  use_hope: true
+  use_moe: false
+  ffn_hidden_size: 3072
+  ffn_activation: silu
+training:
+  task: mlm
+  num_epochs: 4
+  batch_size: 2
+  dataloader_workers: 2
+  max_length: 256
+  mlm_probability: 0.15
+  max_samples: 6000000
+  dataset_batch_size: 15000
+  num_workers: 6
+  cache_dir: "./temp_data/v2_dataset_cache"
+  local_parquet_dir: "/home/erickfmm/.cache/huggingface/hub/datasets--erickfmm--red_pajama_es_hq_35/snapshots/bd7286c289a95dc3803c375bc36aaaeb138b1eab/train/"
+  prefer_local_cache: true
+  stream_local_parquet: true
+  join_temp_data_context_window: 0
+  join_temp_data_min_remainder_tokens: 128
+  use_amp: false
+  gradient_accumulation_steps: 12
+  optimizer:
+    optimizer_class: turbo_muon
+    parameters:
+      turbo_muon-lr_embeddings: 1e-6
+      turbo_muon-lr_norms: 5e-6
+      turbo_muon-lr_ode: 1e-7
+      turbo_muon-lr_retnet: 5e-6
+      turbo_muon-lr_mamba: 2e-6
+      turbo_muon-lr_attention: 3e-6
+      turbo_muon-lr_other: 2e-6
+      turbo_muon-wd_embeddings: 0.01
+      turbo_muon-wd_norms: 0.001
+      turbo_muon-wd_ode: 0.01
+      turbo_muon-wd_retnet: 0.01
+      turbo_muon-wd_mamba: 0.01
+      turbo_muon-wd_attention: 0.01
+      turbo_muon-wd_other: 0.01
+      turbo_muon-betas_embeddings: [0.9, 0.95]
+      turbo_muon-betas_norms: [0.9, 0.95]
+      turbo_muon-betas_ode: [0.9, 0.95]
+      turbo_muon-betas_retnet: [0.9, 0.95]
+      turbo_muon-betas_mamba: [0.9, 0.95]
+      turbo_muon-betas_attention: [0.9, 0.95]
+      turbo_muon-betas_other: [0.9, 0.95]
+      turbo_muon-eps_embeddings: 1e-8
+      turbo_muon-eps_norms: 1e-8
+      turbo_muon-eps_ode: 1e-8
+      turbo_muon-eps_retnet: 1e-8
+      turbo_muon-eps_mamba: 1e-8
+      turbo_muon-eps_attention: 1e-8
+      turbo_muon-eps_other: 1e-8
+      turbo_muon-momentum: 0.95
+      turbo_muon-nesterov: true
+      turbo_muon-ns_steps: 4
+      turbo_muon-ns_eps: 1e-7
+  scheduler_total_steps: 12000
+  scheduler_warmup_ratio: 0.10
+  scheduler_type: cosine
+  grad_clip_max_norm: 5.0
+  inf_post_clip_threshold: 100.0
+  max_nan_retries: 4
+  checkpoint_every_n_steps: 500
+  max_rolling_checkpoints: 3
+  num_best_checkpoints: 2
+  nan_check_interval: 10
+  log_gradient_stats: true
+  gradient_log_interval: 10
+  csv_log_path: "training_metrics_es_arch_hybrid_turbo_muon.csv"
+  csv_rotate_on_schema_change: true
+  gpu_metrics_backend: nvml
+  nvml_device_index: 0
+  enable_block_grad_norms: true
+  telemetry_log_interval: 5
+  use_galore: false
+  galore_rank: 64
+  galore_update_interval: 1
+  galore_scale: 1.0
+  galore_max_dim: 4096
