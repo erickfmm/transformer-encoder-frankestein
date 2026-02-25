@@ -20,6 +20,18 @@ def _run_train(args: argparse.Namespace) -> int:
         argv.extend(["--batch-size", str(args.batch_size)])
     if args.model_mode:
         argv.extend(["--model-mode", args.model_mode])
+    if args.gpu_temp_guard is True:
+        argv.append("--gpu-temp-guard")
+    elif args.gpu_temp_guard is False:
+        argv.append("--no-gpu-temp-guard")
+    if args.gpu_temp_pause_threshold_c is not None:
+        argv.extend(["--gpu-temp-pause-threshold-c", str(args.gpu_temp_pause_threshold_c)])
+    if args.gpu_temp_resume_threshold_c is not None:
+        argv.extend(["--gpu-temp-resume-threshold-c", str(args.gpu_temp_resume_threshold_c)])
+    if args.gpu_temp_critical_threshold_c is not None:
+        argv.extend(["--gpu-temp-critical-threshold-c", str(args.gpu_temp_critical_threshold_c)])
+    if args.gpu_temp_poll_interval_seconds is not None:
+        argv.extend(["--gpu-temp-poll-interval-seconds", str(args.gpu_temp_poll_interval_seconds)])
     result = train_main(argv)
     return int(result) if isinstance(result, int) else 0
 
@@ -189,6 +201,14 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--batch-size", type=int, default=None)
     train_parser.add_argument("--model-mode", choices=["frankenstein", "mini"], default=None)
     train_parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
+    gpu_temp_group = train_parser.add_mutually_exclusive_group()
+    gpu_temp_group.add_argument("--gpu-temp-guard", dest="gpu_temp_guard", action="store_true")
+    gpu_temp_group.add_argument("--no-gpu-temp-guard", dest="gpu_temp_guard", action="store_false")
+    train_parser.set_defaults(gpu_temp_guard=None)
+    train_parser.add_argument("--gpu-temp-pause-threshold-c", type=float, default=None)
+    train_parser.add_argument("--gpu-temp-resume-threshold-c", type=float, default=None)
+    train_parser.add_argument("--gpu-temp-critical-threshold-c", type=float, default=None)
+    train_parser.add_argument("--gpu-temp-poll-interval-seconds", type=float, default=None)
     train_parser.set_defaults(func=_run_train)
 
     deploy_parser = subparsers.add_parser("deploy", help="Convert checkpoint to deployment artifacts")

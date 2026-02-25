@@ -15,13 +15,34 @@ The example presets are stored in `src/training/configs/examples/`.
 ### CLI (terminal)
 ```bash
 # Run MLM example
-python -m src.cli train --config src/training/configs/examples/es_mlm_beto_adamw.yaml --device cuda
+python -m src.cli train \
+  --config src/training/configs/examples/es_mlm_beto_adamw.yaml \
+  --device cuda \
+  --gpu-temp-guard \
+  --gpu-temp-pause-threshold-c 90 \
+  --gpu-temp-resume-threshold-c 80 \
+  --gpu-temp-critical-threshold-c 95 \
+  --gpu-temp-poll-interval-seconds 30
 
 # Run custom architecture MLM example
-python -m src.cli train --config src/training/configs/examples/es_arch_moe_titan_ademamix.yaml --device cuda
+python -m src.cli train \
+  --config src/training/configs/examples/es_arch_moe_titan_ademamix.yaml \
+  --device cuda \
+  --gpu-temp-guard \
+  --gpu-temp-pause-threshold-c 90 \
+  --gpu-temp-resume-threshold-c 80 \
+  --gpu-temp-critical-threshold-c 95 \
+  --gpu-temp-poll-interval-seconds 30
 
 # Run SBERT finetuning example
-python -m src.cli train --config src/training/configs/examples/es_sbert_modernbert_mean.yaml --device cuda
+python -m src.cli train \
+  --config src/training/configs/examples/es_sbert_modernbert_mean.yaml \
+  --device cuda \
+  --gpu-temp-guard \
+  --gpu-temp-pause-threshold-c 90 \
+  --gpu-temp-resume-threshold-c 80 \
+  --gpu-temp-critical-threshold-c 95 \
+  --gpu-temp-poll-interval-seconds 30
 ```
 
 ### Python interface
@@ -34,6 +55,15 @@ train_main([
     "src/training/configs/examples/es_mlm_beto_adamw.yaml",
     "--device",
     "cuda",
+    "--gpu-temp-guard",
+    "--gpu-temp-pause-threshold-c",
+    "90",
+    "--gpu-temp-resume-threshold-c",
+    "80",
+    "--gpu-temp-critical-threshold-c",
+    "95",
+    "--gpu-temp-poll-interval-seconds",
+    "30",
 ])
 
 # Option 2: Call the CLI programmatically
@@ -45,6 +75,15 @@ cli_main([
     "src/training/configs/examples/es_sbert_beto_mean.yaml",
     "--device",
     "cuda",
+    "--gpu-temp-guard",
+    "--gpu-temp-pause-threshold-c",
+    "90",
+    "--gpu-temp-resume-threshold-c",
+    "80",
+    "--gpu-temp-critical-threshold-c",
+    "95",
+    "--gpu-temp-poll-interval-seconds",
+    "30",
 ])
 ```
 

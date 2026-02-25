@@ -96,6 +96,11 @@ training:
   nvml_device_index: 0
   enable_block_grad_norms: true
   telemetry_log_interval: 1
+  gpu_temp_guard_enabled: true
+  gpu_temp_pause_threshold_c: 90.0
+  gpu_temp_resume_threshold_c: 80.0
+  gpu_temp_critical_threshold_c: null
+  gpu_temp_poll_interval_seconds: 30.0
   use_galore: false
   galore_rank: 64
   galore_update_interval: 1
@@ -260,6 +265,11 @@ Examples:
 - `nvml_device_index`: GPU index for NVML metrics.
 - `enable_block_grad_norms`: include fixed per-block grad norm columns.
 - `telemetry_log_interval`: interval in optimizer steps for heavy telemetry fields.
+- `gpu_temp_guard_enabled`: enable strict thermal guard for CUDA training.
+- `gpu_temp_pause_threshold_c`: pause when GPU temp exceeds this threshold.
+- `gpu_temp_resume_threshold_c`: resume when GPU temp is at/below this threshold.
+- `gpu_temp_critical_threshold_c`: optional critical marker for logging (pause/retry policy still applies).
+- `gpu_temp_poll_interval_seconds`: cooldown polling interval while paused.
 - `use_galore`: enable GaLore.
 - `galore_rank`: low-rank projection rank.
 - `galore_update_interval`: projection update frequency.
@@ -278,4 +288,5 @@ This is a hard migration.
 - `ffn_hidden_size` is required to match BERT/TinyBERT/EmbBERT.
 - `embedding_conv_kernel` allows replicating EmbBERT with kernel 32.
 - `standard_attn` and `sigmoid_attn` are compatible with `use_hope=false`.
-- Full GPU temperature/power/utilization metrics require `pynvml`; when unavailable, telemetry falls back to zero values without interrupting training.
+- Full GPU power/utilization/memory telemetry uses `pynvml` when available; non-guard telemetry may fall back to zeros.
+- When `gpu_temp_guard_enabled: true`, temperature reads are strict (`NVML` then `nvidia-smi`), and telemetry failure stops training immediately.

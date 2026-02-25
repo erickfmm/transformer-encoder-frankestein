@@ -25,9 +25,11 @@ import numpy as np
 try:
     from ..model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+    from ..utils.gpu_temp_guard import GPUTemperatureGuard
 except ImportError:
     from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
+    from utils.gpu_temp_guard import GPUTemperatureGuard
 
 # Setup logging
 logging.basicConfig(
@@ -223,7 +225,14 @@ class SBERTTrainer:
         warmup_steps: int = 1000,
         evaluation_steps: int = 5000,
         learning_rate: float = 2e-5,
-        use_amp: bool = True
+        use_amp: bool = True,
+        device: str = "auto",
+        gpu_temp_guard_enabled: bool = True,
+        gpu_temp_pause_threshold_c: float = 90.0,
+        gpu_temp_resume_threshold_c: float = 80.0,
+        gpu_temp_critical_threshold_c: Optional[float] = None,
+        gpu_temp_poll_interval_seconds: float = 30.0,
+        nvml_device_index: int = 0,
     ):
         """
         Initialize SBERT Trainer.
@@ -246,6 +255,16 @@ class SBERTTrainer:
         self.evaluation_steps = evaluation_steps
         self.learning_rate = learning_rate
         self.use_amp = use_amp
+        self.device = resolve_torch_device(device)
+        self.gpu_temp_guard = GPUTemperatureGuard(
+            enabled=bool(gpu_temp_guard_enabled),
+            device=self.device,
+            nvml_device_index=int(nvml_device_index),
+            pause_threshold_c=float(gpu_temp_pause_threshold_c),
+            resume_threshold_c=float(gpu_temp_resume_threshold_c),
+            critical_threshold_c=gpu_temp_critical_threshold_c,
+            poll_interval_seconds=float(gpu_temp_poll_interval_seconds),
+        )
         
         # Create output directory
         os.makedirs(output_dir, exist_ok=True)
@@ -257,6 +276,20 @@ class SBERTTrainer:
             'epochs': epochs,
             'learning_rate': learning_rate
         }
+        if self.gpu_temp_guard.is_active:
+            logger.info(
+                "GPU thermal guard enabled for SBERT (pause>%.1fC, resume<=%.1fC, poll=%.1fs, critical=%s)",
+                float(gpu_temp_pause_threshold_c),
+                float(gpu_temp_resume_threshold_c),
+                float(gpu_temp_poll_interval_seconds),
+                (
+                    f"{float(gpu_temp_critical_threshold_c):.1f}C"
+                    if gpu_temp_critical_threshold_c is not None
+                    else "disabled"
+                ),
+            )
+        else:
+            logger.info("GPU thermal guard disabled for SBERT")
     
     def load_dataset(
         self,
@@ -448,6 +481,11 @@ class SBERTTrainer:
             shuffle=True,
             batch_size=self.batch_size
         )
+        train_dataloader = _ThermalGuardedDataLoader(
+            dataloader=train_dataloader,
+            guard=self.gpu_temp_guard,
+            context_prefix="sbert.fit",
+        )
         
         # Define loss function (CosineSimilarityLoss for regression)
         train_loss = losses.CosineSimilarityLoss(self.model)
@@ -481,6 +519,31 @@ class SBERTTrainer:
         self.training_metadata['final_score'] = final_score
         
         return final_score
+
+
+class _ThermalGuardedDataLoader:
+    """Dataloader wrapper that blocks when the GPU is too hot."""
+
+    def __init__(self, dataloader: DataLoader, guard: GPUTemperatureGuard, context_prefix: str):
+        self._dataloader = dataloader
+        self._guard = guard
+        self._context_prefix = context_prefix
+
+    def __len__(self):
+        return len(self._dataloader)
+
+    def __iter__(self):
+        for batch_idx, batch in enumerate(self._dataloader):
+            result = self._guard.wait_until_safe(
+                context=f"{self._context_prefix} batch={batch_idx + 1}"
+            )
+            if result.paused:
+                logger.warning(
+                    "[ThermalGuard][SBERT] pause event: %s (temp=%.1fC)",
+                    result.repair_action,
+                    result.temp_c,
+                )
+            yield batch
 
 
 def main(argv=None):
@@ -521,10 +584,45 @@ def main(argv=None):
         choices=SUPPORTED_DEVICE_CHOICES,
         help="Device to run SBERT training on"
     )
+    gpu_temp_group = parser.add_mutually_exclusive_group()
+    gpu_temp_group.add_argument(
+        "--gpu-temp-guard",
+        dest="gpu_temp_guard",
+        action="store_true",
+        help="Enable GPU thermal guard for CUDA training.",
+    )
+    gpu_temp_group.add_argument(
+        "--no-gpu-temp-guard",
+        dest="gpu_temp_guard",
+        action="store_false",
+        help="Disable GPU thermal guard.",
+    )
+    parser.set_defaults(gpu_temp_guard=None)
+    parser.add_argument("--gpu-temp-pause-threshold-c", type=float, default=90.0)
+    parser.add_argument("--gpu-temp-resume-threshold-c", type=float, default=80.0)
+    parser.add_argument("--gpu-temp-critical-threshold-c", type=float, default=None)
+    parser.add_argument("--gpu-temp-poll-interval-seconds", type=float, default=30.0)
+    parser.add_argument("--nvml-device-index", type=int, default=0)
     
     args = parser.parse_args(argv)
     resolved_device = resolve_torch_device(args.device)
     logger.info(f"SBERT train device requested='{args.device}', resolved='{resolved_device}'")
+    gpu_temp_guard_enabled = True if args.gpu_temp_guard is None else bool(args.gpu_temp_guard)
+    if not resolved_device.startswith("cuda"):
+        gpu_temp_guard_enabled = False
+    if args.gpu_temp_pause_threshold_c <= 0:
+        raise ValueError("gpu_temp_pause_threshold_c must be > 0")
+    if args.gpu_temp_resume_threshold_c <= 0:
+        raise ValueError("gpu_temp_resume_threshold_c must be > 0")
+    if args.gpu_temp_resume_threshold_c >= args.gpu_temp_pause_threshold_c:
+        raise ValueError("gpu_temp_resume_threshold_c must be < gpu_temp_pause_threshold_c")
+    if args.gpu_temp_poll_interval_seconds <= 0:
+        raise ValueError("gpu_temp_poll_interval_seconds must be > 0")
+    if (
+        args.gpu_temp_critical_threshold_c is not None
+        and args.gpu_temp_critical_threshold_c <= 0
+    ):
+        raise ValueError("gpu_temp_critical_threshold_c must be > 0 when provided")
     
     # Setup
     logger.info("=" * 80)
@@ -578,7 +676,14 @@ def main(argv=None):
         warmup_steps=args.warmup_steps,
         evaluation_steps=args.evaluation_steps,
         learning_rate=args.learning_rate,
-        use_amp=not args.no_amp
+        use_amp=not args.no_amp,
+        device=resolved_device,
+        gpu_temp_guard_enabled=gpu_temp_guard_enabled,
+        gpu_temp_pause_threshold_c=args.gpu_temp_pause_threshold_c,
+        gpu_temp_resume_threshold_c=args.gpu_temp_resume_threshold_c,
+        gpu_temp_critical_threshold_c=args.gpu_temp_critical_threshold_c,
+        gpu_temp_poll_interval_seconds=args.gpu_temp_poll_interval_seconds,
+        nvml_device_index=args.nvml_device_index,
     )
     
     # Load dataset

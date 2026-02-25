@@ -43,6 +43,11 @@ Key train flags:
 - `--batch-size`
 - `--model-mode` (`frankenstein|mini`)
 - `--device`
+- `--gpu-temp-guard` / `--no-gpu-temp-guard`
+- `--gpu-temp-pause-threshold-c`
+- `--gpu-temp-resume-threshold-c`
+- `--gpu-temp-critical-threshold-c`
+- `--gpu-temp-poll-interval-seconds`
 
 ## 3. Configuration Schema (`src/training/configs/schema.yaml`)
 
@@ -112,6 +117,7 @@ Required core fields:
 - `nan_check_interval`, `log_gradient_stats`, `gradient_log_interval`
 - `csv_log_path`, `csv_rotate_on_schema_change`
 - `gpu_metrics_backend`, `nvml_device_index`, `enable_block_grad_norms`, `telemetry_log_interval`
+- `gpu_temp_guard_enabled`, `gpu_temp_pause_threshold_c`, `gpu_temp_resume_threshold_c`, `gpu_temp_critical_threshold_c`, `gpu_temp_poll_interval_seconds`
 - `use_galore`, `galore_rank`, `galore_update_interval`, `galore_scale`, `galore_max_dim`
 
 Optional dataset locality fields:

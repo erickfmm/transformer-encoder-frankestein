@@ -123,6 +123,7 @@ Training options include:
 - Stability/recovery: `grad_clip_max_norm`, `inf_post_clip_threshold`, `max_nan_retries`, `nan_check_interval`
 - Checkpoint policy: `checkpoint_every_n_steps`, `max_rolling_checkpoints`, `num_best_checkpoints`
 - Logging/telemetry: `log_gradient_stats`, `gradient_log_interval`, `csv_log_path`, `csv_rotate_on_schema_change`, `gpu_metrics_backend`, `nvml_device_index`, `enable_block_grad_norms`, `telemetry_log_interval`
+- Thermal guard: `gpu_temp_guard_enabled`, `gpu_temp_pause_threshold_c`, `gpu_temp_resume_threshold_c`, `gpu_temp_critical_threshold_c`, `gpu_temp_poll_interval_seconds`
 - GaLore controls: `use_galore`, `galore_rank`, `galore_update_interval`, `galore_scale`, `galore_max_dim`
 
 Supported optimizer classes:

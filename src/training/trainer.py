@@ -19,9 +19,11 @@ import torch.nn.functional as F
 
 try:
     from ..utils.storage_manager import StorageManager
+    from ..utils.gpu_temp_guard import GPUTelemetryError, GPUTemperatureGuard
     from ..model.optimizer.factory import build_optimizer
 except ImportError:
     from utils.storage_manager import StorageManager
+    from utils.gpu_temp_guard import GPUTelemetryError, GPUTemperatureGuard
     from model.optimizer.factory import build_optimizer
 
 
@@ -36,6 +38,11 @@ class TrainingConfig:
     nvml_device_index: int = 0
     enable_block_grad_norms: bool = True
     telemetry_log_interval: int = 1
+    gpu_temp_guard_enabled: bool = True
+    gpu_temp_pause_threshold_c: float = 90.0
+    gpu_temp_resume_threshold_c: float = 80.0
+    gpu_temp_critical_threshold_c: Optional[float] = None
+    gpu_temp_poll_interval_seconds: float = 30.0
     
     # Rolling Checkpoints
     checkpoint_every_n_steps: int = 500  # Save every N steps
@@ -136,6 +143,17 @@ class TitanTrainer:
         self._nvml_handle = None
         self._nvml_disabled = False
         self._nvml_warning_logged = False
+        self._last_guard_temp_c: Optional[float] = None
+        self._pending_thermal_repair_action = "none"
+        self.gpu_temp_guard = GPUTemperatureGuard(
+            enabled=bool(self.training_config.gpu_temp_guard_enabled),
+            device=str(self.device),
+            nvml_device_index=int(self.training_config.nvml_device_index),
+            pause_threshold_c=float(self.training_config.gpu_temp_pause_threshold_c),
+            resume_threshold_c=float(self.training_config.gpu_temp_resume_threshold_c),
+            critical_threshold_c=self.training_config.gpu_temp_critical_threshold_c,
+            poll_interval_seconds=float(self.training_config.gpu_temp_poll_interval_seconds),
+        )
 
         self._init_csv_logger()
         
@@ -195,6 +213,34 @@ class TitanTrainer:
             "head": 0.0,
             "other": 0.0,
         }
+
+    def _append_repair_action(self, current: str, extra: str) -> str:
+        cur = str(current or "none").strip() or "none"
+        add = str(extra or "none").strip() or "none"
+        if add == "none":
+            return cur
+        if cur == "none":
+            return add
+        existing = set(cur.split("+"))
+        if add in existing:
+            return cur
+        return f"{cur}+{add}"
+
+    def _enforce_thermal_guard(self, epoch: int, batch_idx: int) -> str:
+        if not self.gpu_temp_guard.is_active:
+            self._last_guard_temp_c = None
+            return "none"
+        result = self.gpu_temp_guard.wait_until_safe(
+            context=f"mlm epoch={epoch + 1} batch={batch_idx + 1}"
+        )
+        self._last_guard_temp_c = result.temp_c
+        return result.repair_action
+
+    def _merge_guard_temperature(self, telemetry: Dict[str, float]) -> Dict[str, float]:
+        merged = dict(telemetry)
+        if self.gpu_temp_guard.is_active and self._last_guard_temp_c is not None:
+            merged["gpu_temp_c"] = float(self._last_guard_temp_c)
+        return merged
 
     def _read_csv_header(self, csv_path: str) -> Optional[List[str]]:
         if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
@@ -771,6 +817,20 @@ class TitanTrainer:
         )
         logging.info(f"🔄 Recursion Loops: {getattr(self.config, 'num_loops', 'n/a')}")
         logging.info(f"📐 Gradient Accumulation: {self.gradient_accumulation_steps} steps")
+        if self.gpu_temp_guard.is_active:
+            logging.info(
+                "🌡️ GPU thermal guard enabled (pause>%.1fC, resume<=%.1fC, poll=%.1fs, critical=%s)",
+                float(self.training_config.gpu_temp_pause_threshold_c),
+                float(self.training_config.gpu_temp_resume_threshold_c),
+                float(self.training_config.gpu_temp_poll_interval_seconds),
+                (
+                    f"{float(self.training_config.gpu_temp_critical_threshold_c):.1f}C"
+                    if self.training_config.gpu_temp_critical_threshold_c is not None
+                    else "disabled"
+                ),
+            )
+        else:
+            logging.info("🌡️ GPU thermal guard disabled")
 
     def _forward_mlm_logits(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         """Forward pass compatible with custom models and HF masked-LM outputs."""
@@ -889,9 +949,15 @@ class TitanTrainer:
         
         for batch_idx, batch in enumerate(progress_bar):
             try:
+                thermal_action = self._enforce_thermal_guard(epoch, batch_idx)
+                if thermal_action != "none":
+                    self._pending_thermal_repair_action = self._append_repair_action(
+                        self._pending_thermal_repair_action,
+                        thermal_action,
+                    )
                 # Move to device
                 batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
-                repair_action = "none"
+                repair_action = self._pending_thermal_repair_action
                 retry_count = 0
                 batch_done = False
 
@@ -905,7 +971,10 @@ class TitanTrainer:
                         )
 
                         if self._check_for_nan(loss * self.gradient_accumulation_steps, batch_idx, batch):
-                            repair_action = f"nan_loss_retry_{retry_count + 1}"
+                            repair_action = self._append_repair_action(
+                                repair_action,
+                                f"nan_loss_retry_{retry_count + 1}",
+                            )
                             self.optimizer.zero_grad(set_to_none=True)
                             self._scale_learning_rate(0.5)
                             retry_count += 1
@@ -933,7 +1002,10 @@ class TitanTrainer:
 
                     # Repair policy for NaN gradients: skip step, zero grad, LR*0.75 retry up to N times
                     if grad_stats["has_nan"]:
-                        repair_action = f"nan_grad_retry_{retry_count + 1}"
+                        repair_action = self._append_repair_action(
+                            repair_action,
+                            f"nan_grad_retry_{retry_count + 1}",
+                        )
                         self.optimizer.zero_grad(set_to_none=True)
                         self._scale_learning_rate(0.75)  # Less aggressive reduction (was 0.5)
                         retry_count += 1
@@ -966,7 +1038,12 @@ class TitanTrainer:
 
                         telemetry_interval = max(int(self.training_config.telemetry_log_interval), 1)
                         should_log_heavy = ((self.global_step + 1) % telemetry_interval == 0)
-                        gpu_telemetry = self._get_gpu_telemetry() if should_log_heavy else self._get_default_gpu_telemetry()
+                        gpu_telemetry = (
+                            self._get_gpu_telemetry()
+                            if should_log_heavy
+                            else self._get_default_gpu_telemetry()
+                        )
+                        gpu_telemetry = self._merge_guard_temperature(gpu_telemetry)
                         block_grad_norms = (
                             self._collect_block_grad_norms()
                             if should_log_heavy
@@ -984,7 +1061,10 @@ class TitanTrainer:
                         # Repair policy for Inf/exploding gradients
                         if grad_stats["has_inf"] or post_clip_bad:
                             self.current_epoch_had_inf = True
-                            repair_action = "inf_skip_step_lr_half"
+                            repair_action = self._append_repair_action(
+                                repair_action,
+                                "inf_skip_step_lr_half",
+                            )
                             self._scale_learning_rate(0.5)
 
                             self.global_step += 1
@@ -1007,6 +1087,7 @@ class TitanTrainer:
                                 clip_ratio=clip_ratio,
                                 effective_batch_size=effective_batch_size,
                             )
+                            self._pending_thermal_repair_action = "none"
                             self.optimizer.zero_grad(set_to_none=True)
                             optimizer_window_start = time.perf_counter()
                             batch_done = True
@@ -1042,6 +1123,7 @@ class TitanTrainer:
                             clip_ratio=clip_ratio,
                             effective_batch_size=effective_batch_size,
                         )
+                        self._pending_thermal_repair_action = "none"
                         optimizer_window_start = time.perf_counter()
 
                         if self.global_step % self.training_config.checkpoint_every_n_steps == 0:
@@ -1085,6 +1167,13 @@ class TitanTrainer:
                         )
                 
             except RuntimeError as e:
+                if isinstance(e, GPUTelemetryError):
+                    logging.error(
+                        "Fatal GPU telemetry error at batch %s: %s. Stopping training immediately.",
+                        batch_idx,
+                        e,
+                    )
+                    raise
                 if "out of memory" in str(e):
                     logging.error(f"OOM at batch {batch_idx}, clearing cache and continuing...")
                     if torch.cuda.is_available():
