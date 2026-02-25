@@ -24,6 +24,7 @@ model:
   ffn_hidden_size: 3072
   ffn_activation: gelu
 training:
+  task: mlm
   batch_size: 4
   dataloader_workers: 2
   max_length: 512

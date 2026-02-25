@@ -44,8 +44,10 @@ class TormentedBertSentenceTransformer:
         self,
         model_config: Optional[UltraConfig] = None,
         pretrained_path: Optional[str] = None,
+        base_model_name_or_path: Optional[str] = None,
         max_seq_length: int = 512,
         pooling_mode: str = "mean",
+        trust_remote_code: bool = False,
         device: str = "auto"
     ):
         """
@@ -54,12 +56,21 @@ class TormentedBertSentenceTransformer:
         Args:
             model_config: UltraConfig for the model (if training from scratch)
             pretrained_path: Path to pretrained checkpoint
+            base_model_name_or_path: Any HF/local model path compatible with sentence-transformers
             max_seq_length: Maximum sequence length
             pooling_mode: Pooling strategy ("mean", "cls", "max")
         """
         self.max_seq_length = max_seq_length
         self.pooling_mode = pooling_mode
+        self.trust_remote_code = bool(trust_remote_code)
         self.device = resolve_torch_device(device)
+
+        if base_model_name_or_path:
+            logger.info(f"Loading base model for SBERT from {base_model_name_or_path}")
+            self.base_model = None
+            self.config = None
+            self.model = self._build_hf_sentence_transformer(base_model_name_or_path)
+            return
         
         # Initialize or load base model
         if pretrained_path and os.path.exists(pretrained_path):
@@ -161,6 +172,39 @@ class TormentedBertSentenceTransformer:
         )
         
         return model
+
+    def _build_hf_sentence_transformer(self, base_model_name_or_path: str) -> SentenceTransformer:
+        """Build SentenceTransformer from a base HF model identifier/path."""
+        transformer_kwargs = {
+            "max_seq_length": self.max_seq_length,
+        }
+
+        # sentence-transformers changed this constructor across versions.
+        try:
+            word_embedding_model = models.Transformer(
+                base_model_name_or_path,
+                max_seq_length=self.max_seq_length,
+                model_args={"trust_remote_code": self.trust_remote_code},
+                tokenizer_args={"trust_remote_code": self.trust_remote_code},
+            )
+        except TypeError:
+            word_embedding_model = models.Transformer(
+                base_model_name_or_path,
+                **transformer_kwargs,
+            )
+
+        pooling_model = models.Pooling(
+            word_embedding_model.get_word_embedding_dimension(),
+            pooling_mode_mean_tokens=(self.pooling_mode == "mean"),
+            pooling_mode_cls_token=(self.pooling_mode == "cls"),
+            pooling_mode_max_tokens=(self.pooling_mode == "max")
+        )
+
+        normalize = models.Normalize()
+        return SentenceTransformer(
+            modules=[word_embedding_model, pooling_model, normalize],
+            device=self.device,
+        )
     
     def get_model(self) -> SentenceTransformer:
         """Get the SentenceTransformer model"""
@@ -444,16 +488,27 @@ def main(argv=None):
     import argparse
     
     parser = argparse.ArgumentParser(description="Train SBERT on TormentedBert")
+    parser.add_argument("--base-model", type=str, default=None, help="HF model id/path for base-model SBERT finetuning")
     parser.add_argument("--pretrained", type=str, help="Path to pretrained checkpoint")
     parser.add_argument("--output_dir", type=str, default="./output/sbert_tormented_v2")
+    parser.add_argument(
+        "--dataset_name",
+        type=str,
+        default="erickfmm/agentlans__multilingual-sentences__paired_10_sts",
+        help="Hugging Face dataset name for SBERT training",
+    )
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--warmup_steps", type=int, default=1000)
+    parser.add_argument("--evaluation_steps", type=int, default=5000)
     parser.add_argument("--learning_rate", type=float, default=2e-5)
     parser.add_argument("--max_train_samples", type=int, default=None)
     parser.add_argument("--max_eval_samples", type=int, default=10000)
+    parser.add_argument("--max_seq_length", type=int, default=512)
     parser.add_argument("--hidden_size", type=int, default=768)
     parser.add_argument("--num_layers", type=int, default=12)
     parser.add_argument("--pooling_mode", type=str, default="mean", choices=["mean", "cls", "max"])
+    parser.add_argument("--trust_remote_code", action="store_true", help="Allow remote code for HF models/tokenizers")
     parser.add_argument("--no_amp", action="store_true", help="Disable automatic mixed precision")
     parser.add_argument("--no_resample", action="store_true", 
                        help="Don't resample dataset (default: undersample to normal distribution centered at 0)")
@@ -475,11 +530,23 @@ def main(argv=None):
     logger.info("=" * 80)
     logger.info("SBERT Training on TORMENTED-BERT-Frankenstein v2")
     logger.info("=" * 80)
+
+    if args.base_model and args.pretrained:
+        raise ValueError("--base-model and --pretrained are mutually exclusive")
     
     # Create model
-    if args.pretrained:
+    if args.base_model:
+        model_wrapper = TormentedBertSentenceTransformer(
+            base_model_name_or_path=args.base_model,
+            max_seq_length=args.max_seq_length,
+            pooling_mode=args.pooling_mode,
+            trust_remote_code=args.trust_remote_code,
+            device=resolved_device,
+        )
+    elif args.pretrained:
         model_wrapper = TormentedBertSentenceTransformer(
             pretrained_path=args.pretrained,
+            max_seq_length=args.max_seq_length,
             pooling_mode=args.pooling_mode,
             device=resolved_device,
         )
@@ -494,6 +561,7 @@ def main(argv=None):
         )
         model_wrapper = TormentedBertSentenceTransformer(
             model_config=config,
+            max_seq_length=args.max_seq_length,
             pooling_mode=args.pooling_mode,
             device=resolved_device,
         )
@@ -507,12 +575,15 @@ def main(argv=None):
         output_dir=args.output_dir,
         batch_size=args.batch_size,
         epochs=args.epochs,
+        warmup_steps=args.warmup_steps,
+        evaluation_steps=args.evaluation_steps,
         learning_rate=args.learning_rate,
         use_amp=not args.no_amp
     )
     
     # Load dataset
     trainer.load_dataset(
+        dataset_name=args.dataset_name,
         max_train_samples=args.max_train_samples,
         max_eval_samples=args.max_eval_samples,
         resample_balanced=not args.no_resample,

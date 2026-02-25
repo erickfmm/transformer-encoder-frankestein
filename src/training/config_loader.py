@@ -1,6 +1,7 @@
 import os
+from dataclasses import dataclass
 from dataclasses import fields
-from typing import Dict, Tuple, Any
+from typing import Dict, Any, Optional
 
 import yaml
 
@@ -16,29 +17,84 @@ def _field_names(cls) -> set:
     return {field.name for field in fields(cls)}
 
 
-def load_training_config(path: str) -> Tuple[str, UltraConfig, TrainingConfig, Dict[str, Any]]:
+@dataclass
+class LoadedTrainingConfig:
+    task: str
+    model_class: Optional[str]
+    model_config: Optional[UltraConfig]
+    base_model: Optional[str]
+    tokenizer_config: Dict[str, Any]
+    training_config: TrainingConfig
+    training_runtime: Dict[str, Any]
+
+
+def load_training_config(path: str) -> LoadedTrainingConfig:
     with open(path, "r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
 
+    base_model = data.get("base_model")
+    if base_model is not None:
+        base_model = str(base_model).strip()
+        if not base_model:
+            raise ValueError("base_model must be a non-empty string when provided")
+
+    model_class = data.get("model_class")
+    if model_class is not None:
+        model_class = str(model_class).strip().lower()
+
     model_data = data.get("model", {}) or {}
     training_data = data.get("training", {}) or {}
+    tokenizer_config = data.get("tokenizer", {}) or {}
+    if not isinstance(tokenizer_config, dict):
+        raise ValueError("tokenizer must be an object when provided")
 
-    model_config = UltraConfig(**model_data)
+    task = str(training_data.get("task", "")).strip().lower()
+    if task not in {"mlm", "sbert"}:
+        raise ValueError("training.task is required and must be one of: mlm, sbert")
+
+    model_config: Optional[UltraConfig] = None
+    if not base_model:
+        if not model_data:
+            raise ValueError("model is required when base_model is not provided")
+        model_config = UltraConfig(**model_data)
+        if not model_class:
+            model_class = "frankenstein"
+    else:
+        # model/model_class are intentionally ignored when base_model is set.
+        model_class = model_class or "base_model"
+
+    if base_model and task == "mlm":
+        tokenizer_name_or_path = tokenizer_config.get("name_or_path")
+        if not isinstance(tokenizer_name_or_path, str) or not tokenizer_name_or_path.strip():
+            raise ValueError(
+                "tokenizer.name_or_path must be provided for MLM training when base_model is set"
+            )
 
     optimizer_data = training_data.get("optimizer")
-    if not isinstance(optimizer_data, dict):
-        raise ValueError(
-            "Missing required 'training.optimizer' object in config. "
-            "Legacy top-level optimizer fields were removed."
-        )
+    if task == "mlm":
+        if not isinstance(optimizer_data, dict):
+            raise ValueError(
+                "Missing required 'training.optimizer' object in config. "
+                "Legacy top-level optimizer fields were removed."
+            )
 
-    optimizer_class = optimizer_data.get("optimizer_class")
-    if not isinstance(optimizer_class, str) or not optimizer_class.strip():
-        raise ValueError("training.optimizer.optimizer_class must be a non-empty string")
+        optimizer_class = optimizer_data.get("optimizer_class")
+        if not isinstance(optimizer_class, str) or not optimizer_class.strip():
+            raise ValueError("training.optimizer.optimizer_class must be a non-empty string")
 
-    optimizer_parameters = optimizer_data.get("parameters", {})
-    if not isinstance(optimizer_parameters, dict):
-        raise ValueError("training.optimizer.parameters must be an object")
+        optimizer_parameters = optimizer_data.get("parameters", {})
+        if not isinstance(optimizer_parameters, dict):
+            raise ValueError("training.optimizer.parameters must be an object")
+    else:
+        optimizer_class = "adamw"
+        optimizer_parameters = {}
+        if isinstance(optimizer_data, dict):
+            cfg_optimizer_class = optimizer_data.get("optimizer_class")
+            if isinstance(cfg_optimizer_class, str) and cfg_optimizer_class.strip():
+                optimizer_class = cfg_optimizer_class
+            cfg_optimizer_params = optimizer_data.get("parameters", {})
+            if isinstance(cfg_optimizer_params, dict):
+                optimizer_parameters = cfg_optimizer_params
 
     training_fields = _field_names(TrainingConfig)
     training_kwargs = {k: v for k, v in training_data.items() if k in training_fields}
@@ -49,8 +105,15 @@ def load_training_config(path: str) -> Tuple[str, UltraConfig, TrainingConfig, D
     runtime_keys = set(training_data.keys()) - training_fields - {"optimizer"}
     training_runtime = {k: training_data[k] for k in runtime_keys}
 
-    model_class = data.get("model_class", "frankenstein")
-    return model_class, model_config, training_config, training_runtime
+    return LoadedTrainingConfig(
+        task=task,
+        model_class=model_class,
+        model_config=model_config,
+        base_model=base_model,
+        tokenizer_config=tokenizer_config,
+        training_config=training_config,
+        training_runtime=training_runtime,
+    )
 
 
 def list_config_paths(config_dir: str) -> Dict[str, str]:

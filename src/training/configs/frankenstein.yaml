@@ -29,6 +29,7 @@ model:
   ffn_hidden_size: 2048
   ffn_activation: silu
 training:
+  task: mlm
   batch_size: 2
   dataloader_workers: 2
   max_length: 512

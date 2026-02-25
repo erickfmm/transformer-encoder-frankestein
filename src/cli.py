@@ -97,14 +97,22 @@ def _run_sbert_train(args: argparse.Namespace) -> int:
     argv = [
         "--output_dir",
         args.output_dir,
+        "--dataset_name",
+        args.dataset_name,
         "--batch_size",
         str(args.batch_size),
         "--epochs",
         str(args.epochs),
+        "--warmup_steps",
+        str(args.warmup_steps),
+        "--evaluation_steps",
+        str(args.evaluation_steps),
         "--learning_rate",
         str(args.learning_rate),
         "--max_eval_samples",
         str(args.max_eval_samples),
+        "--max_seq_length",
+        str(args.max_seq_length),
         "--hidden_size",
         str(args.hidden_size),
         "--num_layers",
@@ -116,6 +124,8 @@ def _run_sbert_train(args: argparse.Namespace) -> int:
         "--device",
         args.device,
     ]
+    if args.base_model:
+        argv.extend(["--base-model", args.base_model])
     if args.pretrained:
         argv.extend(["--pretrained", args.pretrained])
     if args.max_train_samples is not None:
@@ -124,6 +134,8 @@ def _run_sbert_train(args: argparse.Namespace) -> int:
         argv.append("--no_amp")
     if args.no_resample:
         argv.append("--no_resample")
+    if args.trust_remote_code:
+        argv.append("--trust_remote_code")
     result = sbert_train_main(argv)
     return int(result) if isinstance(result, int) else 0
 
@@ -208,16 +220,26 @@ def build_parser() -> argparse.ArgumentParser:
     infer_parser.set_defaults(func=_run_infer)
 
     sbert_train_parser = subparsers.add_parser("sbert-train", help="Train SBERT model")
+    sbert_train_parser.add_argument("--base-model", type=str, default=None)
     sbert_train_parser.add_argument("--pretrained", type=str, default=None)
     sbert_train_parser.add_argument("--output_dir", type=str, default="./output/sbert_tormented_v2")
+    sbert_train_parser.add_argument(
+        "--dataset_name",
+        type=str,
+        default="erickfmm/agentlans__multilingual-sentences__paired_10_sts",
+    )
     sbert_train_parser.add_argument("--batch_size", type=int, default=16)
     sbert_train_parser.add_argument("--epochs", type=int, default=4)
+    sbert_train_parser.add_argument("--warmup_steps", type=int, default=1000)
+    sbert_train_parser.add_argument("--evaluation_steps", type=int, default=5000)
     sbert_train_parser.add_argument("--learning_rate", type=float, default=2e-5)
     sbert_train_parser.add_argument("--max_train_samples", type=int, default=None)
     sbert_train_parser.add_argument("--max_eval_samples", type=int, default=10000)
+    sbert_train_parser.add_argument("--max_seq_length", type=int, default=512)
     sbert_train_parser.add_argument("--hidden_size", type=int, default=768)
     sbert_train_parser.add_argument("--num_layers", type=int, default=12)
     sbert_train_parser.add_argument("--pooling_mode", choices=["mean", "cls", "max"], default="mean")
+    sbert_train_parser.add_argument("--trust_remote_code", action="store_true")
     sbert_train_parser.add_argument("--no_amp", action="store_true")
     sbert_train_parser.add_argument("--no_resample", action="store_true")
     sbert_train_parser.add_argument("--resample_std", type=float, default=0.3)

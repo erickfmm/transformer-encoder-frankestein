@@ -10,39 +10,27 @@ This directory contains YAML presets. Each file describes the model (`model`) an
 - `standard_hope.yaml`
 - `tinybert.yaml`
 - `embbert.yaml`
+- `modernbert_continual.yaml`
+- `modernbert_sbert.yaml`
 - `schema.yaml` (JSON Schema in YAML form)
 
 ## General Structure
 
 ```yaml
+# Option A: train custom Tormented model
 model_class: frankenstein|mini
-model:
-  # UltraConfig
-  vocab_size: 50000
-  hidden_size: 768
-  num_layers: 12
-  num_loops: 1
-  num_heads: 12
-  retention_heads: 12
-  num_experts: 4
-  top_k_experts: 2
-  dropout: 0.1
-  layer_pattern: [standard_attn]
-  ode_solver: rk4
-  ode_steps: 2
-  use_bitnet: false
-  norm_type: layer_norm|dynamic_tanh|derf
-  use_factorized_embedding: false
-  factorized_embedding_dim: 128
-  use_embedding_conv: false
-  embedding_conv_kernel: 3
-  hope_base: 10000.0
-  hope_damping: 0.01
-  use_hope: true
-  use_moe: true
-  ffn_hidden_size: 3072
-  ffn_activation: silu|gelu
+model: # UltraConfig
+  ...
+
+# Option B: continual pretraining/finetuning from any HF/local base model
+base_model: answerdotai/ModernBERT-base
+tokenizer:
+  name_or_path: answerdotai/ModernBERT-base
+  use_fast: true
+  trust_remote_code: false
+
 training:
+  task: mlm|sbert
   # TrainingConfig + runtime
   batch_size: 4
   dataloader_workers: 2
@@ -55,6 +43,8 @@ training:
   local_parquet_dir: "/path/to/parquet"  # optional
   prefer_local_cache: true
   stream_local_parquet: true
+  join_temp_data_context_window: 0   # e.g. 2000 or 8192 to join cached temp_data
+  join_temp_data_min_remainder_tokens: 128
   use_amp: false
   gradient_accumulation_steps: 4
   optimizer:
@@ -111,6 +101,24 @@ training:
   galore_update_interval: 1
   galore_scale: 1.0
   galore_max_dim: 4096
+
+  # Used when task == sbert
+  sbert:
+    dataset_name: "erickfmm/agentlans__multilingual-sentences__paired_10_sts"
+    output_dir: "./output/sbert_base_model"
+    batch_size: 16
+    epochs: 4
+    warmup_steps: 1000
+    evaluation_steps: 5000
+    learning_rate: 2e-5
+    max_train_samples: null
+    max_eval_samples: 10000
+    max_seq_length: 512
+    pooling_mode: mean
+    trust_remote_code: false
+    use_amp: true
+    resample_balanced: true
+    resample_std: 0.3
 ```
 
 ## Optimizer Chooser
@@ -179,6 +187,15 @@ Examples:
 
 ### model_class
 - `frankenstein` or `mini`.
+- Ignored when `base_model` is set.
+
+### base_model
+- Optional HF model id/local path.
+- When set, `model_class` and `model` can be omitted and ignored by runtime.
+
+### tokenizer
+- Required for `training.task: mlm` when `base_model` is set.
+- Uses `AutoTokenizer` via `tokenizer.name_or_path`.
 
 ### model (UltraConfig)
 - `vocab_size`: vocabulary size.
@@ -207,6 +224,8 @@ Examples:
 - `ffn_activation`: `silu` or `gelu`.
 
 ### training (TrainingConfig + runtime)
+- `task`: `mlm` or `sbert` (required).
+  - `sbert` task requires `base_model`.
 - `batch_size`: dataloader batch size.
 - `dataloader_workers`: dataloader workers.
 - `max_length`: max sequence length.
@@ -218,6 +237,8 @@ Examples:
 - `local_parquet_dir`: local parquet path (optional).
 - `prefer_local_cache`: prefer local cache.
 - `stream_local_parquet`: stream from local parquet.
+- `join_temp_data_context_window`: if >0, joins cached `temp_data` chunks into this context size.
+- `join_temp_data_min_remainder_tokens`: keep final joined remainder only if content tokens >= this value.
 - `use_amp`: mixed precision.
 - `gradient_accumulation_steps`: gradient accumulation steps.
 - `optimizer`: optimizer chooser object with `optimizer_class` and prefixed `parameters`.
@@ -244,10 +265,13 @@ Examples:
 - `galore_update_interval`: projection update frequency.
 - `galore_scale`: projected gradient scale.
 - `galore_max_dim`: max tensor size for GaLore.
+- `sbert`: block for SBERT-specific settings when `task: sbert`.
 
 ## Migration Note
 
-This is a hard migration. Legacy top-level optimizer keys (`lr_*`, `wd_*`, `betas_*`, `eps_*`) are no longer accepted in `training`.
+This is a hard migration.
+- `training.task` is required.
+- Legacy top-level optimizer keys (`lr_*`, `wd_*`, `betas_*`, `eps_*`) are no longer accepted in `training`.
 
 ## Notes
 

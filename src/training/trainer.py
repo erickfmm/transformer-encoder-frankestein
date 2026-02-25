@@ -20,11 +20,9 @@ import torch.nn.functional as F
 try:
     from ..utils.storage_manager import StorageManager
     from ..model.optimizer.factory import build_optimizer
-    from ..model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 except ImportError:
     from utils.storage_manager import StorageManager
     from model.optimizer.factory import build_optimizer
-    from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 
 
 # ==================== TRAINING CONFIGURATION ====================
@@ -86,7 +84,7 @@ class TrainingConfig:
 class TitanTrainer:
     """Advanced trainer for TITAN-BERT-ULTRA with specialized optimizations"""
     
-    def __init__(self, model: torch.nn.Module, config: UltraConfig,
+    def __init__(self, model: torch.nn.Module, config: Optional[Any],
                  training_config: TrainingConfig = None,
                  device: str = None): #torch.device = None):
         self.model = model
@@ -520,11 +518,15 @@ class TitanTrainer:
         
         # Log config that might affect stability
         logging.error("Model configuration (stability-relevant):")
-        logging.error(f"  - BitNet enabled: {self.config.use_bitnet}")
-        logging.error(f"  - ODE solver: {self.config.ode_solver}, steps: {self.config.ode_steps}")
-        logging.error(f"  - Layer pattern: {self.config.layer_pattern}")
-        logging.error(f"  - Num loops: {self.config.num_loops}")
-        logging.error(f"  - Dropout: {self.config.dropout}")
+        logging.error(f"  - BitNet enabled: {getattr(self.config, 'use_bitnet', 'n/a')}")
+        logging.error(
+            "  - ODE solver: %s, steps: %s",
+            getattr(self.config, "ode_solver", "n/a"),
+            getattr(self.config, "ode_steps", "n/a"),
+        )
+        logging.error(f"  - Layer pattern: {getattr(self.config, 'layer_pattern', 'n/a')}")
+        logging.error(f"  - Num loops: {getattr(self.config, 'num_loops', 'n/a')}")
+        logging.error(f"  - Dropout: {getattr(self.config, 'dropout', 'n/a')}")
         
         logging.error("=" * 80)
         
@@ -760,16 +762,44 @@ class TitanTrainer:
             torch.backends.cudnn.allow_tf32 = True
         
         # Model-specific logging
-        logging.info(f"🧠 Architecture: Hybrid TITAN-BERT-ULTRA")
-        logging.info(f"⚡ BitNet Quantization: {self.config.use_bitnet}")
-        logging.info(f"🌊 ODE Solver: {self.config.ode_solver} ({self.config.ode_steps} steps)")
-        logging.info(f"🔄 Recursion Loops: {self.config.num_loops}")
+        logging.info("🧠 Architecture: %s", self.model.__class__.__name__)
+        logging.info(f"⚡ BitNet Quantization: {getattr(self.config, 'use_bitnet', 'n/a')}")
+        logging.info(
+            "🌊 ODE Solver: %s (%s steps)",
+            getattr(self.config, "ode_solver", "n/a"),
+            getattr(self.config, "ode_steps", "n/a"),
+        )
+        logging.info(f"🔄 Recursion Loops: {getattr(self.config, 'num_loops', 'n/a')}")
         logging.info(f"📐 Gradient Accumulation: {self.gradient_accumulation_steps} steps")
+
+    def _forward_mlm_logits(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        """Forward pass compatible with custom models and HF masked-LM outputs."""
+        try:
+            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+        except TypeError:
+            try:
+                outputs = self.model(input_ids, attention_mask=attention_mask)
+            except TypeError:
+                outputs = self.model(input_ids)
+
+        if torch.is_tensor(outputs):
+            return outputs
+        if isinstance(outputs, dict):
+            logits = outputs.get("logits")
+            if logits is not None:
+                return logits
+        if hasattr(outputs, "logits"):
+            return outputs.logits
+
+        raise RuntimeError(
+            "Model forward output does not include MLM logits. "
+            "Expected tensor, dict['logits'], or object.logits."
+        )
     
     def compute_mlm_loss(self, input_ids, attention_mask, labels):
         """Compute MLM loss with proper masking and shape safety checks"""
         # Forward pass
-        logits = self.model(input_ids)
+        logits = self._forward_mlm_logits(input_ids, attention_mask)
 
         # Safety: avoid propagating non-finite logits into CE (would yield NaN loss)
         if not torch.isfinite(logits).all():
@@ -1244,3 +1274,16 @@ class TitanTrainer:
         logging.info(f"✅ Checkpoint loaded - Global Step: {self.global_step}, Best Loss: {self.best_loss:.4f}")
         
         return checkpoint['epoch']
+
+    def save_pretrained_artifacts(self, output_dir: str, tokenizer: Any = None):
+        """Save HuggingFace-compatible artifacts when the model/tokenizer support it."""
+        if not hasattr(self.model, "save_pretrained"):
+            raise RuntimeError("Current model does not support save_pretrained")
+
+        os.makedirs(output_dir, exist_ok=True)
+        self.model.save_pretrained(output_dir)
+        logging.info("💾 Saved model with save_pretrained: %s", output_dir)
+
+        if tokenizer is not None and hasattr(tokenizer, "save_pretrained"):
+            tokenizer.save_pretrained(output_dir)
+            logging.info("💾 Saved tokenizer with save_pretrained: %s", output_dir)

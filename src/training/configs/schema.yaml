@@ -4,11 +4,35 @@ title: "Training Config Schema"
 type: object
 additionalProperties: false
 required:
-  - model_class
-  - model
   - training
 
 properties:
+  base_model:
+    type: string
+    description: "Base model id/path for continual pretraining or SBERT finetuning."
+    examples:
+      - answerdotai/ModernBERT-base
+      - /path/to/local/model
+
+  tokenizer:
+    type: object
+    description: "Tokenizer settings for base-model MLM training."
+    additionalProperties: false
+    properties:
+      name_or_path:
+        type: string
+        description: "Tokenizer id/path to load with AutoTokenizer."
+        examples:
+          - answerdotai/ModernBERT-base
+      use_fast:
+        type: boolean
+        description: "Use fast tokenizer implementation when available."
+        examples: [true]
+      trust_remote_code:
+        type: boolean
+        description: "Allow custom remote code during tokenizer/model loading."
+        examples: [false]
+
   model_class:
     type: string
     description: "Model variant name."
@@ -174,41 +198,18 @@ properties:
     description: "TrainingConfig + runtime parameters."
     additionalProperties: false
     required:
-      - batch_size
-      - dataloader_workers
-      - max_length
-      - mlm_probability
-      - max_samples
-      - dataset_batch_size
-      - num_workers
-      - cache_dir
-      - use_amp
-      - gradient_accumulation_steps
-      - optimizer
-      - scheduler_total_steps
-      - scheduler_warmup_ratio
-      - scheduler_type
-      - grad_clip_max_norm
-      - inf_post_clip_threshold
-      - max_nan_retries
-      - checkpoint_every_n_steps
-      - max_rolling_checkpoints
-      - num_best_checkpoints
-      - nan_check_interval
-      - log_gradient_stats
-      - gradient_log_interval
-      - csv_log_path
-      - csv_rotate_on_schema_change
-      - gpu_metrics_backend
-      - nvml_device_index
-      - enable_block_grad_norms
-      - telemetry_log_interval
-      - use_galore
-      - galore_rank
-      - galore_update_interval
-      - galore_scale
-      - galore_max_dim
+      - task
     properties:
+      task:
+        type: string
+        enum: [mlm, sbert]
+        description: "Training task selector."
+        examples: [mlm]
+      num_epochs:
+        type: integer
+        minimum: 1
+        description: "Number of training epochs for MLM task."
+        examples: [5]
       batch_size:
         type: integer
         minimum: 1
@@ -261,6 +262,16 @@ properties:
         type: boolean
         description: "Stream from local parquet if enabled."
         examples: [true]
+      join_temp_data_context_window:
+        type: integer
+        minimum: 0
+        description: "If >0, join cached temp_data token chunks into this context window length."
+        examples: [0, 2000, 8192]
+      join_temp_data_min_remainder_tokens:
+        type: integer
+        minimum: 1
+        description: "Minimum remainder content tokens needed to keep the last partial joined window."
+        examples: [128]
       use_amp:
         type: boolean
         description: "Enable mixed precision."
@@ -525,6 +536,69 @@ properties:
         minimum: 1
         description: "Max tensor dimension for GaLore."
         examples: [4096]
+      hf_output_dir:
+        type: string
+        description: "Output directory for save_pretrained artifacts when base_model is used."
+        examples: ["checkpoints/hf_final"]
+      sbert:
+        type: object
+        description: "SBERT task settings (used when training.task=sbert)."
+        additionalProperties: false
+        properties:
+          dataset_name:
+            type: string
+            examples: ["erickfmm/agentlans__multilingual-sentences__paired_10_sts"]
+          output_dir:
+            type: string
+            examples: ["./output/sbert_base_model"]
+          batch_size:
+            type: integer
+            minimum: 1
+            examples: [16]
+          epochs:
+            type: integer
+            minimum: 1
+            examples: [4]
+          warmup_steps:
+            type: integer
+            minimum: 0
+            examples: [1000]
+          evaluation_steps:
+            type: integer
+            minimum: 1
+            examples: [5000]
+          learning_rate:
+            type: number
+            minimum: 0.0
+            examples: [2.0e-5]
+          max_train_samples:
+            type: integer
+            minimum: 1
+          max_eval_samples:
+            type: integer
+            minimum: 1
+            examples: [10000]
+          max_seq_length:
+            type: integer
+            minimum: 1
+            examples: [512]
+          pooling_mode:
+            type: string
+            enum: [mean, cls, max]
+            examples: [mean]
+          trust_remote_code:
+            type: boolean
+            examples: [false]
+          use_amp:
+            type: boolean
+            examples: [true]
+          resample_balanced:
+            type: boolean
+            examples: [true]
+          resample_std:
+            type: number
+            minimum: 0.0
+            examples: [0.3]
     allOf:
       - if:
           properties:
@@ -793,6 +867,54 @@ properties:
                   patternProperties:
                     "^soap-": {}
 
+allOf:
+  - anyOf:
+      - required: [base_model]
+      - required: [model_class, model]
+  - if:
+      properties:
+        training:
+          properties:
+            task:
+              const: mlm
+    then:
+      properties:
+        training:
+          required: [optimizer]
+  - if:
+      properties:
+        training:
+          properties:
+            task:
+              const: sbert
+    then:
+      properties:
+        training:
+          required: [sbert]
+  - if:
+      required: [base_model]
+    then:
+      properties:
+        training:
+          required:
+            - task
+      allOf:
+        - if:
+            properties:
+              training:
+                properties:
+                  task:
+                    const: mlm
+          then:
+            properties:
+              tokenizer:
+                required: [name_or_path]
+  - if:
+      not:
+        required: [base_model]
+    then:
+      required: [model_class, model]
+
 examples:
   - model_class: frankenstein
     model:
@@ -819,6 +941,7 @@ examples:
       ffn_hidden_size: 3072
       ffn_activation: gelu
     training:
+      task: mlm
       batch_size: 4
       dataloader_workers: 2
       max_length: 512
