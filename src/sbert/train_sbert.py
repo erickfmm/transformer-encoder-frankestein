@@ -283,6 +283,8 @@ class SBERTTrainer:
         epochs: int = 4,
         warmup_steps: int = 1000,
         evaluation_steps: int = 5000,
+        checkpoint_save_steps: int = 1000,
+        resume_from_checkpoint: bool = False,
         learning_rate: float = 2e-5,
         use_amp: bool = True,
         device: str = "auto",
@@ -303,6 +305,8 @@ class SBERTTrainer:
             epochs: Number of training epochs
             warmup_steps: Warmup steps for learning rate
             evaluation_steps: Steps between evaluations
+            checkpoint_save_steps: Step interval for rolling checkpoints
+            resume_from_checkpoint: Resume from latest checkpoint in output_dir/checkpoints
             learning_rate: Learning rate
             use_amp: Use automatic mixed precision
         """
@@ -312,6 +316,8 @@ class SBERTTrainer:
         self.epochs = epochs
         self.warmup_steps = warmup_steps
         self.evaluation_steps = evaluation_steps
+        self.checkpoint_save_steps = int(checkpoint_save_steps)
+        self.resume_from_checkpoint = bool(resume_from_checkpoint)
         self.learning_rate = learning_rate
         self.use_amp = use_amp
         self.device = resolve_torch_device(device)
@@ -333,7 +339,9 @@ class SBERTTrainer:
             'start_time': datetime.now().isoformat(),
             'batch_size': batch_size,
             'epochs': epochs,
-            'learning_rate': learning_rate
+            'learning_rate': learning_rate,
+            'checkpoint_save_steps': self.checkpoint_save_steps,
+            'resume_from_checkpoint': self.resume_from_checkpoint,
         }
         if self.gpu_temp_guard.is_active:
             logger.info(
@@ -762,6 +770,13 @@ class SBERTTrainer:
             use_amp=self.use_amp,
             show_progress_bar=True
         )
+        if self.checkpoint_save_steps > 0 or self.resume_from_checkpoint:
+            fit_kwargs["checkpoint_path"] = os.path.join(self.output_dir, "checkpoints")
+        if self.checkpoint_save_steps > 0:
+            fit_kwargs["checkpoint_save_steps"] = self.checkpoint_save_steps
+            fit_kwargs["checkpoint_save_total_limit"] = 3
+        if self.resume_from_checkpoint:
+            fit_kwargs["resume_from_checkpoint"] = True
         if self.evaluator is not None:
             fit_kwargs["evaluator"] = self.evaluator
         self.model.fit(**fit_kwargs)
@@ -844,6 +859,17 @@ def main(argv=None):
     parser.add_argument("--epochs", type=int, default=4)
     parser.add_argument("--warmup_steps", type=int, default=1000)
     parser.add_argument("--evaluation_steps", type=int, default=5000)
+    parser.add_argument(
+        "--checkpoint_save_steps",
+        type=int,
+        default=1000,
+        help="Rolling checkpoint save interval in steps (<=0 disables rolling checkpoint saves)",
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        action="store_true",
+        help="Resume SBERT training from latest checkpoint in output_dir/checkpoints",
+    )
     parser.add_argument("--learning_rate", type=float, default=2e-5)
     parser.add_argument("--max_train_samples", type=int, default=None)
     parser.add_argument("--max_eval_samples", type=int, default=10000)
@@ -908,6 +934,8 @@ def main(argv=None):
         and args.gpu_temp_critical_threshold_c <= 0
     ):
         raise ValueError("gpu_temp_critical_threshold_c must be > 0 when provided")
+    if args.checkpoint_save_steps < 0:
+        raise ValueError("checkpoint_save_steps must be >= 0")
     
     # Setup
     logger.info("=" * 80)
@@ -960,6 +988,8 @@ def main(argv=None):
         epochs=args.epochs,
         warmup_steps=args.warmup_steps,
         evaluation_steps=args.evaluation_steps,
+        checkpoint_save_steps=args.checkpoint_save_steps,
+        resume_from_checkpoint=bool(args.resume_from_checkpoint),
         learning_rate=args.learning_rate,
         use_amp=not args.no_amp,
         device=resolved_device,

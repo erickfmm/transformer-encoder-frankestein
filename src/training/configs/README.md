@@ -122,6 +122,8 @@ training:
     epochs: 4
     warmup_steps: 1000
     evaluation_steps: 5000
+    checkpoint_save_steps: 1000
+    resume_from_checkpoint: false
     learning_rate: 2e-5
     max_train_samples: null
     max_eval_samples: 10000
@@ -295,6 +297,8 @@ Examples:
 - Evaluator: `EmbeddingSimilarityEvaluator`.
 - Resampling: supported (`resample_balanced` and `resample_std`).
 - Score standardization: optional via `standardize_scores: true` (keeps all rows, rescales score mean/std).
+- Rolling checkpoints: configurable via `checkpoint_save_steps` (default: `1000`, set `0` to disable).
+- Resume support: `resume_from_checkpoint: true` resumes from latest checkpoint inside `output_dir/checkpoints`.
 
 - `triplets`:
 - Required columns: `query`, `positive`, `negatives`.

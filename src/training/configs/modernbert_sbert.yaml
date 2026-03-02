@@ -13,6 +13,8 @@ training:
     epochs: 4
     warmup_steps: 1000
     evaluation_steps: 5000
+    checkpoint_save_steps: 1000
+    resume_from_checkpoint: false
     learning_rate: 2e-5
     max_train_samples: null
     max_eval_samples: 10000

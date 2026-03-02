@@ -641,6 +641,15 @@ properties:
             type: integer
             minimum: 1
             examples: [5000]
+          checkpoint_save_steps:
+            type: integer
+            minimum: 0
+            description: "Rolling checkpoint save interval in steps for SBERT (0 disables checkpointing)."
+            examples: [1000]
+          resume_from_checkpoint:
+            type: boolean
+            description: "Resume SBERT from latest checkpoint in output_dir/checkpoints."
+            examples: [false]
           learning_rate:
             type: number
             minimum: 0.0

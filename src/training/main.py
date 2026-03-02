@@ -341,6 +341,11 @@ def _run_sbert_task(
     evaluation_steps = sbert_cfg.get("evaluation_steps")
     if evaluation_steps is not None:
         argv.extend(["--evaluation_steps", str(int(evaluation_steps))])
+    checkpoint_save_steps = sbert_cfg.get("checkpoint_save_steps")
+    if checkpoint_save_steps is not None:
+        argv.extend(["--checkpoint_save_steps", str(int(checkpoint_save_steps))])
+    if bool(sbert_cfg.get("resume_from_checkpoint", False)):
+        argv.append("--resume_from_checkpoint")
 
     max_seq_length = sbert_cfg.get("max_seq_length")
     if max_seq_length is not None:
