@@ -3,6 +3,11 @@ training:
   task: sbert
   sbert:
     dataset_name: "erickfmm/agentlans__multilingual-sentences__paired_10_sts"
+    dataset_type: paired_similarity
+    columns:
+      sentence1: sentence1
+      sentence2: sentence2
+      similarity: similarity
     output_dir: "./output/es_sbert_xlmr_mean"
     batch_size: 12
     epochs: 4

@@ -9,7 +9,7 @@ import os
 import torch
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from datasets import load_dataset
 from sentence_transformers import (
@@ -37,6 +37,25 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+SUPPORTED_SBERT_DATASET_TYPES = ("paired_similarity", "triplets", "qa")
+
+DEFAULT_SBERT_COLUMNS = {
+    "paired_similarity": {
+        "sentence1": "sentence1",
+        "sentence2": "sentence2",
+        "similarity": "score",
+    },
+    "triplets": {
+        "query": "Q",
+        "positive": "POS",
+        "negatives": "NEGs",
+    },
+    "qa": {
+        "question": "Question",
+        "answer": "Answer",
+    },
+}
 
 
 class TormentedBertSentenceTransformer:
@@ -294,6 +313,10 @@ class SBERTTrainer:
     def load_dataset(
         self,
         dataset_name: str = "erickfmm/agentlans__multilingual-sentences__paired_10_sts",
+        dataset_type: str = "paired_similarity",
+        columns: Optional[Dict[str, str]] = None,
+        query_prefix: str = "",
+        document_prefix: str = "",
         max_train_samples: Optional[int] = None,
         max_eval_samples: Optional[int] = 10000,
         resample_balanced: bool = True,
@@ -309,21 +332,54 @@ class SBERTTrainer:
         
         Args:
             dataset_name: HuggingFace dataset name
+            dataset_type: Dataset format type (paired_similarity, triplets, qa)
+            columns: Optional dataset column mapping
+            query_prefix: Optional prefix prepended to query/question text
+            document_prefix: Optional prefix prepended to answer/positive/negative text
             max_train_samples: Maximum training samples
             max_eval_samples: Maximum evaluation samples
             resample_balanced: Resample to get normal distribution centered at 0
             target_std: Target standard deviation for normal distribution (default: 0.3)
         """
+        dataset_type = str(dataset_type).strip().lower()
+        if dataset_type not in SUPPORTED_SBERT_DATASET_TYPES:
+            raise ValueError(
+                f"Unsupported dataset_type='{dataset_type}'. "
+                f"Supported values: {', '.join(SUPPORTED_SBERT_DATASET_TYPES)}"
+            )
+        self.dataset_type = dataset_type
+        self.query_prefix = str(query_prefix or "")
+        self.document_prefix = str(document_prefix or "")
+        self.dataset_columns = self._resolve_dataset_columns(dataset_type, columns or {})
+
         logger.info(f"Loading dataset: {dataset_name}")
+        logger.info(
+            "SBERT dataset configuration: type=%s, columns=%s, query_prefix=%r, document_prefix=%r",
+            self.dataset_type,
+            self.dataset_columns,
+            self.query_prefix,
+            self.document_prefix,
+        )
         
         # Load dataset
         dataset = load_dataset(dataset_name, split="train")
         
         logger.info(f"Dataset loaded: {len(dataset)} total samples")
+        self._validate_required_columns(dataset)
         
         # Resample to balance distribution (avoid imbalance as recommended)
-        if resample_balanced:
-            dataset = self._resample_balanced(dataset, target_std=target_std)
+        if resample_balanced and self.dataset_type != "paired_similarity":
+            logger.warning(
+                "resample_balanced is only supported for paired_similarity datasets; disabling for dataset_type='%s'",
+                self.dataset_type,
+            )
+        elif resample_balanced:
+            similarity_column = self.dataset_columns["similarity"]
+            dataset = self._resample_balanced(
+                dataset,
+                score_column=similarity_column,
+                target_std=target_std,
+            )
             logger.info(f"After resampling: {len(dataset)} samples")
         
         # Shuffle and split
@@ -342,16 +398,51 @@ class SBERTTrainer:
         
         logger.info(f"Train samples: {len(train_dataset)}, Eval samples: {len(eval_dataset)}")
         
-        # Convert to InputExample format (keeping scores in [-1, 1] to preserve sign)
-        self.train_examples = self._dataset_to_examples(train_dataset)
-        self.eval_examples = self._dataset_to_examples(eval_dataset)
+        # Convert to InputExample format according to dataset type
+        self.train_examples = self._dataset_to_examples(train_dataset, split_name="train")
+        self.eval_examples = self._dataset_to_examples(eval_dataset, split_name="eval")
         
-        # Create evaluator
-        self.evaluator = self._create_evaluator()
+        # Create evaluator for paired similarity only
+        self.evaluator = self._create_evaluator() if self.dataset_type == "paired_similarity" else None
         
         return self.train_examples, self.eval_examples
     
-    def _resample_balanced(self, dataset, bins: int = 20, target_std: float = 0.3):
+    def _resolve_dataset_columns(self, dataset_type: str, columns: Dict[str, Any]) -> Dict[str, str]:
+        defaults = dict(DEFAULT_SBERT_COLUMNS[dataset_type])
+        resolved = dict(defaults)
+        for key in defaults:
+            value = columns.get(key)
+            if value is None:
+                continue
+            text_value = str(value).strip()
+            if not text_value:
+                raise ValueError(
+                    f"Column mapping for key '{key}' cannot be empty for dataset_type='{dataset_type}'"
+                )
+            resolved[key] = text_value
+        return resolved
+
+    def _validate_required_columns(self, dataset):
+        available = set(dataset.column_names)
+        required = set(self.dataset_columns.values())
+        missing = sorted(required - available)
+        if missing:
+            raise ValueError(
+                f"Missing required dataset columns for dataset_type='{self.dataset_type}': {missing}. "
+                f"Available columns: {sorted(available)}"
+            )
+
+    def _with_prefix(self, text: Any, prefix: str) -> str:
+        base = str(text)
+        return f"{prefix}{base}" if prefix else base
+
+    def _resample_balanced(
+        self,
+        dataset,
+        score_column: str,
+        bins: int = 20,
+        target_std: float = 0.3,
+    ):
         """
         Resample dataset to create a normal distribution centered at 0.
         
@@ -365,18 +456,15 @@ class SBERTTrainer:
         """
         from scipy import stats
         
-        scores = np.array(dataset['score'])
+        scores = np.array(dataset[score_column], dtype=np.float32)
         
         logger.info(f"Original distribution: mean={scores.mean():.4f}, std={scores.std():.4f}")
         logger.info(f"Score range: [{scores.min():.4f}, {scores.max():.4f}]")
         
         # Create bins
         hist, bin_edges = np.histogram(scores, bins=bins)
-        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-        
         # Target: Normal distribution centered at 0 with specified std
         # Calculate expected count per bin based on normal distribution
-        total_samples = len(scores)
         norm_dist = stats.norm(loc=0, scale=target_std)
         
         # Get probability for each bin
@@ -422,34 +510,96 @@ class SBERTTrainer:
             indices_to_keep.extend(sampled.tolist())
         
         resampled = dataset.select(indices_to_keep)
-        resampled_scores = np.array([resampled[i]['score'] for i in range(len(resampled))])
+        resampled_scores = np.array(
+            [float(resampled[i][score_column]) for i in range(len(resampled))],
+            dtype=np.float32,
+        )
         
         logger.info(f"Resampled distribution: mean={resampled_scores.mean():.4f}, std={resampled_scores.std():.4f}")
         logger.info(f"Final sample count: {len(resampled)}")
         
         return resampled
     
-    def _dataset_to_examples(self, dataset):
+    def _dataset_to_examples(self, dataset, split_name: str):
         """
-        Convert dataset to InputExample list.
-        
-        Scores are kept in [-1, 1] range (cosine similarity) to preserve:
-        - Negative values: dissimilar sentences
-        - Zero: neutral similarity  
-        - Positive values: similar sentences
+        Convert dataset split to InputExample list according to dataset_type.
         """
+        if self.dataset_type == "paired_similarity":
+            return self._dataset_to_examples_paired_similarity(dataset)
+        if self.dataset_type == "triplets":
+            return self._dataset_to_examples_triplets(dataset, split_name=split_name)
+        if self.dataset_type == "qa":
+            return self._dataset_to_examples_qa(dataset)
+        raise ValueError(f"Unsupported dataset_type='{self.dataset_type}'")
+
+    def _dataset_to_examples_paired_similarity(self, dataset):
         examples = []
+        similarity_column = self.dataset_columns["similarity"]
+        sentence1_column = self.dataset_columns["sentence1"]
+        sentence2_column = self.dataset_columns["sentence2"]
         
         for item in dataset:
             # Keep score in [-1, 1] range to preserve sign
-            score = float(item['score'])
+            score = float(item[similarity_column])
             
             example = InputExample(
-                texts=[item['sentence1'], item['sentence2']],
+                texts=[
+                    self._with_prefix(item[sentence1_column], self.query_prefix),
+                    self._with_prefix(item[sentence2_column], self.document_prefix),
+                ],
                 label=score
             )
             examples.append(example)
         
+        return examples
+
+    def _dataset_to_examples_triplets(self, dataset, split_name: str):
+        examples: List[InputExample] = []
+        skipped_rows = 0
+        query_column = self.dataset_columns["query"]
+        positive_column = self.dataset_columns["positive"]
+        negatives_column = self.dataset_columns["negatives"]
+
+        for item in dataset:
+            negatives = item[negatives_column]
+            if not isinstance(negatives, list):
+                skipped_rows += 1
+                continue
+
+            query_text = self._with_prefix(item[query_column], self.query_prefix)
+            positive_text = self._with_prefix(item[positive_column], self.document_prefix)
+
+            valid_negative_count = 0
+            for negative in negatives:
+                if not isinstance(negative, str) or not negative.strip():
+                    continue
+                negative_text = self._with_prefix(negative, self.document_prefix)
+                examples.append(InputExample(texts=[query_text, positive_text, negative_text]))
+                valid_negative_count += 1
+            if valid_negative_count == 0:
+                skipped_rows += 1
+
+        if skipped_rows > 0:
+            logger.warning(
+                "Skipped %d rows in %s split for triplets due to malformed or empty negatives list",
+                skipped_rows,
+                split_name,
+            )
+        return examples
+
+    def _dataset_to_examples_qa(self, dataset):
+        examples: List[InputExample] = []
+        question_column = self.dataset_columns["question"]
+        answer_column = self.dataset_columns["answer"]
+        for item in dataset:
+            examples.append(
+                InputExample(
+                    texts=[
+                        self._with_prefix(item[question_column], self.query_prefix),
+                        self._with_prefix(item[answer_column], self.document_prefix),
+                    ]
+                )
+            )
         return examples
     
     def _create_evaluator(self):
@@ -474,6 +624,7 @@ class SBERTTrainer:
         logger.info(f"Device: {self.model.device}")
         logger.info(f"Training samples: {len(self.train_examples)}")
         logger.info(f"Batch size: {self.batch_size}, Epochs: {self.epochs}")
+        logger.info(f"Dataset type: {self.dataset_type}")
         
         # Create data loader
         train_dataloader = DataLoader(
@@ -487,17 +638,19 @@ class SBERTTrainer:
             context_prefix="sbert.fit",
         )
         
-        # Define loss function (CosineSimilarityLoss for regression)
-        train_loss = losses.CosineSimilarityLoss(self.model)
+        # Define loss function according to dataset type.
+        if self.dataset_type == "paired_similarity":
+            train_loss = losses.CosineSimilarityLoss(self.model)
+        else:
+            train_loss = losses.MultipleNegativesRankingLoss(self.model)
         
         # Calculate total steps
         num_train_steps = len(train_dataloader) * self.epochs
         logger.info(f"Total training steps: {num_train_steps}")
         
         # Train
-        self.model.fit(
+        fit_kwargs = dict(
             train_objectives=[(train_dataloader, train_loss)],
-            evaluator=self.evaluator,
             epochs=self.epochs,
             warmup_steps=self.warmup_steps,
             evaluation_steps=self.evaluation_steps,
@@ -507,13 +660,20 @@ class SBERTTrainer:
             use_amp=self.use_amp,
             show_progress_bar=True
         )
+        if self.evaluator is not None:
+            fit_kwargs["evaluator"] = self.evaluator
+        self.model.fit(**fit_kwargs)
         
         logger.info(f"Training completed! Model saved to {self.output_dir}")
         
-        # Final evaluation
-        logger.info("Running final evaluation...")
-        final_score = self.evaluator(self.model)
-        logger.info(f"Final Spearman correlation: {final_score:.4f}")
+        final_score = None
+        if self.evaluator is not None:
+            # Final evaluation
+            logger.info("Running final evaluation...")
+            final_score = self.evaluator(self.model)
+            logger.info(f"Final Spearman correlation: {final_score:.4f}")
+        else:
+            logger.info("Skipping final evaluator for dataset type '%s'", self.dataset_type)
         
         self.training_metadata['end_time'] = datetime.now().isoformat()
         self.training_metadata['final_score'] = final_score
@@ -560,6 +720,23 @@ def main(argv=None):
         default="erickfmm/agentlans__multilingual-sentences__paired_10_sts",
         help="Hugging Face dataset name for SBERT training",
     )
+    parser.add_argument(
+        "--dataset_type",
+        type=str,
+        default="paired_similarity",
+        choices=SUPPORTED_SBERT_DATASET_TYPES,
+        help="Dataset layout used for SBERT training",
+    )
+    parser.add_argument("--col_sentence1", type=str, default=None, help="Column name for sentence1 in paired_similarity datasets")
+    parser.add_argument("--col_sentence2", type=str, default=None, help="Column name for sentence2 in paired_similarity datasets")
+    parser.add_argument("--col_similarity", type=str, default=None, help="Column name for similarity score in paired_similarity datasets")
+    parser.add_argument("--col_query", type=str, default=None, help="Column name for query in triplets datasets")
+    parser.add_argument("--col_positive", type=str, default=None, help="Column name for positive text in triplets datasets")
+    parser.add_argument("--col_negatives", type=str, default=None, help="Column name for negatives list in triplets datasets")
+    parser.add_argument("--col_question", type=str, default=None, help="Column name for question in qa datasets")
+    parser.add_argument("--col_answer", type=str, default=None, help="Column name for answer in qa datasets")
+    parser.add_argument("--query_prefix", type=str, default="", help="Optional prefix for query/question text")
+    parser.add_argument("--document_prefix", type=str, default="", help="Optional prefix for document/answer/positive/negative text")
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--epochs", type=int, default=4)
     parser.add_argument("--warmup_steps", type=int, default=1000)
@@ -687,8 +864,26 @@ def main(argv=None):
     )
     
     # Load dataset
+    column_overrides = {
+        "sentence1": args.col_sentence1,
+        "sentence2": args.col_sentence2,
+        "similarity": args.col_similarity,
+        "query": args.col_query,
+        "positive": args.col_positive,
+        "negatives": args.col_negatives,
+        "question": args.col_question,
+        "answer": args.col_answer,
+    }
+    column_overrides = {
+        key: value for key, value in column_overrides.items()
+        if isinstance(value, str) and value.strip()
+    }
     trainer.load_dataset(
         dataset_name=args.dataset_name,
+        dataset_type=args.dataset_type,
+        columns=column_overrides,
+        query_prefix=args.query_prefix,
+        document_prefix=args.document_prefix,
         max_train_samples=args.max_train_samples,
         max_eval_samples=args.max_eval_samples,
         resample_balanced=not args.no_resample,
@@ -699,7 +894,10 @@ def main(argv=None):
     final_score = trainer.train()
     
     logger.info("=" * 80)
-    logger.info(f"Training complete! Final score: {final_score:.4f}")
+    if final_score is not None:
+        logger.info(f"Training complete! Final score: {final_score:.4f}")
+    else:
+        logger.info("Training complete! Final score: n/a (no evaluator configured for this dataset type)")
     logger.info(f"Model saved to: {args.output_dir}")
     logger.info("=" * 80)
 

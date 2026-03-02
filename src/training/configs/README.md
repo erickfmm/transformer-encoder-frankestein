@@ -110,6 +110,13 @@ training:
   # Used when task == sbert
   sbert:
     dataset_name: "erickfmm/agentlans__multilingual-sentences__paired_10_sts"
+    dataset_type: paired_similarity
+    columns:
+      sentence1: sentence1
+      sentence2: sentence2
+      similarity: similarity
+    query_prefix: ""
+    document_prefix: ""
     output_dir: "./output/sbert_base_model"
     batch_size: 16
     epochs: 4
@@ -276,6 +283,77 @@ Examples:
 - `galore_scale`: projected gradient scale.
 - `galore_max_dim`: max tensor size for GaLore.
 - `sbert`: block for SBERT-specific settings when `task: sbert`.
+
+## SBERT Dataset Types
+
+`training.sbert.dataset_type` controls how rows are converted and which objective/evaluator is used:
+
+- `paired_similarity`:
+- Required columns: `sentence1`, `sentence2`, `similarity` (defaults in runtime: `sentence1`, `sentence2`, `score`).
+- Loss: `CosineSimilarityLoss`.
+- Evaluator: `EmbeddingSimilarityEvaluator`.
+- Resampling: supported (`resample_balanced` and `resample_std`).
+
+- `triplets`:
+- Required columns: `query`, `positive`, `negatives`.
+- `negatives` must be a list of strings; malformed rows are skipped with warning.
+- Loss: `MultipleNegativesRankingLoss` (using explicit negatives).
+- Evaluator: disabled by default.
+- Resampling: auto-disabled with warning.
+
+- `qa`:
+- Required columns: `question`, `answer`.
+- Loss: `MultipleNegativesRankingLoss`.
+- Evaluator: disabled by default.
+- Resampling: auto-disabled with warning.
+
+`training.sbert.columns` is optional and lets you rename dataset columns without code changes.
+`training.sbert.query_prefix` and `training.sbert.document_prefix` are optional text prefixes for asymmetric query/document style training.
+
+### Example: Paired Similarity
+
+```yaml
+training:
+  task: sbert
+  sbert:
+    dataset_name: "erickfmm/agentlans__multilingual-sentences__paired_10_sts"
+    dataset_type: paired_similarity
+    columns:
+      sentence1: sentence1
+      sentence2: sentence2
+      similarity: similarity
+```
+
+### Example: Triplets (`Q`, `POS`, `NEGs`)
+
+```yaml
+training:
+  task: sbert
+  sbert:
+    dataset_name: "your-org/triplets-dataset"
+    dataset_type: triplets
+    columns:
+      query: Q
+      positive: POS
+      negatives: NEGs
+    query_prefix: "query: "
+    document_prefix: "passage: "
+```
+
+### Example: QA (`Question`, `Answer`)
+
+```yaml
+training:
+  task: sbert
+  sbert:
+    dataset_name: "your-org/qa-pairs"
+    dataset_type: qa
+    columns:
+      question: Question
+      answer: Answer
+    query_prefix: "query: "
+    document_prefix: "answer: "
+```
 
 ## Migration Note
 

@@ -1,8 +1,13 @@
-base_model: answerdotai/ModernBERT-base
+base_model: BSC-LT/MrBERT-es
 training:
   task: sbert
   sbert:
     dataset_name: "erickfmm/agentlans__multilingual-sentences__paired_10_sts"
+    dataset_type: paired_similarity
+    columns:
+      sentence1: sentence1
+      sentence2: sentence2
+      similarity: similarity
     output_dir: "./output/sbert_modernbert"
     batch_size: 16
     epochs: 4

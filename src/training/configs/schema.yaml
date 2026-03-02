@@ -572,6 +572,56 @@ properties:
           dataset_name:
             type: string
             examples: ["erickfmm/agentlans__multilingual-sentences__paired_10_sts"]
+          dataset_type:
+            type: string
+            enum: [paired_similarity, triplets, qa]
+            description: "Dataset layout for SBERT conversion and loss/evaluator strategy."
+            examples: [paired_similarity, triplets, qa]
+          columns:
+            type: object
+            additionalProperties: false
+            description: "Optional column overrides; relevant keys depend on dataset_type."
+            properties:
+              sentence1:
+                type: string
+                description: "Sentence 1 column for paired_similarity datasets."
+                examples: [sentence1]
+              sentence2:
+                type: string
+                description: "Sentence 2 column for paired_similarity datasets."
+                examples: [sentence2]
+              similarity:
+                type: string
+                description: "Similarity score column for paired_similarity datasets."
+                examples: [score, similarity]
+              query:
+                type: string
+                description: "Query/anchor column for triplets datasets."
+                examples: [Q]
+              positive:
+                type: string
+                description: "Positive column for triplets datasets."
+                examples: [POS]
+              negatives:
+                type: string
+                description: "Negatives list column for triplets datasets."
+                examples: [NEGs]
+              question:
+                type: string
+                description: "Question column for qa datasets."
+                examples: [Question]
+              answer:
+                type: string
+                description: "Answer column for qa datasets."
+                examples: [Answer]
+          query_prefix:
+            type: string
+            description: "Optional text prefix applied to query/question fields."
+            examples: ["query: "]
+          document_prefix:
+            type: string
+            description: "Optional text prefix applied to answer/positive/negative/document fields."
+            examples: ["document: "]
           output_dir:
             type: string
             examples: ["./output/sbert_base_model"]

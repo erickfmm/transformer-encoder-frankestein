@@ -320,6 +320,9 @@ def _run_sbert_task(
     dataset_name = str(sbert_cfg.get("dataset_name", "")).strip()
     if dataset_name:
         argv.extend(["--dataset_name", dataset_name])
+    dataset_type = str(sbert_cfg.get("dataset_type", "")).strip()
+    if dataset_type:
+        argv.extend(["--dataset_type", dataset_type])
 
     max_train_samples = sbert_cfg.get("max_train_samples")
     if max_train_samples is not None:
@@ -343,6 +346,35 @@ def _run_sbert_task(
         argv.append("--no_resample")
     if bool(sbert_cfg.get("trust_remote_code", False)):
         argv.append("--trust_remote_code")
+
+    columns_cfg = sbert_cfg.get("columns", {}) or {}
+    if not isinstance(columns_cfg, dict):
+        raise ValueError("training.sbert.columns must be an object when provided")
+    column_arg_map = {
+        "sentence1": "--col_sentence1",
+        "sentence2": "--col_sentence2",
+        "similarity": "--col_similarity",
+        "query": "--col_query",
+        "positive": "--col_positive",
+        "negatives": "--col_negatives",
+        "question": "--col_question",
+        "answer": "--col_answer",
+    }
+    for key, cli_flag in column_arg_map.items():
+        value = columns_cfg.get(key)
+        if value is None:
+            continue
+        text_value = str(value).strip()
+        if text_value:
+            argv.extend([cli_flag, text_value])
+
+    query_prefix = sbert_cfg.get("query_prefix")
+    if query_prefix is not None:
+        argv.extend(["--query_prefix", str(query_prefix)])
+
+    document_prefix = sbert_cfg.get("document_prefix")
+    if document_prefix is not None:
+        argv.extend(["--document_prefix", str(document_prefix)])
 
     if bool(training_config.gpu_temp_guard_enabled):
         argv.append("--gpu-temp-guard")
