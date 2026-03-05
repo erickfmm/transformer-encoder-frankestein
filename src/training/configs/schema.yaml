@@ -648,6 +648,16 @@ properties:
             type: integer
             minimum: 1
             examples: [16]
+          gradient_accumulation_steps:
+            type: integer
+            minimum: 1
+            description: "Accumulate gradients over N mini-batches before each optimizer step."
+            examples: [1, 4]
+          max_grad_norm:
+            type: number
+            minimum: 0.0
+            description: "Gradient clipping norm for SBERT training (0 disables clipping)."
+            examples: [1.0]
           epochs:
             type: integer
             minimum: 1

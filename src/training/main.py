@@ -354,6 +354,17 @@ def _run_sbert_task(
         "--device",
         resolved_device,
     ]
+    gradient_accumulation_steps = sbert_cfg.get("gradient_accumulation_steps")
+    if gradient_accumulation_steps is not None:
+        argv.extend(
+            [
+                "--gradient_accumulation_steps",
+                str(int(gradient_accumulation_steps)),
+            ]
+        )
+    max_grad_norm = sbert_cfg.get("max_grad_norm")
+    if max_grad_norm is not None:
+        argv.extend(["--max_grad_norm", str(float(max_grad_norm))])
 
     dataset_name = str(sbert_cfg.get("dataset_name", "")).strip()
     if dataset_name:

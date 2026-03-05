@@ -12,6 +12,7 @@ import re
 import shutil
 import time
 import subprocess
+import inspect
 
 # Tesla P40 (sm_61) and other legacy GPUs are often unstable with Triton/Inductor paths.
 # Set FRANKENSTEIN_DISABLE_TRITON=0 to re-enable explicitly.
@@ -287,6 +288,8 @@ class SBERTTrainer:
         model: SentenceTransformer,
         output_dir: str = "./output/sbert_tormented_v2",
         batch_size: int = 16,
+        gradient_accumulation_steps: int = 1,
+        max_grad_norm: float = 1.0,
         epochs: int = 4,
         warmup_steps: int = 1000,
         evaluation_steps: int = 5000,
@@ -315,6 +318,8 @@ class SBERTTrainer:
             model: SentenceTransformer model
             output_dir: Directory to save checkpoints
             batch_size: Training batch size
+            gradient_accumulation_steps: Number of accumulation steps before optimizer update
+            max_grad_norm: Gradient clipping max norm (0 disables clipping)
             epochs: Number of training epochs
             warmup_steps: Warmup steps for learning rate
             evaluation_steps: Steps between evaluations
@@ -326,6 +331,8 @@ class SBERTTrainer:
         self.model = model
         self.output_dir = output_dir
         self.batch_size = batch_size
+        self.gradient_accumulation_steps = max(int(gradient_accumulation_steps), 1)
+        self.max_grad_norm = max(float(max_grad_norm), 0.0)
         self.epochs = epochs
         self.warmup_steps = warmup_steps
         self.evaluation_steps = evaluation_steps
@@ -380,6 +387,9 @@ class SBERTTrainer:
         self.training_metadata = {
             'start_time': datetime.now().isoformat(),
             'batch_size': batch_size,
+            'gradient_accumulation_steps': self.gradient_accumulation_steps,
+            'effective_batch_size': int(self.batch_size) * int(self.gradient_accumulation_steps),
+            'max_grad_norm': self.max_grad_norm,
             'epochs': epochs,
             'learning_rate': learning_rate,
             'checkpoint_save_steps': self.checkpoint_save_steps,
@@ -897,7 +907,7 @@ class SBERTTrainer:
             step_time_ms=0.0,
             tokens_per_sec=0.0,
             clip_ratio=0.0,
-            effective_batch_size=int(self.batch_size),
+            effective_batch_size=int(self.batch_size) * int(self.gradient_accumulation_steps),
         )
 
     def close(self):
@@ -1321,6 +1331,12 @@ class SBERTTrainer:
         logger.info(f"Device: {self.model.device}")
         logger.info(f"Training samples: {len(self.train_examples)}")
         logger.info(f"Batch size: {self.batch_size}, Epochs: {self.epochs}")
+        logger.info(
+            "Gradient accumulation: %d, effective batch size: %d",
+            self.gradient_accumulation_steps,
+            int(self.batch_size) * int(self.gradient_accumulation_steps),
+        )
+        logger.info("Gradient clipping max_grad_norm: %.4f", self.max_grad_norm)
         logger.info(f"Dataset type: {self.dataset_type}")
         
         # Create data loader
@@ -1406,6 +1422,33 @@ class SBERTTrainer:
             )
         if self.evaluator is not None:
             fit_kwargs["evaluator"] = self.evaluator
+        try:
+            fit_signature = inspect.signature(self.model.fit)
+            fit_params = fit_signature.parameters
+            accepts_var_kwargs = any(
+                param.kind == inspect.Parameter.VAR_KEYWORD
+                for param in fit_params.values()
+            )
+        except (TypeError, ValueError):
+            fit_params = {}
+            accepts_var_kwargs = False
+
+        if self.gradient_accumulation_steps > 1:
+            if "gradient_accumulation_steps" in fit_params or accepts_var_kwargs:
+                fit_kwargs["gradient_accumulation_steps"] = int(self.gradient_accumulation_steps)
+            else:
+                logger.warning(
+                    "sentence-transformers fit() in this environment does not expose "
+                    "gradient_accumulation_steps; continuing without accumulation support."
+                )
+        if self.max_grad_norm > 0.0:
+            if "max_grad_norm" in fit_params or accepts_var_kwargs:
+                fit_kwargs["max_grad_norm"] = float(self.max_grad_norm)
+            else:
+                logger.warning(
+                    "sentence-transformers fit() in this environment does not expose "
+                    "max_grad_norm; continuing without explicit gradient clipping."
+                )
         try:
             self.model.fit(**fit_kwargs)
         except RuntimeError as exc:
@@ -1576,6 +1619,8 @@ def main(argv=None):
     parser.add_argument("--query_prefix", type=str, default="", help="Optional prefix for query/question text")
     parser.add_argument("--document_prefix", type=str, default="", help="Optional prefix for document/answer/positive/negative text")
     parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
+    parser.add_argument("--max_grad_norm", type=float, default=1.0)
     parser.add_argument("--epochs", type=int, default=4)
     parser.add_argument("--warmup_steps", type=int, default=1000)
     parser.add_argument("--evaluation_steps", type=int, default=5000)
@@ -1750,6 +1795,8 @@ def main(argv=None):
         model=model,
         output_dir=args.output_dir,
         batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        max_grad_norm=args.max_grad_norm,
         epochs=args.epochs,
         warmup_steps=args.warmup_steps,
         evaluation_steps=args.evaluation_steps,

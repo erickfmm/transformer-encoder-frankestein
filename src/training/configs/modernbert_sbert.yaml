@@ -16,18 +16,20 @@ training:
       sentence2: sentence2
       similarity: similarity
     output_dir: "./output/sbert_modernbert"
-    batch_size: 16
+    batch_size: 64
+    gradient_accumulation_steps: 4
+    max_grad_norm: 1.0
     epochs: 4
-    warmup_steps: 1000
-    evaluation_steps: 1000
-    checkpoint_save_steps: 1000
+    warmup_steps: 250
+    evaluation_steps: 250
+    checkpoint_save_steps: 250
     resume_from_checkpoint: true
-    learning_rate: 2e-5
+    learning_rate: 1.6e-5
     max_train_samples: null
     max_eval_samples: 10000
     max_seq_length: 8192
     pooling_mode: mean
-    use_amp: true
+    use_amp: false
     resample_balanced: false
     resample_std: 0.3
     standardize_scores: true
