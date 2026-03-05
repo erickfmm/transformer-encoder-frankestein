@@ -1,17 +1,23 @@
 [project]
-name = "spanish_moe_bert"
+name = "transformer_encoder_frankestein"
 version = "0.1.0"
-description = "Spanish MoE-BERT model with SPM tokenizer"
+description = "Config-driven training library and CLI for end-to-end NLP workflows"
 readme = "README.md"
 requires-python = ">=3.9, <3.13"  # Changed: Avoid Python 3.13 for now
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+default = true   # optional: set this index as the default for all packages
+
 dependencies = [
-    "torch==2.5.1",  # Changed: Fixed version instead of range
+    "torch==2.6.0+cu118",  # Changed to 2.6 because security issues
     "sentence-transformers>=3.0.0",
     "sentencepiece>=0.1.99",
     "sacremoses>=0.0.53",
     "datasets>=2.14.0",
-    "transformers>=4.35.0",
-    "accelerate>=0.24.0",
+    "transformers>=4.40.0",
+    "accelerate>=0.30.0",
     "tqdm>=4.66.0",
     "numpy>=1.24.0",
     "pandas>=2.0.0",
@@ -30,10 +36,10 @@ train = [
     "tensorboard>=2.14.0",
 ]
 cuda = [
-    "torch==2.5.1+cu118",  # CUDA 11.8 variant
+    "torch==2.6.0+cu118",  # CUDA 11.8 variant
 ]
 cpu = [
-    "torch==2.5.1+cpu",  # CPU-only variant
+    "torch==2.6.0+cpu",  # CPU-only variant
 ]
 
 [build-system]
@@ -43,5 +49,4 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
-[tool.uv]
-# uv-specific configurations (optional)
+
