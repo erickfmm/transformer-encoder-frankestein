@@ -293,10 +293,19 @@ def _apply_gpu_temp_guard_overrides(
     _validate_gpu_temp_guard_config(training_config)
 
     if training_config.gpu_temp_guard_enabled and str(resolved_device).startswith("cuda"):
+        if training_config.gpu_temp_critical_threshold_c is not None and not training_config.switch_on_thermal:
+            logging.info(
+                "Enabling switch_on_thermal automatically because gpu_temp_critical_threshold_c is configured."
+            )
+            training_config.switch_on_thermal = True
         if training_config.gpu_temp_critical_threshold_c is None:
             logging.info(
                 "GPU thermal critical offload disabled (gpu_temp_critical_threshold_c is null); pause-only thermal guard remains active."
             )
+            if training_config.switch_on_thermal:
+                logging.info(
+                    "switch_on_thermal=true but gpu_temp_critical_threshold_c is null; no GPU->CPU thermal switching will occur."
+                )
         else:
             logging.info(
                 "GPU thermal critical offload enabled (critical>=%.1fC).",
@@ -439,6 +448,24 @@ def _run_sbert_task(
                 str(float(training_config.gpu_temp_critical_threshold_c)),
             ]
         )
+    argv.extend(
+        [
+            "--csv-log-path",
+            str(training_config.csv_log_path),
+            "--telemetry-log-interval",
+            str(int(training_config.telemetry_log_interval)),
+            "--gpu-metrics-backend",
+            str(training_config.gpu_metrics_backend),
+        ]
+    )
+    if bool(training_config.csv_rotate_on_schema_change):
+        argv.append("--csv-rotate-on-schema-change")
+    else:
+        argv.append("--no-csv-rotate-on-schema-change")
+    if bool(training_config.enable_block_grad_norms):
+        argv.append("--enable-block-grad-norms")
+    else:
+        argv.append("--no-enable-block-grad-norms")
 
     logging.info("Dispatching SBERT finetuning with base_model=%s", loaded.base_model)
     result = sbert_train_main(argv)

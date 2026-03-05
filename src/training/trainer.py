@@ -100,6 +100,11 @@ class TitanTrainer:
         self.training_config = training_config or TrainingConfig()
         self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
         self._primary_device = str(self.device)
+        if (
+            self.training_config.gpu_temp_critical_threshold_c is not None
+            and self._primary_device.startswith("cuda")
+        ):
+            self.training_config.switch_on_thermal = True
         self._configured_use_amp = bool(self.training_config.use_amp)
         self.use_amp = (
             self._configured_use_amp
@@ -1228,6 +1233,7 @@ class TitanTrainer:
             leave=True,
             ncols=120
         )
+        epoch_started = time.perf_counter()
         
         self.optimizer.zero_grad(set_to_none=True)
         optimizer_window_start = time.perf_counter()
@@ -1443,6 +1449,12 @@ class TitanTrainer:
                 if batch_idx % 100 == 0 and batch_idx > 0:
                     avg_loss = total_loss / num_batches
                     avg_acc = total_accuracy / num_batches
+                    progress_snapshot = tqdm.format_meter(
+                        batch_idx + 1,
+                        len(dataloader),
+                        time.perf_counter() - epoch_started,
+                    )
+                    logging.info("Progress %s", progress_snapshot)
                     
                     if torch.cuda.is_available():
                         memory_used = torch.cuda.memory_allocated() / 1024**3

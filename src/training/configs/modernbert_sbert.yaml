@@ -7,6 +7,7 @@ training:
   gpu_temp_pause_threshold_c: 85
   gpu_temp_critical_threshold_c: 88
   gpu_temp_poll_interval_seconds: 30
+  telemetry_log_interval: 1
   sbert:
     dataset_name: "erickfmm/agentlans__multilingual-sentences__paired_10_sts"
     dataset_type: paired_similarity

@@ -7,9 +7,11 @@ Dataset: erickfmm/agentlans__multilingual-sentences__paired_10_sts
 
 import os
 import json
+import csv
 import re
 import shutil
 import time
+import subprocess
 
 # Tesla P40 (sm_61) and other legacy GPUs are often unstable with Triton/Inductor paths.
 # Set FRANKENSTEIN_DISABLE_TRITON=0 to re-enable explicitly.
@@ -31,6 +33,7 @@ from sentence_transformers import (
     InputExample
 )
 from torch.utils.data import DataLoader
+from tqdm import tqdm as tqdm_progress
 import numpy as np
 
 try:
@@ -299,6 +302,11 @@ class SBERTTrainer:
         gpu_temp_critical_threshold_c: Optional[float] = None,
         gpu_temp_poll_interval_seconds: float = 30.0,
         nvml_device_index: int = 0,
+        csv_log_path: str = "training_metrics.csv",
+        csv_rotate_on_schema_change: bool = True,
+        gpu_metrics_backend: str = "nvml",
+        enable_block_grad_norms: bool = True,
+        telemetry_log_interval: int = 1,
     ):
         """
         Initialize SBERT Trainer.
@@ -328,12 +336,32 @@ class SBERTTrainer:
         self.use_amp = use_amp
         self.device = resolve_torch_device(device)
         self._switch_on_thermal = bool(switch_on_thermal)
+        if (
+            gpu_temp_critical_threshold_c is not None
+            and self.device.startswith("cuda")
+            and bool(gpu_temp_guard_enabled)
+        ):
+            self._switch_on_thermal = True
         self._thermal_offload_active = False
         self._thermal_offload_started_monotonic: Optional[float] = None
         self._thermal_last_poll_monotonic = 0.0
         self._thermal_last_model_snapshot: Optional[str] = None
         self._thermal_last_resume_artifact: Optional[str] = None
         self._force_cpu_only_after_gpu_error = False
+        self._last_guard_temp_c: Optional[float] = None
+        self.global_step = 0
+        self.csv_log_path = str(csv_log_path)
+        self.csv_rotate_on_schema_change = bool(csv_rotate_on_schema_change)
+        self.gpu_metrics_backend = str(gpu_metrics_backend)
+        self.enable_block_grad_norms = bool(enable_block_grad_norms)
+        self.telemetry_log_interval = max(int(telemetry_log_interval), 1)
+        self.csv_columns = self._get_csv_columns()
+        self.csv_file = None
+        self.csv_writer = None
+        self._nvml_module = None
+        self._nvml_handle = None
+        self._nvml_disabled = False
+        self._nvml_warning_logged = False
         self.gpu_temp_guard = GPUTemperatureGuard(
             enabled=bool(gpu_temp_guard_enabled),
             device=self.device,
@@ -346,6 +374,7 @@ class SBERTTrainer:
         
         # Create output directory
         os.makedirs(output_dir, exist_ok=True)
+        self._init_csv_logger()
         
         # Training metadata
         self.training_metadata = {
@@ -357,6 +386,8 @@ class SBERTTrainer:
             'checkpoint_save_total_limit': self.checkpoint_save_total_limit,
             'resume_from_checkpoint': self.resume_from_checkpoint,
             'switch_on_thermal': self._switch_on_thermal,
+            'csv_log_path': self.csv_log_path,
+            'telemetry_log_interval': self.telemetry_log_interval,
         }
         self.thermal_emergency_dir = os.path.join(self.output_dir, "thermal_emergency")
         os.makedirs(self.thermal_emergency_dir, exist_ok=True)
@@ -384,6 +415,234 @@ class SBERTTrainer:
         else:
             logger.info("GPU thermal guard disabled for SBERT")
         logger.info("SBERT switch_on_thermal=%s", self._switch_on_thermal)
+
+    def _get_csv_columns(self) -> List[str]:
+        return [
+            'timestamp', 'epoch', 'step', 'global_step',
+            'loss', 'accuracy', 'learning_rate', 'grad_norm',
+            'scaler_scale', 'gpu_memory_gb', 'gpu_cached_gb',
+            'has_nan', 'has_inf', 'has_zero', 'repair_action',
+            'gpu_temp_c', 'gpu_power_w', 'gpu_util_pct', 'gpu_mem_used_mib',
+            'grad_norm_embeddings', 'grad_norm_attention', 'grad_norm_ffn',
+            'grad_norm_experts', 'grad_norm_router', 'grad_norm_ode',
+            'grad_norm_retnet', 'grad_norm_mamba', 'grad_norm_norms',
+            'grad_norm_head', 'grad_norm_other',
+            'step_time_ms', 'tokens_per_sec', 'clip_ratio', 'effective_batch_size'
+        ]
+
+    def _read_csv_header(self, csv_path: str) -> Optional[List[str]]:
+        if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
+            return None
+        with open(csv_path, 'r', newline='', encoding='utf-8') as handle:
+            reader = csv.reader(handle)
+            return next(reader, None)
+
+    def _init_csv_logger(self):
+        csv_path = self.csv_log_path
+        csv_dir = os.path.dirname(csv_path)
+        if csv_dir:
+            os.makedirs(csv_dir, exist_ok=True)
+
+        file_exists = os.path.exists(csv_path)
+        if file_exists:
+            existing_header = self._read_csv_header(csv_path)
+            if existing_header is not None and existing_header != self.csv_columns:
+                if self.csv_rotate_on_schema_change:
+                    base, ext = os.path.splitext(csv_path)
+                    if not ext:
+                        ext = ".csv"
+                    rotated_path = f"{base}.{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+                    os.replace(csv_path, rotated_path)
+                    logger.info("CSV schema changed. Rotated previous log to: %s", rotated_path)
+                    file_exists = False
+                else:
+                    raise RuntimeError(
+                        "CSV schema mismatch for existing metrics file. "
+                        "Enable csv_rotate_on_schema_change or remove old CSV."
+                    )
+
+        self.csv_file = open(csv_path, 'a', newline='', encoding='utf-8')
+        self.csv_writer = csv.writer(self.csv_file)
+        should_write_header = (not file_exists) or os.path.getsize(csv_path) == 0
+        if should_write_header:
+            self.csv_writer.writerow(self.csv_columns)
+            self.csv_file.flush()
+
+    def _parse_smi_value(self, raw: str) -> float:
+        value = (raw or "").strip()
+        if not value or value.lower() in {"n/a", "[not supported]"}:
+            return 0.0
+        match = re.search(r"[-+]?\d*\.?\d+", value)
+        if match is None:
+            return 0.0
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return 0.0
+
+    def _get_default_gpu_telemetry(self) -> Dict[str, float]:
+        return {
+            "gpu_temp_c": 0.0,
+            "gpu_power_w": 0.0,
+            "gpu_util_pct": 0.0,
+            "gpu_mem_used_mib": 0.0,
+        }
+
+    def _get_gpu_telemetry_from_nvidia_smi(self) -> Dict[str, float]:
+        telemetry = self._get_default_gpu_telemetry()
+        cmd = [
+            "nvidia-smi",
+            "--query-gpu=temperature.gpu,power.draw,utilization.gpu,memory.used",
+            "--format=csv,noheader,nounits",
+            "-i",
+            str(int(self.gpu_temp_guard._nvml_device_index)),  # best-effort parity with guard
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            line = result.stdout.strip().splitlines()[0]
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 4:
+                telemetry["gpu_temp_c"] = self._parse_smi_value(parts[0])
+                telemetry["gpu_power_w"] = self._parse_smi_value(parts[1])
+                telemetry["gpu_util_pct"] = self._parse_smi_value(parts[2])
+                telemetry["gpu_mem_used_mib"] = self._parse_smi_value(parts[3])
+        except Exception:
+            pass
+        return telemetry
+
+    def _get_gpu_telemetry(self) -> Dict[str, float]:
+        telemetry = self._get_default_gpu_telemetry()
+        if not torch.cuda.is_available():
+            return telemetry
+        backend = self.gpu_metrics_backend.strip().lower()
+        if backend == "none":
+            return telemetry
+        if backend != "nvml":
+            return telemetry
+
+        if self._nvml_disabled:
+            return self._get_gpu_telemetry_from_nvidia_smi()
+
+        if self._nvml_module is None or self._nvml_handle is None:
+            try:
+                import pynvml  # type: ignore
+
+                pynvml.nvmlInit()
+                idx = int(self.gpu_temp_guard._nvml_device_index)
+                self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
+                self._nvml_module = pynvml
+            except Exception as exc:
+                self._nvml_disabled = True
+                if not self._nvml_warning_logged:
+                    logger.warning("NVML telemetry unavailable, falling back to nvidia-smi: %s", exc)
+                    self._nvml_warning_logged = True
+                return self._get_gpu_telemetry_from_nvidia_smi()
+
+        try:
+            pynvml = self._nvml_module
+            handle = self._nvml_handle
+            utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            telemetry["gpu_temp_c"] = float(
+                pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            )
+            telemetry["gpu_power_w"] = float(pynvml.nvmlDeviceGetPowerUsage(handle)) / 1000.0
+            telemetry["gpu_util_pct"] = float(utilization.gpu)
+            telemetry["gpu_mem_used_mib"] = float(memory_info.used) / (1024.0 ** 2)
+        except Exception as exc:
+            if not self._nvml_warning_logged:
+                logger.warning("Failed reading NVML telemetry, falling back to nvidia-smi: %s", exc)
+                self._nvml_warning_logged = True
+            return self._get_gpu_telemetry_from_nvidia_smi()
+        return telemetry
+
+    def _get_default_block_grad_norms(self) -> Dict[str, float]:
+        return {
+            "embeddings": 0.0,
+            "attention": 0.0,
+            "ffn": 0.0,
+            "experts": 0.0,
+            "router": 0.0,
+            "ode": 0.0,
+            "retnet": 0.0,
+            "mamba": 0.0,
+            "norms": 0.0,
+            "head": 0.0,
+            "other": 0.0,
+        }
+
+    def _log_step_to_csv(
+        self,
+        *,
+        epoch: int,
+        step: int,
+        loss: float = 0.0,
+        accuracy: float = 0.0,
+        lr: float = 0.0,
+        grad_norm: float = 0.0,
+        has_nan: bool = False,
+        has_inf: bool = False,
+        has_zero: bool = False,
+        repair_action: str = "none",
+        step_time_ms: float = 0.0,
+        tokens_per_sec: float = 0.0,
+        clip_ratio: float = 0.0,
+        effective_batch_size: int = 0,
+    ):
+        gpu_memory = 0.0
+        gpu_cached = 0.0
+        if torch.cuda.is_available():
+            gpu_memory = torch.cuda.memory_allocated() / 1024**3
+            gpu_cached = torch.cuda.memory_reserved() / 1024**3
+
+        telemetry = self._get_gpu_telemetry()
+        if self._last_guard_temp_c is not None:
+            telemetry["gpu_temp_c"] = float(self._last_guard_temp_c)
+        grad_buckets = self._get_default_block_grad_norms()
+
+        self.csv_writer.writerow([
+            datetime.now().isoformat(),
+            epoch,
+            step,
+            self.global_step,
+            f'{float(loss):.6f}',
+            f'{float(accuracy):.6f}',
+            f'{float(lr):.8e}',
+            f'{float(grad_norm):.6f}',
+            f'{1.0:.2f}',
+            f'{gpu_memory:.4f}',
+            f'{gpu_cached:.4f}',
+            int(has_nan),
+            int(has_inf),
+            int(has_zero),
+            repair_action,
+            f"{float(telemetry['gpu_temp_c']):.2f}",
+            f"{float(telemetry['gpu_power_w']):.2f}",
+            f"{float(telemetry['gpu_util_pct']):.2f}",
+            f"{float(telemetry['gpu_mem_used_mib']):.2f}",
+            f"{float(grad_buckets['embeddings']):.6f}",
+            f"{float(grad_buckets['attention']):.6f}",
+            f"{float(grad_buckets['ffn']):.6f}",
+            f"{float(grad_buckets['experts']):.6f}",
+            f"{float(grad_buckets['router']):.6f}",
+            f"{float(grad_buckets['ode']):.6f}",
+            f"{float(grad_buckets['retnet']):.6f}",
+            f"{float(grad_buckets['mamba']):.6f}",
+            f"{float(grad_buckets['norms']):.6f}",
+            f"{float(grad_buckets['head']):.6f}",
+            f"{float(grad_buckets['other']):.6f}",
+            f"{float(step_time_ms):.2f}",
+            f"{float(tokens_per_sec):.2f}",
+            f"{float(clip_ratio):.6f}",
+            int(effective_batch_size),
+        ])
+        self.csv_file.flush()
 
     def _save_thermal_model_snapshot(self, batch_idx: int, temp_c: float) -> str:
         safe_temp = str(f"{float(temp_c):.1f}").replace(".", "p")
@@ -524,6 +783,7 @@ class SBERTTrainer:
 
         self._thermal_last_model_snapshot = model_snapshot_path
         self._thermal_last_resume_artifact = resume_artifact_path
+        self._last_guard_temp_c = float(temp_c)
         self.model.to("cpu")
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -552,6 +812,7 @@ class SBERTTrainer:
         self._thermal_last_poll_monotonic = now
         resume_threshold = float(self.gpu_temp_guard.resume_threshold_c)
         current_temp = float(self.gpu_temp_guard.read_temperature_c())
+        self._last_guard_temp_c = current_temp
         context = f"sbert.fit batch={batch_idx + 1}"
         if current_temp > resume_threshold:
             logger.warning(
@@ -597,8 +858,10 @@ class SBERTTrainer:
         if not self._switch_on_thermal:
             context = f"sbert.fit batch={batch_idx + 1}"
             temp_c = float(self.gpu_temp_guard.read_temperature_c())
+            self._last_guard_temp_c = temp_c
             if temp_c > float(self.gpu_temp_guard.pause_threshold_c):
                 result = self.gpu_temp_guard.wait_until_safe(context=context)
+                self._last_guard_temp_c = float(result.temp_c)
                 return result.repair_action
             return "none"
         if self._thermal_offload_active:
@@ -606,13 +869,41 @@ class SBERTTrainer:
 
         context = f"sbert.fit batch={batch_idx + 1}"
         temp_c = float(self.gpu_temp_guard.read_temperature_c())
+        self._last_guard_temp_c = temp_c
         critical_threshold = self.gpu_temp_guard.critical_threshold_c
         if critical_threshold is not None and temp_c >= float(critical_threshold):
             return self._offload_model_for_critical_thermal_event(batch_idx, temp_c)
         if temp_c > float(self.gpu_temp_guard.pause_threshold_c):
             result = self.gpu_temp_guard.wait_until_safe(context=context)
+            self._last_guard_temp_c = float(result.temp_c)
             return result.repair_action
         return "none"
+
+    def _on_sbert_step(self, epoch_idx: int, batch_idx: int, repair_action: str):
+        self.global_step += 1
+        if (self.global_step % self.telemetry_log_interval) != 0:
+            return
+        self._log_step_to_csv(
+            epoch=int(epoch_idx),
+            step=int(batch_idx),
+            loss=0.0,
+            accuracy=0.0,
+            lr=float(self.learning_rate),
+            grad_norm=0.0,
+            has_nan=False,
+            has_inf=False,
+            has_zero=False,
+            repair_action=str(repair_action or "none"),
+            step_time_ms=0.0,
+            tokens_per_sec=0.0,
+            clip_ratio=0.0,
+            effective_batch_size=int(self.batch_size),
+        )
+
+    def close(self):
+        if self.csv_file:
+            self.csv_file.close()
+            logger.info("CSV log closed: %s", self.csv_log_path)
     
     def load_dataset(
         self,
@@ -1074,6 +1365,7 @@ class SBERTTrainer:
             context_prefix="sbert.fit",
             skip_batches_once=resume_skip_batches,
             on_thermal_check=self._handle_thermal_guard_for_batch,
+            on_step=self._on_sbert_step,
         )
         
         # Define loss function according to dataset type.
@@ -1165,6 +1457,7 @@ class _ThermalGuardedDataLoader:
         context_prefix: str,
         skip_batches_once: int = 0,
         on_thermal_check: Optional[Callable[[int], str]] = None,
+        on_step: Optional[Callable[[int, int, str], None]] = None,
         on_critical_temperature: Optional[Callable[[int, float], str]] = None,
     ):
         self._dataloader = dataloader
@@ -1173,14 +1466,19 @@ class _ThermalGuardedDataLoader:
         self._skip_batches_once = max(int(skip_batches_once), 0)
         self._skip_batches_applied = False
         self._on_thermal_check = on_thermal_check
+        self._on_step = on_step
         self._on_critical_temperature = on_critical_temperature
+        self._epoch_counter = 0
 
     def __len__(self):
         return len(self._dataloader)
 
     def __iter__(self):
         batch_iter = iter(self._dataloader)
+        epoch_idx = self._epoch_counter
+        self._epoch_counter += 1
         start_batch_idx = 0
+        progress_started = time.perf_counter()
 
         if (not self._skip_batches_applied) and self._skip_batches_once > 0:
             skipped = 0
@@ -1198,6 +1496,7 @@ class _ThermalGuardedDataLoader:
             )
 
         for batch_idx, batch in enumerate(batch_iter, start=start_batch_idx):
+            repair_action = "none"
             if self._on_thermal_check is not None:
                 repair_action = self._on_thermal_check(batch_idx)
                 if repair_action != "none":
@@ -1233,6 +1532,15 @@ class _ThermalGuardedDataLoader:
                             result.repair_action,
                             result.temp_c,
                         )
+            if batch_idx > 0 and (batch_idx % 100 == 0):
+                progress_snapshot = tqdm_progress.format_meter(
+                    batch_idx + 1,
+                    len(self._dataloader),
+                    time.perf_counter() - progress_started,
+                )
+                logger.info("Progress %s", progress_snapshot)
+            if self._on_step is not None:
+                self._on_step(epoch_idx, batch_idx, repair_action)
             yield batch
 
 
@@ -1340,6 +1648,33 @@ def main(argv=None):
     parser.add_argument("--gpu-temp-critical-threshold-c", type=float, default=None)
     parser.add_argument("--gpu-temp-poll-interval-seconds", type=float, default=30.0)
     parser.add_argument("--nvml-device-index", type=int, default=0)
+    parser.add_argument("--csv-log-path", type=str, default="training_metrics.csv")
+    csv_rotate_group = parser.add_mutually_exclusive_group()
+    csv_rotate_group.add_argument(
+        "--csv-rotate-on-schema-change",
+        dest="csv_rotate_on_schema_change",
+        action="store_true",
+    )
+    csv_rotate_group.add_argument(
+        "--no-csv-rotate-on-schema-change",
+        dest="csv_rotate_on_schema_change",
+        action="store_false",
+    )
+    parser.set_defaults(csv_rotate_on_schema_change=True)
+    parser.add_argument("--telemetry-log-interval", type=int, default=1)
+    parser.add_argument("--gpu-metrics-backend", type=str, default="nvml", choices=["nvml", "none"])
+    block_grad_group = parser.add_mutually_exclusive_group()
+    block_grad_group.add_argument(
+        "--enable-block-grad-norms",
+        dest="enable_block_grad_norms",
+        action="store_true",
+    )
+    block_grad_group.add_argument(
+        "--no-enable-block-grad-norms",
+        dest="enable_block_grad_norms",
+        action="store_false",
+    )
+    parser.set_defaults(enable_block_grad_norms=True)
     
     args = parser.parse_args(argv)
     resolved_device = resolve_torch_device(args.device)
@@ -1364,6 +1699,8 @@ def main(argv=None):
         raise ValueError("gpu_temp_critical_threshold_c must be > 0 when provided")
     if args.checkpoint_save_steps < 0:
         raise ValueError("checkpoint_save_steps must be >= 0")
+    if args.telemetry_log_interval <= 0:
+        raise ValueError("telemetry_log_interval must be > 0")
     
     # Setup
     logger.info("=" * 80)
@@ -1428,6 +1765,11 @@ def main(argv=None):
         gpu_temp_critical_threshold_c=args.gpu_temp_critical_threshold_c,
         gpu_temp_poll_interval_seconds=args.gpu_temp_poll_interval_seconds,
         nvml_device_index=args.nvml_device_index,
+        csv_log_path=args.csv_log_path,
+        csv_rotate_on_schema_change=bool(args.csv_rotate_on_schema_change),
+        telemetry_log_interval=int(args.telemetry_log_interval),
+        gpu_metrics_backend=args.gpu_metrics_backend,
+        enable_block_grad_norms=bool(args.enable_block_grad_norms),
     )
     
     # Load dataset
@@ -1459,7 +1801,10 @@ def main(argv=None):
     )
     
     # Train
-    final_score = trainer.train()
+    try:
+        final_score = trainer.train()
+    finally:
+        trainer.close()
     
     logger.info("=" * 80)
     if final_score is not None:
