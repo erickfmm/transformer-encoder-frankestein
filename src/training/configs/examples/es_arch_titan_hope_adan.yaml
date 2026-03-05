@@ -18,9 +18,12 @@ model:
   factorized_embedding_dim: 128
   use_embedding_conv: false
   embedding_conv_kernel: 3
+  positional_encoding: rope
   hope_base: 10000.0
   hope_damping: 0.01
-  use_hope: true
+  rope_base: 10000.0
+  rope_scaling: 1.0
+  use_hope: false
   use_moe: false
   ffn_hidden_size: 3072
   ffn_activation: silu

@@ -164,6 +164,11 @@ properties:
         minimum: 1
         description: "Conv1d kernel size."
         examples: [3]
+      positional_encoding:
+        type: string
+        enum: [hope, rope]
+        description: "Positional encoding used by titan_attn. If omitted, use_hope is used as legacy fallback."
+        examples: [hope, rope]
       hope_base:
         type: number
         minimum: 0.0
@@ -174,9 +179,19 @@ properties:
         minimum: 0.0
         description: "HoPE damping."
         examples: [0.01]
+      rope_base:
+        type: number
+        minimum: 0.0
+        description: "RoPE base value."
+        examples: [10000.0]
+      rope_scaling:
+        type: number
+        minimum: 0.0
+        description: "RoPE scaling multiplier for token positions."
+        examples: [1.0]
       use_hope:
         type: boolean
-        description: "Apply HoPE in titan_attn."
+        description: "Legacy fallback flag for titan_attn positional encoding when positional_encoding is omitted."
         examples: [true]
       use_moe:
         type: boolean
@@ -1027,6 +1042,11 @@ examples:
       factorized_embedding_dim: 128
       use_embedding_conv: false
       embedding_conv_kernel: 3
+      positional_encoding: hope
+      hope_base: 10000.0
+      hope_damping: 0.01
+      rope_base: 10000.0
+      rope_scaling: 1.0
       use_hope: false
       use_moe: false
       ffn_hidden_size: 3072

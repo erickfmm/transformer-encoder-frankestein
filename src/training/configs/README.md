@@ -232,9 +232,12 @@ Examples:
 - `factorized_embedding_dim`: reduced embedding dimension.
 - `use_embedding_conv`: optional Conv1d on embeddings.
 - `embedding_conv_kernel`: Conv1d kernel size.
+- `positional_encoding`: titan positional encoding (`hope` or `rope`). If omitted, legacy `use_hope` is used.
 - `hope_base`: HoPE base.
 - `hope_damping`: HoPE damping.
-- `use_hope`: apply HoPE in `titan_attn`.
+- `rope_base`: RoPE base.
+- `rope_scaling`: RoPE position scaling.
+- `use_hope`: legacy fallback for `titan_attn` when `positional_encoding` is omitted.
 - `use_moe`: use MoE in FFN.
 - `ffn_hidden_size`: FFN intermediate dimension.
 - `ffn_activation`: `silu` or `gelu`.
@@ -373,7 +376,7 @@ This is a hard migration.
 
 - `ffn_hidden_size` is required to match BERT/TinyBERT/EmbBERT.
 - `embedding_conv_kernel` allows replicating EmbBERT with kernel 32.
-- `standard_attn` and `sigmoid_attn` are compatible with `use_hope=false`.
+- `standard_attn` and `sigmoid_attn` are compatible with any positional-encoding setting because they do not apply HoPE/RoPE.
 - Full GPU power/utilization/memory telemetry uses `pynvml` when available; non-guard telemetry may fall back to zeros.
 - When `gpu_temp_guard_enabled: true`, temperature reads are strict (`NVML` then `nvidia-smi`), and telemetry failure stops training immediately.
 - When `switch_on_thermal: true`, critical temperature can switch training GPU->CPU and return CPU->GPU at resume temperature; CUDA/NVIDIA runtime failures may force CPU-only mode.
