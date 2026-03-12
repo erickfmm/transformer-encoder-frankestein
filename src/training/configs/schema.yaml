@@ -123,7 +123,27 @@ properties:
         description: "Ordered layer pattern."
         items:
           type: string
-          enum: [retnet, mamba, ode, titan_attn, standard_attn, sigmoid_attn]
+          enum:
+            - retnet
+            - retnet_attn
+            - mamba
+            - ode
+            - titan_attn
+            - standard_attn
+            - sigmoid_attn
+            - sparse_transformer_attn
+            - longformer_attn
+            - bigbird_attn
+            - sparsek_attn
+            - nsa_attn
+            - sparge_attn
+            - fasa_attn
+            - gla_attn
+            - deltanet_attn
+            - gated_deltanet_attn
+            - hgrn2_attn
+            - fox_attn
+            - gated_softmax_attn
         examples:
           - [retnet, titan_attn, retnet, mamba, titan_attn, ode]
           - [standard_attn]

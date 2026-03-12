@@ -223,7 +223,11 @@ Examples:
 - `num_experts`: MoE experts.
 - `top_k_experts`: top-k routing in MoE.
 - `dropout`: global dropout.
-- `layer_pattern`: list of blocks (`retnet`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`).
+- `layer_pattern`: list of blocks.
+- Legacy blocks: `retnet`, `retnet_attn`, `mamba`, `ode`, `titan_attn`, `standard_attn`, `sigmoid_attn`.
+- Sparse blocks: `sparse_transformer_attn`, `longformer_attn`, `bigbird_attn`, `sparsek_attn`, `nsa_attn`, `sparge_attn`, `fasa_attn`.
+- Gated blocks: `gla_attn`, `deltanet_attn`, `gated_deltanet_attn`, `hgrn2_attn`, `fox_attn`, `gated_softmax_attn`.
+- Training-free policy: `sparge_attn` and `fasa_attn` are eval-only; training mode raises an explicit runtime error.
 - `ode_solver`: `rk4` or `euler`.
 - `ode_steps`: integration steps.
 - `use_bitnet`: BitLinear on/off.

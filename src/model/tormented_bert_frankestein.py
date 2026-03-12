@@ -23,9 +23,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .attention.common import BitLinear, get_norm
+from .attention.gated import (
+    DeltaNetAttention,
+    ForgettingAttention,
+    GatedDeltaNetAttention,
+    GatedLinearAttention,
+    GatedSoftmaxAttention,
+    HGRN2Attention,
+    RetNetAttention,
+)
 from .attention.ode import ODEAttentionBlock
 from .attention.retnet import MultiScaleRetention
 from .attention.sigmoid import SigmoidAttention
+from .attention.sparse import (
+    BigBirdAttention,
+    FASAAttention,
+    LongformerAttention,
+    NSAAttention,
+    SparseKAttention,
+    SparseTransformerAttention,
+    SpargeAttention,
+)
 from .attention.standard import StandardAttention
 from .attention.titan import TitanAttention
 
@@ -129,6 +147,8 @@ class FactorizedEmbedding(nn.Module):
 
 # ==================== TITAN HYBRID LAYER ====================
 class HybridLayer(nn.Module):
+    TRAINING_FREE_LAYERS = {"fasa_attn", "sparge_attn"}
+
     def __init__(self, config, layer_type):
         super().__init__()
         self.layer_type = layer_type
@@ -137,19 +157,38 @@ class HybridLayer(nn.Module):
 
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
 
-        if layer_type == "ode":
-            self.mixer = ODEAttentionBlock(config)
-        elif layer_type == "retnet":
-            self.mixer = MultiScaleRetention(config)
-        elif layer_type == "mamba":
+        mixer_registry = {
+            "ode": ODEAttentionBlock,
+            "retnet": MultiScaleRetention,
+            "retnet_attn": RetNetAttention,
+            "titan_attn": TitanAttention,
+            "standard_attn": StandardAttention,
+            "sigmoid_attn": SigmoidAttention,
+            "sparse_transformer_attn": SparseTransformerAttention,
+            "longformer_attn": LongformerAttention,
+            "bigbird_attn": BigBirdAttention,
+            "sparsek_attn": SparseKAttention,
+            "nsa_attn": NSAAttention,
+            "sparge_attn": SpargeAttention,
+            "fasa_attn": FASAAttention,
+            "gla_attn": GatedLinearAttention,
+            "deltanet_attn": DeltaNetAttention,
+            "gated_deltanet_attn": GatedDeltaNetAttention,
+            "hgrn2_attn": HGRN2Attention,
+            "fox_attn": ForgettingAttention,
+            "gated_softmax_attn": GatedSoftmaxAttention,
+        }
+
+        if layer_type == "mamba":
             # Placeholder simple para Mamba (en prod usar mamba-ssm)
             self.mixer = proj_cls(config.hidden_size, config.hidden_size)
-        elif layer_type == "standard_attn":
-            self.mixer = StandardAttention(config)
-        elif layer_type == "sigmoid_attn":
-            self.mixer = SigmoidAttention(config)
-        else:  # titan_attn
-            self.mixer = TitanAttention(config)
+        elif layer_type in mixer_registry:
+            self.mixer = mixer_registry[layer_type](config)
+        else:
+            supported_layers = sorted(list(mixer_registry.keys()) + ["mamba"])
+            raise ValueError(
+                f"Unknown layer_type '{layer_type}'. Supported values: {supported_layers}"
+            )
 
         self.norm2 = get_norm(config)
         activation = nn.SiLU() if config.ffn_activation == "silu" else nn.GELU()
@@ -181,12 +220,17 @@ class HybridLayer(nn.Module):
         residual = x
         x = self.norm1(x)
 
+        if self.training and self.layer_type in self.TRAINING_FREE_LAYERS:
+            raise ValueError(
+                f"Layer '{self.layer_type}' is training-free and only supported in eval/inference mode."
+            )
+
         if self.layer_type == "mamba":
             x = x + self.mixer(x)
-        elif self.layer_type in {"titan_attn", "standard_attn", "sigmoid_attn"}:
-            x = self.mixer(x, logical_layer_idx=logical_layer_idx)
-        else:
+        elif self.layer_type in {"ode", "retnet"}:
             x = self.mixer(x)
+        else:
+            x = self.mixer(x, logical_layer_idx=logical_layer_idx)
 
         x = residual + x
 

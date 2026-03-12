@@ -50,11 +50,30 @@ The authoritative contract is \texttt{src/training/configs/schema.yaml}. It enfo
     \item \texttt{training}
 \end{itemize}
 
-The \texttt{model.layer\_pattern} supports:
-\[
-\{\texttt{retnet}, \texttt{mamba}, \texttt{ode}, \texttt{titan\_attn}, \texttt{standard\_attn}, \texttt{sigmoid\_attn}\}
-\]
-which corresponds to current attention and sequence-mixer literature \citep{sun_retentive_2023,gu_mamba_2023,zhang_continuous_2021,behrouz_titans_2025,ramapuram_theory_2024,vaswani_attention_2017}.
+The \texttt{model.layer\_pattern} supports legacy, sparse, and gated blocks:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Retentive Network (RetNet)} --- internal reference: \texttt{sun\_retentive\_2023} --- code name: \texttt{retnet}, \texttt{retnet\_attn}
+    \item \textbf{Mamba (Selective State Space Model)} --- internal reference: \texttt{gu\_mamba\_2023} --- code name: \texttt{mamba}
+    \item \textbf{ODE-style Continuous Depth Block} --- internal reference: \texttt{zhang\_continuous\_2021} --- code name: \texttt{ode}
+    \item \textbf{Titans Memory-Augmented Attention} --- internal reference: \texttt{behrouz\_titans\_2025} --- code name: \texttt{titan\_attn}
+    \item \textbf{Standard Softmax Attention} --- internal reference: \texttt{vaswani\_attention\_2017} --- code name: \texttt{standard\_attn}
+    \item \textbf{Sigmoid Self-Attention} --- internal reference: \texttt{ramapuram\_theory\_2024} --- code name: \texttt{sigmoid\_attn}
+    \item \textbf{Sparse Transformer} --- internal reference: \texttt{child\_sparse\_transformer\_2019} --- code name: \texttt{sparse\_transformer\_attn}
+    \item \textbf{Longformer} --- internal reference: \texttt{beltagy\_longformer\_2020} --- code name: \texttt{longformer\_attn}
+    \item \textbf{BigBird} --- internal reference: \texttt{zaheer\_bigbird\_2020} --- code name: \texttt{bigbird\_attn}
+    \item \textbf{SparseK Attention} --- internal reference: \texttt{lou\_sparsek\_2024} --- code name: \texttt{sparsek\_attn}
+    \item \textbf{Native Sparse Attention (NSA)} --- internal reference: \texttt{yuan\_nsa\_2025} --- code name: \texttt{nsa\_attn}
+    \item \textbf{SpargeAttn} --- internal reference: \texttt{zhang\_spargeattn\_2025} --- code name: \texttt{sparge\_attn}
+    \item \textbf{FASA (Frequency-aware Sparse Attention)} --- internal reference: \texttt{wang\_fasa\_2026} --- code name: \texttt{fasa\_attn}
+    \item \textbf{Gated Linear Attention (GLA)} --- internal reference: \texttt{yang\_gla\_2023} --- code name: \texttt{gla\_attn}
+    \item \textbf{DeltaNet} --- internal reference: \texttt{yang\_deltanet\_2024} --- code name: \texttt{deltanet\_attn}
+    \item \textbf{Gated DeltaNet} --- internal reference: \texttt{yang\_gated\_deltanet\_2024} --- code name: \texttt{gated\_deltanet\_attn}
+    \item \textbf{HGRN2} --- internal reference: \texttt{qin\_hgrn2\_2024} --- code name: \texttt{hgrn2\_attn}
+    \item \textbf{Forgetting Transformer (FoX)} --- internal reference: \texttt{lin\_forgetting\_transformer\_2025} --- code name: \texttt{fox\_attn}
+    \item \textbf{Gated Softmax Attention} --- internal reference: \texttt{qiu\_gated\_attention\_2025} --- code name: \texttt{gated\_softmax\_attn}
+\end{itemize}
+
+which corresponds to current attention and sequence-mixer literature \citep{sun_retentive_2023,gu_mamba_2023,zhang_continuous_2021,behrouz_titans_2025,ramapuram_theory_2024,vaswani_attention_2017,child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}.
 
 The \texttt{training.optimizer.optimizer\_class} supports a broad optimizer family:
 \texttt{adamw}, \texttt{adafactor}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{schedulefree\_adamw}, \texttt{lion}, \texttt{sophia}, \texttt{prodigy}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{shampoo}, \texttt{soap}, and others.
@@ -86,7 +105,7 @@ Thus, \texttt{rms\_norm} is \textbf{not} a valid schema value in the current con
 \texttt{num\_experts} & int $\ge 1$ & MoE expert count. \\
 \texttt{top\_k\_experts} & int $\ge 1$ & Top-$k$ expert routing in MoE. \\
 \texttt{dropout} & float $[0,1]$ & Global dropout. \\
-\texttt{layer\_pattern} & array enum & Ordered block list: \texttt{retnet}, \texttt{mamba}, \texttt{ode}, \texttt{titan\_attn}, \texttt{standard\_attn}, \texttt{sigmoid\_attn}. \\
+\texttt{layer\_pattern} & array enum & Ordered block list: legacy (\texttt{retnet}, \texttt{retnet\_attn}, \texttt{mamba}, \texttt{ode}, \texttt{titan\_attn}, \texttt{standard\_attn}, \texttt{sigmoid\_attn}), sparse (\texttt{sparse\_transformer\_attn}, \texttt{longformer\_attn}, \texttt{bigbird\_attn}, \texttt{sparsek\_attn}, \texttt{nsa\_attn}, \texttt{sparge\_attn}, \texttt{fasa\_attn}), and gated (\texttt{gla\_attn}, \texttt{deltanet\_attn}, \texttt{gated\_deltanet\_attn}, \texttt{hgrn2\_attn}, \texttt{fox\_attn}, \texttt{gated\_softmax\_attn}). \\
 \texttt{ode\_solver} & enum & \texttt{rk4} or \texttt{euler}. \\
 \texttt{ode\_steps} & int $\ge 1$ & ODE integration steps. \\
 \texttt{use\_bitnet} & bool & Enable low-bit BitLinear path. \\
@@ -320,21 +339,173 @@ S_t=\eta_t S_{t-1}-\theta_t\nabla \ell(M_{t-1};x_t)
 \]
 to adapt memory at inference time \citep{behrouz_titans_2025,behrouz_titans_2024}.
 
+\subsection{Sparse and Gated Extensions in the Current Codebase}
+The mixer registry now includes sparse blocks:
+\texttt{sparse\_transformer\_attn}, \texttt{longformer\_attn}, \texttt{bigbird\_attn},
+\texttt{sparsek\_attn}, \texttt{nsa\_attn}, \texttt{sparge\_attn}, and \texttt{fasa\_attn};
+and gated blocks:
+\texttt{gla\_attn}, \texttt{deltanet\_attn}, \texttt{gated\_deltanet\_attn},
+\texttt{hgrn2\_attn}, \texttt{fox\_attn}, and \texttt{gated\_softmax\_attn}.
+
+The implementation enforces an explicit execution policy for training-free sparse methods:
+\texttt{fasa\_attn} and \texttt{sparge\_attn} are eval/inference-only and raise runtime errors if used while the model is in training mode.
+
+\subsection{Implemented Sparse Attention Blocks (Detailed)}
+This codebase includes seven sparse attention families aligned with the sparse attention survey notes in \texttt{docs/bibliography/SPARSE\_TRANSFORMER\_TYPES.md} \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}.
+
+\paragraph{Sparse Transformer (\texttt{sparse\_transformer\_attn}).}
+Uses factorized sparse masks (strided + fixed) to approximate dense connectivity at lower cost than full $\mathcal{O}(n^2)$ attention:
+\[
+\text{Attn}_i=\text{softmax}\!\left(\frac{q_iK_{A_i}^\top}{\sqrt{d_k}}\right)V_{A_i}
+\]
+where $A_i$ is the sparse neighborhood induced by stride/fixed rules.
+\citep{child_sparse_transformer_2019}
+
+\paragraph{Longformer (\texttt{longformer\_attn}).}
+Uses sliding-window locality with optional global tokens:
+\[
+A_i=\{j:\lvert i-j\rvert \le w/2\}\cup\mathcal{G}
+\]
+yielding linear scaling in sequence length for fixed window $w$.
+\citep{beltagy_longformer_2020}
+
+\paragraph{BigBird (\texttt{bigbird\_attn}).}
+Combines local windows, random links, and global tokens:
+\[
+A_i=A_i^{\text{window}}\cup A_i^{\text{random}}\cup A_i^{\text{global}}
+\]
+to preserve strong long-context connectivity with sparse computation.
+\citep{zaheer_bigbird_2020}
+
+\paragraph{SparseK (\texttt{sparsek\_attn}).}
+Uses a differentiable top-$k$ style projection over importance scores before attention, so only selected KV pairs participate in the expensive dot-product path.
+\citep{lou_sparsek_2024}
+
+\paragraph{NSA (\texttt{nsa\_attn}).}
+Implements a three-branch sparse design: compressed branch, selected branch, and local window branch, then combines them with learned gates:
+\[
+o_t=\sum_{c\in\{\text{cmp},\text{sel},\text{win}\}} g_t^c\,\text{Attn}(q_t,\tilde K_t^c,\tilde V_t^c)
+\]
+\citep{yuan_nsa_2025}
+
+\paragraph{SpargeAttn (\texttt{sparge\_attn}).}
+Two-stage training-free block filtering: first predicts negligible block interactions, then applies softmax-aware pruning to remove low-contribution blocks.
+\citep{zhang_spargeattn_2025}
+
+\paragraph{FASA (\texttt{fasa\_attn}).}
+Frequency-aware training-free attention: uses dominant RoPE frequency chunks for token importance prediction, then applies full attention only on selected tokens.
+\citep{wang_fasa_2026}
+
+\small
+\begin{longtable}{p{2.5cm}p{1.6cm}p{1.9cm}p{2.4cm}p{4.1cm}p{1.5cm}}
+\toprule
+\textbf{Block} & \textbf{Trainable} & \textbf{Asymptotic Trend} & \textbf{Primary Sparsity Unit} & \textbf{Current Integration Notes} & \textbf{Ref} \\
+\midrule
+\endhead
+Sparse Transformer & Yes & sub-quadratic & mask pattern (token-level) & Factorized strided/fixed masks inside SDPA pipeline. & \citep{child_sparse_transformer_2019} \\
+Longformer & Yes & linear in $n$ (fixed $w$) & sliding window + global tokens & Window mask with optional global indices. & \citep{beltagy_longformer_2020} \\
+BigBird & Yes & near-linear & window + random + global edges & Randomized sparse mask plus local/global paths. & \citep{zaheer_bigbird_2020} \\
+SparseK & Yes & linear-like (selected KV) & differentiable top-$k$ KV selection & Learned score net + SparseK projection + gathered KV attention. & \citep{lou_sparsek_2024} \\
+NSA & Yes & reduced-token multi-branch & compressed blocks + selected blocks + local window & Three sparse branches gated into one output tensor. & \citep{yuan_nsa_2025} \\
+SpargeAttn & No (training-free) & sparse block dependent & block-level predicted sparsity & Eval-only in this repo; raises in training mode. & \citep{zhang_spargeattn_2025} \\
+FASA & No (training-free) & selected-token dependent & dominant frequency chunks + selected tokens & Eval-only in this repo; raises in training mode. & \citep{wang_fasa_2026} \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+\subsection{Implemented Gated Attention Blocks (Detailed)}
+This codebase includes seven gated blocks aligned with \texttt{docs/bibliography/GATED\_TRANSFORMER\_TYPES.md} \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,sun_retentive_2023,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}.
+
+\paragraph{GLA (\texttt{gla\_attn}).}
+Gated Linear Attention applies data-dependent multiplicative decay in recurrent state updates:
+\[
+S_t=G_t\odot S_{t-1}+v_tk_t^\top,\qquad o_t=S_tq_t
+\]
+to control memory accumulation.
+\citep{yang_gla_2023}
+
+\paragraph{DeltaNet (\texttt{deltanet\_attn}).}
+Uses a delta-rule error-correcting write with learned write strength $\beta_t$:
+\[
+S_t=S_{t-1}(I-\beta_tk_tk_t^\top)+\beta_tv_tk_t^\top
+\]
+which improves targeted memory replacement.
+\citep{yang_deltanet_2024}
+
+\paragraph{Gated DeltaNet (\texttt{gated\_deltanet\_attn}).}
+Adds decay gate $\alpha_t$ on top of delta-rule writes:
+\[
+S_t=\alpha_t S_{t-1}(I-\beta_tk_tk_t^\top)+\beta_tv_tk_t^\top
+\]
+for both global forgetting and local corrective updates.
+\citep{yang_gated_deltanet_2024}
+
+\paragraph{RetNet Attn Alias (\texttt{retnet\_attn}).}
+Provides an explicit gated-package alias wrapping multi-scale retention behavior for naming consistency in layer registries.
+\citep{sun_retentive_2023}
+
+\paragraph{HGRN2 (\texttt{hgrn2\_attn}).}
+Uses lower-bounded forget gates with outer-product state expansion:
+\[
+S_t=\text{diag}(g_t)S_{t-1}+v_tk_t^\top
+\]
+to increase recurrent state expressiveness while remaining efficient.
+\citep{qin_hgrn2_2024}
+
+\paragraph{FoX (\texttt{fox\_attn}).}
+Injects token-wise forget bias directly into softmax logits:
+\[
+O=\text{softmax}(QK^\top + D)V
+\]
+where $D$ is derived from cumulative log-forget gates.
+\citep{lin_forgetting_transformer_2025}
+
+\paragraph{Gated Softmax (\texttt{gated\_softmax\_attn}).}
+Applies a post-SDPA sigmoid gate:
+\[
+Y'=\text{SDPA}(Q,K,V)\odot \sigma(XW_g)
+\]
+which adds multiplicative channel gating without replacing softmax attention.
+\citep{qiu_gated_attention_2025}
+
+\small
+\begin{longtable}{p{2.4cm}p{2.0cm}p{2.2cm}p{1.8cm}p{4.0cm}p{1.5cm}}
+\toprule
+\textbf{Block} & \textbf{State Type} & \textbf{Gate Mechanism} & \textbf{Softmax Path} & \textbf{Current Integration Notes} & \textbf{Ref} \\
+\midrule
+\endhead
+GLA & matrix recurrent state & data-dependent multiplicative decay & No (linear recurrent) & Recurrent update with low-rank gate projection. & \citep{yang_gla_2023} \\
+DeltaNet & matrix recurrent state & write gate ($\beta$) & No (linear recurrent) & Delta-rule correction with normalized Q/K. & \citep{yang_deltanet_2024} \\
+Gated DeltaNet & matrix recurrent state & decay + write gates ($\alpha,\beta$) & No (linear recurrent) & Combined forgetting and targeted writing. & \citep{yang_gated_deltanet_2024} \\
+RetNet Attn & matrix recurrent state & fixed multi-scale decay & No (retention) & Alias wrapper over existing RetNet mixer. & \citep{sun_retentive_2023} \\
+HGRN2 & matrix recurrent state & lower-bounded forget gate & No (linear recurrent) & Hierarchical recurrent gating with outer products. & \citep{qin_hgrn2_2024} \\
+FoX & full attention matrix & logit-space forget gate & Yes & Forget bias added before softmax. & \citep{lin_forgetting_transformer_2025} \\
+Gated Softmax & full attention matrix & post-attention sigmoid gate & Yes & Sigmoid gating applied after SDPA output. & \citep{qiu_gated_attention_2025} \\
+\bottomrule
+\end{longtable}
+\normalsize
+
 \begin{algorithm}[t]
 \caption{Pattern-Driven Mixer Forward (Conceptual)}
 \begin{algorithmic}[1]
 \Require Hidden states $H$, pattern $P$, layer index $\ell$
 \State $m \gets P[\ell \bmod |P|]$
-\If{$m=\texttt{standard\_attn}$}
+\If{$m \in \{\texttt{fasa\_attn}, \texttt{sparge\_attn}\}$ and model is in training mode}
+    \State raise configuration/runtime error (training-free block in train mode)
+\ElsIf{$m=\texttt{standard\_attn}$}
     \State $H \gets \text{softmax-attention}(H)$
 \ElsIf{$m=\texttt{sigmoid\_attn}$}
     \State $H \gets \text{sigmoid-attention}(H)$
-\ElsIf{$m=\texttt{retnet}$}
+\ElsIf{$m\in\{\texttt{retnet},\texttt{retnet\_attn}\}$}
     \State $H \gets \text{retention}(H)$
 \ElsIf{$m=\texttt{mamba}$}
     \State $H \gets \text{selective-ssm}(H)$
 \ElsIf{$m=\texttt{ode}$}
     \State $H \gets \text{rk-step}(H)$
+\ElsIf{$m$ is a sparse attention key}
+    \State $H \gets \text{sparse-attention-family}(H)$
+\ElsIf{$m$ is a gated attention key}
+    \State $H \gets \text{gated-attention-family}(H)$
 \Else
     \State $H \gets \text{memory-augmented-attn}(H)$
 \EndIf
@@ -512,7 +683,7 @@ Transformer Encoder Frankenstein is positioned as a practical experimentation pl
 % Include all requested bibliography collections.
 \nocite{zhang_continuous_2021,sun_mobilebert_2020,yang_looped_2024,reimers_sentence-bert_2019,wang_bitnet_2023,devlin_bert_2019,canete_spanish_2023,cai_survey_2025,yang_survey_2025,behrouz_titans_2024,gillin_bert-jepa_2026,bui_knowledge_2024,samson_lightweight_2026,zhu_transformers_2025,chen_stronger_2025,yongueng_holonorm_2025,bravin_embbert_2026,hwang_hydra_2024,dai_hope_2025,sun_retentive_2023,gu_mamba_2024,zhang_why_2020}
 \nocite{loshchilov_decoupled_2017,liu_variance_2019,xie_adan_2022,taniguchi_adopt_2024,pagliardini_ademamix_2024,yuan_mars_2024,liang_cautious_2024,defazio_road_2024,gupta_shampoo_2018,vyas_soap_2024,shazeer_adafactor_2018,zhao_galore_2024,mishchenko_prodigy_2023,chen_symbolic_2023,liu_sophia_2023,shen_convergence_2025,boissin_turbo-muon_2025}
-\nocite{behrouz_titans_2025,gu_mamba_2023,ramapuram_theory_2024,vaswani_attention_2017}
+\nocite{behrouz_titans_2025,gu_mamba_2023,ramapuram_theory_2024,vaswani_attention_2017,child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}
 
 \bibliographystyle{plainnat}
 \bibliography{bibliography/other,bibliography/optimizers,bibliography/attention_types}

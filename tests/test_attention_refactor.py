@@ -2,11 +2,58 @@ import unittest
 
 import torch
 
-from src.model.attention import HoPE, ODEAttentionBlock, RoPE, SigmoidAttention, StandardAttention, TitanAttention
+from src.model.attention import (
+    BigBirdAttention,
+    DeltaNetAttention,
+    FASAAttention,
+    ForgettingAttention,
+    GatedDeltaNetAttention,
+    GatedLinearAttention,
+    GatedSoftmaxAttention,
+    HGRN2Attention,
+    HoPE,
+    LongformerAttention,
+    NSAAttention,
+    ODEAttentionBlock,
+    RetNetAttention,
+    RoPE,
+    SigmoidAttention,
+    SparseKAttention,
+    SparseTransformerAttention,
+    SpargeAttention,
+    StandardAttention,
+    TitanAttention,
+)
 from src.model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
 
 
 class AttentionRefactorTests(unittest.TestCase):
+    def _build_config(self, layer_pattern):
+        return UltraConfig(
+            vocab_size=100,
+            hidden_size=48,
+            num_layers=1,
+            num_loops=1,
+            num_heads=6,
+            retention_heads=6,
+            num_experts=2,
+            top_k_experts=1,
+            dropout=0.0,
+            layer_pattern=layer_pattern,
+            ode_solver="rk4",
+            ode_steps=1,
+            use_bitnet=False,
+            norm_type="layer_norm",
+            use_factorized_embedding=False,
+            factorized_embedding_dim=16,
+            use_embedding_conv=False,
+            embedding_conv_kernel=3,
+            use_hope=True,
+            use_moe=False,
+            ffn_hidden_size=96,
+            ffn_activation="gelu",
+        )
+
     def test_import_smoke(self):
         self.assertTrue(callable(TormentedBertFrankenstein))
         self.assertTrue(callable(UltraConfig))
@@ -16,155 +63,93 @@ class AttentionRefactorTests(unittest.TestCase):
         self.assertTrue(callable(ODEAttentionBlock))
         self.assertTrue(callable(HoPE))
         self.assertTrue(callable(RoPE))
+        self.assertTrue(callable(SparseTransformerAttention))
+        self.assertTrue(callable(LongformerAttention))
+        self.assertTrue(callable(BigBirdAttention))
+        self.assertTrue(callable(SparseKAttention))
+        self.assertTrue(callable(NSAAttention))
+        self.assertTrue(callable(SpargeAttention))
+        self.assertTrue(callable(FASAAttention))
+        self.assertTrue(callable(GatedLinearAttention))
+        self.assertTrue(callable(DeltaNetAttention))
+        self.assertTrue(callable(GatedDeltaNetAttention))
+        self.assertTrue(callable(RetNetAttention))
+        self.assertTrue(callable(HGRN2Attention))
+        self.assertTrue(callable(ForgettingAttention))
+        self.assertTrue(callable(GatedSoftmaxAttention))
 
     def test_default_forward_compat(self):
-        config = UltraConfig(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=2,
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            layer_pattern=["titan_attn", "standard_attn"],
-            ode_solver="rk4",
-            ode_steps=1,
-            use_bitnet=False,
-            norm_type="layer_norm",
-            use_factorized_embedding=False,
-            factorized_embedding_dim=16,
-            use_embedding_conv=False,
-            embedding_conv_kernel=3,
-            use_hope=True,
-            use_moe=False,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-        )
+        config = self._build_config(["titan_attn", "standard_attn"])
+        config.num_layers = 2
         model = TormentedBertFrankenstein(config)
         x = torch.randint(0, config.vocab_size, (2, 8))
         y = model(x)
         self.assertEqual(y.shape, (2, 8, config.vocab_size))
 
     def test_legacy_use_hope_false_maps_to_rope(self):
-        config = UltraConfig(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=1,
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            layer_pattern=["titan_attn"],
-            ode_solver="rk4",
-            ode_steps=1,
-            use_bitnet=False,
-            norm_type="layer_norm",
-            use_factorized_embedding=False,
-            factorized_embedding_dim=16,
-            use_embedding_conv=False,
-            embedding_conv_kernel=3,
-            use_hope=False,
-            positional_encoding=None,
-            use_moe=False,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-        )
+        config = self._build_config(["titan_attn"])
+        config.use_hope = False
+        config.positional_encoding = None
         attn = TitanAttention(config)
         self.assertIsInstance(attn.pos_encoder, RoPE)
 
     def test_positional_encoding_override(self):
-        base_kwargs = dict(
-            vocab_size=100,
-            hidden_size=48,
-            num_layers=1,
-            num_loops=1,
-            num_heads=6,
-            retention_heads=6,
-            num_experts=2,
-            top_k_experts=1,
-            dropout=0.0,
-            layer_pattern=["titan_attn"],
-            ode_solver="rk4",
-            ode_steps=1,
-            use_bitnet=False,
-            norm_type="layer_norm",
-            use_factorized_embedding=False,
-            factorized_embedding_dim=16,
-            use_embedding_conv=False,
-            embedding_conv_kernel=3,
-            use_hope=True,
-            use_moe=False,
-            ffn_hidden_size=96,
-            ffn_activation="gelu",
-        )
-        cfg_hope = UltraConfig(**base_kwargs, positional_encoding="hope")
-        cfg_rope = UltraConfig(**base_kwargs, positional_encoding="rope")
-
+        base = self._build_config(["titan_attn"])
+        cfg_hope = UltraConfig(**{**base.__dict__, "positional_encoding": "hope"})
+        cfg_rope = UltraConfig(**{**base.__dict__, "positional_encoding": "rope"})
         self.assertIsInstance(TitanAttention(cfg_hope).pos_encoder, HoPE)
         self.assertIsInstance(TitanAttention(cfg_rope).pos_encoder, RoPE)
 
     def test_invalid_positional_encoding_raises(self):
         with self.assertRaisesRegex(ValueError, "positional_encoding"):
-            UltraConfig(
-                vocab_size=100,
-                hidden_size=48,
-                num_layers=1,
-                num_loops=1,
-                num_heads=6,
-                retention_heads=6,
-                num_experts=2,
-                top_k_experts=1,
-                dropout=0.0,
-                layer_pattern=["titan_attn"],
-                ode_solver="rk4",
-                ode_steps=1,
-                use_bitnet=False,
-                norm_type="layer_norm",
-                use_factorized_embedding=False,
-                factorized_embedding_dim=16,
-                use_embedding_conv=False,
-                embedding_conv_kernel=3,
-                use_hope=True,
-                positional_encoding="invalid",
-                use_moe=False,
-                ffn_hidden_size=96,
-                ffn_activation="gelu",
-            )
+            UltraConfig(**{**self._build_config(["titan_attn"]).__dict__, "positional_encoding": "invalid"})
 
-    def test_layer_type_coverage(self):
-        for layer_type in ["titan_attn", "standard_attn", "sigmoid_attn", "ode", "retnet"]:
-            config = UltraConfig(
-                vocab_size=100,
-                hidden_size=48,
-                num_layers=1,
-                num_loops=1,
-                num_heads=6,
-                retention_heads=6,
-                num_experts=2,
-                top_k_experts=1,
-                dropout=0.0,
-                layer_pattern=[layer_type],
-                ode_solver="rk4",
-                ode_steps=1,
-                use_bitnet=False,
-                norm_type="layer_norm",
-                use_factorized_embedding=False,
-                factorized_embedding_dim=16,
-                use_embedding_conv=False,
-                embedding_conv_kernel=3,
-                use_hope=True,
-                use_moe=False,
-                ffn_hidden_size=96,
-                ffn_activation="gelu",
-            )
+    def test_layer_type_coverage_trainable(self):
+        layer_types = [
+            "titan_attn",
+            "standard_attn",
+            "sigmoid_attn",
+            "ode",
+            "retnet",
+            "retnet_attn",
+            "mamba",
+            "sparse_transformer_attn",
+            "longformer_attn",
+            "bigbird_attn",
+            "sparsek_attn",
+            "nsa_attn",
+            "gla_attn",
+            "deltanet_attn",
+            "gated_deltanet_attn",
+            "hgrn2_attn",
+            "fox_attn",
+            "gated_softmax_attn",
+        ]
+        for layer_type in layer_types:
+            config = self._build_config([layer_type])
             model = TormentedBertFrankenstein(config)
             x = torch.randint(0, config.vocab_size, (1, 6))
             y = model(x)
-            self.assertEqual(y.shape, (1, 6, config.vocab_size))
+            self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
+
+    def test_training_free_sparse_layers_eval_only(self):
+        for layer_type in ["fasa_attn", "sparge_attn"]:
+            config = self._build_config([layer_type])
+            model = TormentedBertFrankenstein(config)
+            model.eval()
+            x = torch.randint(0, config.vocab_size, (1, 6))
+            with torch.no_grad():
+                y = model(x)
+            self.assertEqual(y.shape, (1, 6, config.vocab_size), msg=layer_type)
+
+    def test_training_free_sparse_layers_raise_in_train_mode(self):
+        for layer_type in ["fasa_attn", "sparge_attn"]:
+            config = self._build_config([layer_type])
+            model = TormentedBertFrankenstein(config)
+            model.train()
+            x = torch.randint(0, config.vocab_size, (1, 6))
+            with self.assertRaisesRegex(ValueError, "training-free"):
+                _ = model(x)
 
 
 if __name__ == "__main__":
