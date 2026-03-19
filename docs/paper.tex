@@ -54,7 +54,17 @@ The project command surface is:
 \texttt{frankestein-transformer}
 \end{center}
 with subcommands:
-\texttt{train}, \texttt{deploy}, \texttt{quantize}, \texttt{infer}, \texttt{sbert-train}, \texttt{sbert-infer}.
+\texttt{train}, \texttt{deploy}, \texttt{quantize}, \texttt{infer}, \texttt{sbert-train}, \texttt{sbert-infer}, \texttt{web-server}.
+
+The \texttt{web-server} command launches a Streamlit-based configuration builder that provides:
+\begin{itemize}[leftmargin=*]
+    \item Schema-driven form fields with parameter titles and detailed descriptions
+    \item Real-time tooltips and help text for each configuration option
+    \item Live YAML preview and download functionality
+    \item Generated CLI commands for training, deployment, inference, and SBERT workflows
+\end{itemize}
+
+This interactive interface serves as an alternative to manual YAML editing, improving usability for users exploring available configuration options and understanding their impact on model behavior and training dynamics.
 
 This paper is written to answer four operational questions:
 \begin{enumerate}[leftmargin=*]
@@ -65,28 +75,49 @@ This paper is written to answer four operational questions:
 \end{enumerate}
 
 \subsection{Reading Guide}
-Sections 2 and 3 describe the configuration contract and the supported model families. Section 4 explains normalization options exposed by the current schema. Section 5 covers optimizer routing and training dynamics. Sections 6 and 7 describe deployment and SBERT workflows. Appendix A--D act as annexes summarizing the supporting literature files in \texttt{docs/bibliography/}.
+Sections 2 and 3 describe the configuration contract and supported model families. Section 4 explains normalization options exposed by current schema. Section 5 covers optimizer routing and training dynamics. Sections 6 and 7 describe deployment and SBERT workflows. Appendix A--D act as annexes summarizing to supporting literature files in \texttt{docs/bibliography/}.
 
-\begin{figure}[t]
-\centering
-\fitfigure{\begin{tikzpicture}[node distance=1.7cm and 0.9cm]
-\node[box, fill=blue!8] (cli) {\textbf{CLI Surface}\\\texttt{train}, \texttt{infer}, \texttt{deploy}\\\texttt{sbert-train}, \texttt{sbert-infer}};
-\node[box, fill=green!8, below=of cli] (schema) {\textbf{Schema Contract}\\\texttt{model\_class}, \texttt{model}, \texttt{training}};
-\node[box, fill=yellow!12, below left=of schema, xshift=-1.5cm] (mixers) {\textbf{Model Families}\\standard, sparse, gated,\\retentive, SSM, ODE, memory};
-\node[box, fill=orange!12, below=of schema] (optim) {\textbf{Optimizer Router}\\prefixed hyperparameters\\and safety controls};
-\node[box, fill=red!8, below right=of schema, xshift=1.5cm] (deploy) {\textbf{Outputs}\\quantized checkpoints,\\embeddings, inference artifacts};
-\draw[line] (cli) -- (schema);
-\draw[line] (schema) -- (mixers);
-\draw[line] (schema) -- (optim);
-\draw[line] (schema) -- (deploy);
-\draw[line] (mixers) -- (deploy);
-\draw[line] (optim) -- (deploy);
-\end{tikzpicture}}
-\caption{System view of the project: the CLI dispatches into a strict schema, which then controls architecture selection, optimizer behavior, and deploy/inference outputs.}
-\label{fig:system-overview}
-\end{figure}
+\subsection{Web-Based Configuration Builder}
 
-\section{Configuration-Centric Architecture}
+In addition to direct YAML editing, this project provides a Streamlit-based web interface (accessed via \texttt{web-server} command) that improves configuration accessibility and discoverability. The interface presents schema fields with:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Schema-driven form rendering} --- All fields are dynamically generated from the authoritative schema, ensuring consistency and validation.
+    \item \textbf{Inline parameter documentation} --- Each form field displays a \emph{title} from the schema as its label, with the \emph{description} shown as a help tooltip on hover.
+    \item \textbf{Real-time configuration preview} --- Users see live YAML output as they modify form fields, enabling immediate validation feedback.
+    \item \textbf{CLI command generation} --- The interface generates complete CLI commands for training, deployment, inference, and SBERT workflows based on current configuration.
+    \item \textbf{Accessibility improvements} --- Tooltips and structured forms make configuration options easier to understand, especially for users new to the project or exploring novel architectures.
+\end{itemize}
+
+This web-based approach addresses common usability barriers in configuration-driven experimentation:
+\begin{itemize}[leftmargin=*]
+    \item Reduces need to memorize YAML structure and field names
+    \item Prevents typos through schema validation
+    \item Provides educational context through inline documentation
+    \item Enables rapid experimentation with guided parameter tuning
+    \item Serves as both a configuration tool and a learning resource
+\end{itemize}
+
+The web interface implementation uses Streamlit's form widgets with:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{st.checkbox()} for binary toggles with help text
+    \item \texttt{st.number\_input()} for numeric fields with step size and format
+    \item \texttt{st.selectbox()} for enum choices with options display
+    \item \texttt{st.multiselect()} for array selections from defined options
+    \item \texttt{st.text\_input()} for string fields
+    \item \texttt{st.info()}, \texttt{st.caption()} for supplementary information
+\end{itemize}
+
+Schema metadata (title and description fields) are extracted and rendered systematically across all form sections, including:
+\begin{itemize}[leftmargin=*]
+    \item Model architecture parameters (hidden size, layers, attention heads, etc.)
+    \item Training runtime settings (batch size, accumulation, scheduler)
+    \item Optimizer configuration with per-parameter-group hyperparameters
+    \item Deployment and quantization options
+    \item SBERT-specific training and inference parameters
+\end{itemize}
+
+\subsection{Configuration-Centric Architecture}
 
 The core design choice in this repository is that experimentation is \emph{schema first}. Instead of exposing a large number of loosely checked flags, the project forces model topology, optimizer family, training limits, and telemetry options through a single validated configuration document. This reduces ambiguity when reproducing results and makes it possible to compare many architectures under a consistent operational interface.
 
@@ -120,7 +151,7 @@ The \texttt{model.layer\_pattern} supports legacy, sparse, and gated blocks:
     \item \textbf{Gated Softmax Attention} --- internal reference: \texttt{qiu\_gated\_attention\_2025} --- code name: \texttt{gated\_softmax\_attn}
 \end{itemize}
 
-which corresponds to current attention and sequence-mixer literature \citep{sun_retentive_2023,gu_mamba_2023,zhang_continuous_2021,behrouz_titans_2025,ramapuram_theory_2024,vaswani_attention_2017,child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}.
+which corresponds to current attention and sequence-mixer literature \citep{sun_retentive_2023,gu_mamba_2023,zhang_continuous_2021,behrouz_titans_2025,ramapuram_theory_2024,vaswani_attention_2017,child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}
 
 The \texttt{training.optimizer.optimizer\_class} supports a broad optimizer family:
 \texttt{adamw}, \texttt{adafactor}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{schedulefree\_adamw}, \texttt{lion}, \texttt{sophia}, \texttt{prodigy}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{shampoo}, \texttt{soap}, and others.

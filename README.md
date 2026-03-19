@@ -68,6 +68,7 @@ frankestein-transformer quantize ...
 frankestein-transformer infer ...
 frankestein-transformer sbert-train ...
 frankestein-transformer sbert-infer ...
+frankestein-transformer web-server ...
 ```
 
 All model-executing commands support:
@@ -226,6 +227,37 @@ frankestein-transformer sbert-infer \
   --input_file sentences.txt \
   --output_file embeddings.npz
 ```
+
+### Web Server (Configuration Builder)
+
+```bash
+# Launch Streamlit web interface for building configurations
+frankestein-transformer web-server
+
+# Custom server configuration
+frankestein-transformer web-server \
+  --server-port 8501 \
+  --server-address localhost
+
+# Headless mode (no browser)
+frankestein-transformer web-server --server-headless
+
+# Development mode with debug logging
+frankestein-transformer web-server --development-mode
+```
+
+The web server provides an interactive UI for building YAML configurations with:
+
+- Schema-driven form fields with titles and descriptions
+- Real-time parameter explanations and tooltips
+- Live YAML preview and download
+- CLI command generation for training, deployment, and inference
+- Support for all workflow commands (train, deploy, quantize, infer, sbert-train, sbert-infer)
+
+Use the web server as an alternative to manual YAML editing, especially for:
+- Users new to the project
+- Exploring available schema options with inline documentation
+- Building complex configurations with guided parameter tuning
 
 `--mode` options:
 

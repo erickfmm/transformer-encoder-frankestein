@@ -12,3 +12,8 @@ output/
 **/es_redpajama_50k.vocab
 **/nohup.out**
 **/training_metrics.csv
+
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
