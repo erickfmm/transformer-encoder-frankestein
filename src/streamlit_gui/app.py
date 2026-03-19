@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
+import math
 import streamlit as st
 import yaml
 
@@ -50,32 +50,32 @@ def render_field(
         return st.checkbox(field_title, value=default, key=field_key, help=field_description)
     
     elif field_type == "integer":
-        min_val = field_schema.get("minimum", 0)
-        max_val = field_schema.get("maximum", 10000)
+        min_val = field_schema.get("minimum", None)
+        max_val = field_schema.get("maximum", None)
         examples = field_schema.get("examples", [])
         default = examples[0] if examples else min_val
         
         return st.number_input(
             field_title,
             value=int(default),
-            min_value=int(min_val),
-            max_value=int(max_val),
+            min_value=int(min_val) if min_val is not None else None,
+            max_value=int(max_val) if max_val is not None else None,
             step=1,
             key=field_key,
             help=field_description,
         )
     
     elif field_type == "number":
-        min_val = field_schema.get("minimum", 0.0)
-        max_val = field_schema.get("maximum", 1.0)
+        min_val = field_schema.get("minimum", None)
+        max_val = field_schema.get("maximum", None)
         examples = field_schema.get("examples", [])
         default = examples[0] if examples else min_val
         
         return st.number_input(
             field_title,
             value=float(default),
-            min_value=float(min_val),
-            max_value=float(max_val),
+            min_value=float(min_val) if min_val is not None else None,
+            max_value=float(max_val) if max_val is not None else None,
             step=0.01,
             key=field_key,
             format="%.6f",
