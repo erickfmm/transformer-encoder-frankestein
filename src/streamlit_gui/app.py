@@ -35,7 +35,9 @@ def render_field(
     level: int = 0,
 ) -> Any:
     """Render a form field based on its schema type."""
-    field_title = field_schema.get("description", field_name)
+    # Get title and description from schema
+    field_title = field_schema.get("title", field_name)
+    field_description = field_schema.get("description", "")
     
     # Generate a unique key for the field
     field_key = f"{parent_key}.{field_name}" if parent_key else field_name
@@ -45,7 +47,7 @@ def render_field(
     
     if field_type == "boolean":
         default = field_schema.get("examples", [False])[0]
-        return st.checkbox(field_title, value=default, key=field_key)
+        return st.checkbox(field_title, value=default, key=field_key, help=field_description)
     
     elif field_type == "integer":
         min_val = field_schema.get("minimum", 0)
@@ -60,6 +62,7 @@ def render_field(
             max_value=int(max_val),
             step=1,
             key=field_key,
+            help=field_description,
         )
     
     elif field_type == "number":
@@ -76,6 +79,7 @@ def render_field(
             step=0.01,
             key=field_key,
             format="%.6f",
+            help=field_description,
         )
     
     elif field_type == "string":
@@ -84,9 +88,9 @@ def render_field(
         default = examples[0] if examples else ""
         
         if enum:
-            return st.selectbox(field_title, enum, index=0 if enum else 0, key=field_key)
+            return st.selectbox(field_title, enum, index=0 if enum else 0, key=field_key, help=field_description)
         else:
-            return st.text_input(field_title, value=default, key=field_key)
+            return st.text_input(field_title, value=default, key=field_key, help=field_description)
     
     elif field_type == "array":
         items_schema = field_schema.get("items", {})
@@ -96,6 +100,8 @@ def render_field(
         
         if enum:
             st.write(f"**{field_title}**")
+            if field_description:
+                st.caption(field_description)
             selected = st.multiselect(
                 "Select items",
                 enum,
@@ -105,6 +111,8 @@ def render_field(
             return selected
         else:
             st.write(f"**{field_title}**")
+            if field_description:
+                st.caption(field_description)
             array_input = st.text_area(
                 "Enter items (one per line)",
                 value="\n".join(map(str, default)),
@@ -114,6 +122,8 @@ def render_field(
     
     elif field_type == "object":
         st.write(f"### {field_title}")
+        if field_description:
+            st.caption(field_description)
         return render_object(field_name, field_schema, parent_key, level + 1)
     
     return None
@@ -134,12 +144,20 @@ def render_object(
     
     for prop_name, prop_schema in properties.items():
         with st.container():
+            # Get title from schema for display
+            prop_title = prop_schema.get("title", prop_name)
+            prop_description = prop_schema.get("description", "")
+            
             # Mark required fields
             is_required = prop_name in required
             if is_required:
-                st.markdown(f"**{prop_name}** *:red[Required]*")
+                st.markdown(f"**{prop_title}** *:red[Required]*")
             else:
-                st.markdown(f"**{prop_name}**")
+                st.markdown(f"**{prop_title}**")
+            
+            # Show description if available
+            if prop_description:
+                st.caption(prop_description)
             
             prop_value = render_field(prop_name, prop_schema, parent_key, level)
             
@@ -159,19 +177,16 @@ def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
         "optimizer_class": optimizer_class,
     }
     
+    # Load schema for optimizer parameters
+    schema = load_schema()
+    optimizer_schema = schema["properties"]["training"]["properties"]["optimizer"]
+    optimizer_class_schema = optimizer_schema["properties"]["optimizer_class"]
+    
     st.subheader("Optimizer Parameters")
     st.info(
         "The following parameters are available for this optimizer. "
         "Prefix each parameter with the optimizer class name (e.g., 'adamw-lr_embeddings')."
     )
-    
-    # Common parameter suffixes
-    common_suffixes = [
-        ("Learning Rate", "lr_"),
-        ("Weight Decay", "wd_"),
-        ("Betas", "betas_"),
-        ("Epsilon", "eps_"),
-    ]
     
     # Map optimizer class to its prefix
     prefix_map = {
@@ -209,90 +224,112 @@ def render_optimizer_section(optimizer_class: str) -> Dict[str, Any]:
         "other": st.container(),
     }
     
+    # Descriptions for parameter groups
+    param_descriptions = {
+        "lr_": "Learning rate controls step size for parameter updates. Higher values converge faster but may overshoot. Lower values are more stable but slower.",
+        "wd_": "Weight decay regularizes by penalizing large weights. Higher values prevent overfitting but may underfit.",
+        "betas_": "Beta coefficients for momentum (β₁) and squared gradient (β₂). Controls momentum strength and second moment.",
+        "eps_": "Epsilon prevents division by zero in adaptive optimizers. Small values ensure numerical stability.",
+    }
+    
     with param_groups["embeddings"]:
         st.write("##### Embeddings")
+        st.caption("Parameters controlling token embedding matrix optimization.")
         lr_emb = st.number_input(
-            f"{prefix}-lr_embeddings",
+            "Learning Rate",
             value=1e-6,
             min_value=0.0,
             format="%.1e",
             key=f"{prefix}-lr_embeddings",
+            help=f"{prefix}-lr_embeddings: {param_descriptions['lr_']}",
         )
         wd_emb = st.number_input(
-            f"{prefix}-wd_embeddings",
+            "Weight Decay",
             value=0.01,
             min_value=0.0,
             format="%.3f",
             key=f"{prefix}-wd_embeddings",
+            help=f"{prefix}-wd_embeddings: {param_descriptions['wd_']}",
         )
         result[f"{prefix}-lr_embeddings"] = lr_emb
         result[f"{prefix}-wd_embeddings"] = wd_emb
     
     with param_groups["norms"]:
         st.write("##### Normalization Layers")
+        st.caption("Parameters for layer normalization and other normalization layers.")
         lr_norm = st.number_input(
-            f"{prefix}-lr_norms",
+            "Learning Rate",
             value=5e-6,
             min_value=0.0,
             format="%.1e",
             key=f"{prefix}-lr_norms",
+            help=f"{prefix}-lr_norms: {param_descriptions['lr_']}",
         )
         wd_norm = st.number_input(
-            f"{prefix}-wd_norms",
+            "Weight Decay",
             value=0.001,
             min_value=0.0,
             format="%.4f",
             key=f"{prefix}-wd_norms",
+            help=f"{prefix}-wd_norms: {param_descriptions['wd_']}",
         )
         result[f"{prefix}-lr_norms"] = lr_norm
         result[f"{prefix}-wd_norms"] = wd_norm
     
     with param_groups["attention"]:
         st.write("##### Attention Layers")
+        st.caption("Parameters for attention mechanism optimization (all attention variants).")
         lr_attn = st.number_input(
-            f"{prefix}-lr_attention",
+            "Learning Rate",
             value=3e-6,
             min_value=0.0,
             format="%.1e",
             key=f"{prefix}-lr_attention",
+            help=f"{prefix}-lr_attention: {param_descriptions['lr_']}",
         )
         wd_attn = st.number_input(
-            f"{prefix}-wd_attention",
+            "Weight Decay",
             value=0.01,
             min_value=0.0,
             format="%.3f",
             key=f"{prefix}-wd_attention",
+            help=f"{prefix}-wd_attention: {param_descriptions['wd_']}",
         )
         result[f"{prefix}-lr_attention"] = lr_attn
         result[f"{prefix}-wd_attention"] = wd_attn
     
     with param_groups["other"]:
         st.write("##### Other Parameters")
+        st.caption("Parameters for remaining model components (FFN, routing, etc.).")
         lr_other = st.number_input(
-            f"{prefix}-lr_other",
+            "Learning Rate",
             value=2e-6,
             min_value=0.0,
             format="%.1e",
             key=f"{prefix}-lr_other",
+            help=f"{prefix}-lr_other: {param_descriptions['lr_']}",
         )
         wd_other = st.number_input(
-            f"{prefix}-wd_other",
+            "Weight Decay",
             value=0.01,
             min_value=0.0,
             format="%.3f",
             key=f"{prefix}-wd_other",
+            help=f"{prefix}-wd_other: {param_descriptions['wd_']}",
         )
         betas_other = st.text_input(
-            f"{prefix}-betas_other",
+            "Betas",
             value="[0.9, 0.95]",
             key=f"{prefix}-betas_other",
+            help=f"{prefix}-betas_other: {param_descriptions['betas_']}",
         )
         eps_other = st.number_input(
-            f"{prefix}-eps_other",
+            "Epsilon",
             value=1e-8,
             min_value=0.0,
             format="%.1e",
             key=f"{prefix}-eps_other",
+            help=f"{prefix}-eps_other: {param_descriptions['eps_']}",
         )
         result[f"{prefix}-lr_other"] = lr_other
         result[f"{prefix}-wd_other"] = wd_other
@@ -355,23 +392,30 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         
         # General training parameters
         st.write("##### General Training Parameters")
+        num_epochs_schema = training_schema["properties"]["num_epochs"]
+        batch_size_schema = training_schema["properties"]["batch_size"]
+        max_length_schema = training_schema["properties"]["max_length"]
+        
         num_epochs = st.number_input(
-            "Number of Epochs",
+            num_epochs_schema.get("title", "Number of Epochs"),
             value=5,
             min_value=1,
             key="training.num_epochs",
+            help=num_epochs_schema.get("description", ""),
         )
         batch_size = st.number_input(
-            "Batch Size",
+            batch_size_schema.get("title", "Batch Size"),
             value=4,
             min_value=1,
             key="training.batch_size",
+            help=batch_size_schema.get("description", ""),
         )
         max_length = st.number_input(
-            "Max Sequence Length",
+            max_length_schema.get("title", "Max Sequence Length"),
             value=512,
             min_value=1,
             key="training.max_length",
+            help=max_length_schema.get("description", ""),
         )
         
         training_config["num_epochs"] = num_epochs
@@ -380,17 +424,22 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         
         # Dataset parameters
         st.write("##### Dataset Parameters")
+        max_samples_schema = training_schema["properties"]["max_samples"]
+        dataset_batch_size_schema = training_schema["properties"]["dataset_batch_size"]
+        
         max_samples = st.number_input(
-            "Max Samples",
+            max_samples_schema.get("title", "Max Samples"),
             value=20000000,
             min_value=1,
             key="training.max_samples",
+            help=max_samples_schema.get("description", ""),
         )
         dataset_batch_size = st.number_input(
-            "Dataset Batch Size",
+            dataset_batch_size_schema.get("title", "Dataset Batch Size"),
             value=25000,
             min_value=1,
             key="training.dataset_batch_size",
+            help=dataset_batch_size_schema.get("description", ""),
         )
         
         training_config["max_samples"] = max_samples
@@ -410,25 +459,32 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         
         # Scheduler
         st.write("##### Scheduler")
+        scheduler_total_steps_schema = training_schema["properties"]["scheduler_total_steps"]
+        scheduler_warmup_ratio_schema = training_schema["properties"]["scheduler_warmup_ratio"]
+        scheduler_type_schema = training_schema["properties"]["scheduler_type"]
+        
         scheduler_total_steps = st.number_input(
-            "Total Steps",
+            scheduler_total_steps_schema.get("title", "Total Steps"),
             value=10000,
             min_value=1,
             key="training.scheduler_total_steps",
+            help=scheduler_total_steps_schema.get("description", ""),
         )
         scheduler_warmup_ratio = st.number_input(
-            "Warmup Ratio",
+            scheduler_warmup_ratio_schema.get("title", "Warmup Ratio"),
             value=0.1,
             min_value=0.0,
             max_value=1.0,
             step=0.01,
             key="training.scheduler_warmup_ratio",
+            help=scheduler_warmup_ratio_schema.get("description", ""),
         )
         scheduler_type = st.selectbox(
-            "Scheduler Type",
-            schema["properties"]["training"]["properties"]["scheduler_type"]["enum"],
+            scheduler_type_schema.get("title", "Scheduler Type"),
+            scheduler_type_schema.get("enum", []),
             index=0,
             key="training.scheduler_type",
+            help=scheduler_type_schema.get("description", ""),
         )
         
         training_config["scheduler_total_steps"] = scheduler_total_steps
@@ -437,17 +493,22 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         
         # Gradient settings
         st.write("##### Gradient Settings")
+        gradient_accumulation_steps_schema = training_schema["properties"]["gradient_accumulation_steps"]
+        grad_clip_max_norm_schema = training_schema["properties"]["grad_clip_max_norm"]
+        
         gradient_accumulation_steps = st.number_input(
-            "Gradient Accumulation Steps",
+            gradient_accumulation_steps_schema.get("title", "Gradient Accumulation Steps"),
             value=4,
             min_value=1,
             key="training.gradient_accumulation_steps",
+            help=gradient_accumulation_steps_schema.get("description", ""),
         )
         grad_clip_max_norm = st.number_input(
-            "Gradient Clip Max Norm",
+            grad_clip_max_norm_schema.get("title", "Gradient Clip Max Norm"),
             value=5.0,
             min_value=0.0,
             key="training.grad_clip_max_norm",
+            help=grad_clip_max_norm_schema.get("description", ""),
         )
         
         training_config["gradient_accumulation_steps"] = gradient_accumulation_steps
@@ -455,23 +516,30 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         
         # Checkpoint settings
         st.write("##### Checkpoint Settings")
+        checkpoint_every_n_steps_schema = training_schema["properties"]["checkpoint_every_n_steps"]
+        max_rolling_checkpoints_schema = training_schema["properties"]["max_rolling_checkpoints"]
+        num_best_checkpoints_schema = training_schema["properties"]["num_best_checkpoints"]
+        
         checkpoint_every_n_steps = st.number_input(
-            "Checkpoint Every N Steps",
+            checkpoint_every_n_steps_schema.get("title", "Checkpoint Every N Steps"),
             value=500,
             min_value=1,
             key="training.checkpoint_every_n_steps",
+            help=checkpoint_every_n_steps_schema.get("description", ""),
         )
         max_rolling_checkpoints = st.number_input(
-            "Max Rolling Checkpoints",
+            max_rolling_checkpoints_schema.get("title", "Max Rolling Checkpoints"),
             value=3,
             min_value=1,
             key="training.max_rolling_checkpoints",
+            help=max_rolling_checkpoints_schema.get("description", ""),
         )
         num_best_checkpoints = st.number_input(
-            "Num Best Checkpoints",
+            num_best_checkpoints_schema.get("title", "Num Best Checkpoints"),
             value=2,
             min_value=1,
             key="training.num_best_checkpoints",
+            help=num_best_checkpoints_schema.get("description", ""),
         )
         
         training_config["checkpoint_every_n_steps"] = checkpoint_every_n_steps
@@ -480,21 +548,28 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         
         # Logging settings
         st.write("##### Logging Settings")
+        csv_log_path_schema = training_schema["properties"]["csv_log_path"]
+        log_gradient_stats_schema = training_schema["properties"]["log_gradient_stats"]
+        gradient_log_interval_schema = training_schema["properties"]["gradient_log_interval"]
+        
         csv_log_path = st.text_input(
-            "CSV Log Path",
+            csv_log_path_schema.get("title", "CSV Log Path"),
             value="training_metrics.csv",
             key="training.csv_log_path",
+            help=csv_log_path_schema.get("description", ""),
         )
         log_gradient_stats = st.checkbox(
-            "Log Gradient Stats",
+            log_gradient_stats_schema.get("title", "Log Gradient Stats"),
             value=True,
             key="training.log_gradient_stats",
+            help=log_gradient_stats_schema.get("description", ""),
         )
         gradient_log_interval = st.number_input(
-            "Gradient Log Interval",
+            gradient_log_interval_schema.get("title", "Gradient Log Interval"),
             value=10,
             min_value=1,
             key="training.gradient_log_interval",
+            help=gradient_log_interval_schema.get("description", ""),
         )
         
         training_config["csv_log_path"] = csv_log_path
@@ -503,22 +578,29 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         
         # GPU settings
         st.write("##### GPU Settings")
+        gpu_temp_guard_enabled_schema = training_schema["properties"]["gpu_temp_guard_enabled"]
+        gpu_temp_pause_threshold_c_schema = training_schema["properties"]["gpu_temp_pause_threshold_c"]
+        gpu_temp_resume_threshold_c_schema = training_schema["properties"]["gpu_temp_resume_threshold_c"]
+        
         gpu_temp_guard_enabled = st.checkbox(
-            "Enable GPU Temperature Guard",
+            gpu_temp_guard_enabled_schema.get("title", "Enable GPU Temperature Guard"),
             value=True,
             key="training.gpu_temp_guard_enabled",
+            help=gpu_temp_guard_enabled_schema.get("description", ""),
         )
         gpu_temp_pause_threshold_c = st.number_input(
-            "GPU Temp Pause Threshold (°C)",
+            gpu_temp_pause_threshold_c_schema.get("title", "GPU Temp Pause Threshold (°C)"),
             value=90.0,
             min_value=0.0,
             key="training.gpu_temp_pause_threshold_c",
+            help=gpu_temp_pause_threshold_c_schema.get("description", ""),
         )
         gpu_temp_resume_threshold_c = st.number_input(
-            "GPU Temp Resume Threshold (°C)",
+            gpu_temp_resume_threshold_c_schema.get("title", "GPU Temp Resume Threshold (°C)"),
             value=80.0,
             min_value=0.0,
             key="training.gpu_temp_resume_threshold_c",
+            help=gpu_temp_resume_threshold_c_schema.get("description", ""),
         )
         
         training_config["gpu_temp_guard_enabled"] = gpu_temp_guard_enabled
@@ -526,10 +608,12 @@ def build_config_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
         training_config["gpu_temp_resume_threshold_c"] = gpu_temp_resume_threshold_c
         
         # Mixed precision
+        use_amp_schema = training_schema["properties"]["use_amp"]
         use_amp = st.checkbox(
-            "Use Automatic Mixed Precision",
+            use_amp_schema.get("title", "Use Automatic Mixed Precision"),
             value=False,
             key="training.use_amp",
+            help=use_amp_schema.get("description", ""),
         )
         training_config["use_amp"] = use_amp
         
