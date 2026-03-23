@@ -2,6 +2,13 @@
 
 This document describes the project as a configurable library + CLI toolchain.
 
+```bash
+pdflatex -interaction=nonstopmode paper.tex
+bibtex paper
+pdflatex -interaction=nonstopmode paper.tex
+pdflatex -interaction=nonstopmode paper.tex
+```
+
 ## 1. CLI Command Surface
 
 The entrypoint is:
