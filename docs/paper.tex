@@ -44,7 +44,7 @@ This work is not affiliated \\
 \maketitle
 
 \begin{abstract}
-Transformer Encoder Frankenstein presents a unified configuration-driven toolkit for systematic experimentation with modern encoder architectures, spanning seventeen sequence mixer variants and twenty optimizer families. The research contributions are threefold: (i) a strict schema-based configuration contract that enables reproducible experimentation across diverse attention mechanisms, including standard softmax attention, sigmoid attention, retentive networks, selective state-space models, continuous-depth transformers, memory-augmented attention, sparse attention patterns, and gated mechanisms; (ii) a comprehensive optimizer routing framework supporting variance-reduction methods (MARS, Adan, AdEMAMix), memory-efficient variants (Adafactor, GaLore, Lion), schedule-free approaches, and second-order preconditioners (Shampoo, SOAP, Sophia); and (iii) end-to-end workflows spanning quantized deployment via ternary weight packing and sentence-embedding training inspired by SBERT. The toolkit implements a web-based configuration interface that provides schema-driven form rendering with inline documentation and real-time validation. This technical reference document includes architectural diagrams, execution-flow visualizations, decision tables, and comprehensive appendices synthesizing literature on transformer architectures, sparse attention mechanisms, gated attention variants, and optimization algorithms. The system enables rapid iteration while maintaining reproducible experimental conditions through its schema-first design philosophy.
+Transformer Encoder Frankenstein presents a unified configuration-driven toolkit for systematic experimentation with modern transformer architectures, spanning seventeen sequence mixer variants and twenty optimizer families. The system supports both encoder-style masked language modeling (MLM) and decoder-style autoregressive (AR) next-token prediction through flexible model class and mode configuration. The research contributions are threefold: (i) a strict schema-based configuration contract that enables reproducible experimentation across diverse attention mechanisms, including standard softmax attention, sigmoid attention, retentive networks, selective state-space models, continuous-depth transformers, memory-augmented attention, sparse attention patterns, and gated mechanisms; (ii) a comprehensive optimizer routing framework supporting variance-reduction methods (MARS, Adan, AdEMAMix), memory-efficient variants (Adafactor, GaLore, Lion), schedule-free approaches, and second-order preconditioners (Shampoo, SOAP, Sophia); and (iii) end-to-end workflows spanning quantized deployment via ternary weight packing and sentence-embedding training inspired by SBERT. The toolkit implements a web-based configuration interface that provides schema-driven form rendering with inline documentation and real-time validation. This technical reference document includes architectural diagrams, execution-flow visualizations, decision tables, and comprehensive appendices synthesizing literature on transformer architectures, sparse attention mechanisms, gated attention variants, and optimization algorithms. The system enables rapid iteration while maintaining reproducible experimental conditions through its schema-first design philosophy.
 \end{abstract}
 
 \tableofcontents
@@ -91,7 +91,7 @@ This interactive interface serves as an alternative to manual YAML editing, impr
 This work makes the following primary contributions:
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Unified Configuration Schema}: A YAML-based schema contract with strict validation that supports seventeen distinct sequence mixer architectures across four categories (dense baselines, recurrent/retentive blocks, sparse attention patterns, and gated mechanisms) while enforcing reproducibility through \texttt{additionalProperties: false} constraints.
-    \item \textbf{Comprehensive Architecture Support}: Implementation of modern transformer variants including standard softmax attention \citep{vaswani_attention_2017}, sigmoid attention \citep{ramapuram_theory_2024}, RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, ODE-style continuous transformers \citep{zhang_continuous_2021}, Titans memory-augmented attention \citep{behrouz_titans_2025}, sparse attention mechanisms \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}, and gated attention architectures \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}.
+    \item \textbf{Comprehensive Architecture Support}: Implementation of modern transformer variants including standard softmax attention \citep{vaswani_attention_2017}, sigmoid attention \citep{ramapuram_theory_2024}, RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, ODE-style continuous transformers \citep{zhang_continuous_2021}, Titans memory-augmented attention \citep{behrouz_titans_2025}, sparse attention mechanisms \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}, and gated attention architectures \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}. System supports both encoder-mode training with bidirectional attention for masked language modeling (MLM) and decoder-mode training with causal masking for autoregressive next-token prediction.
     \item \textbf{Optimizer Routing Framework}: Prefixed hyperparameter system enabling per-parameter-group control across twenty optimizers, including variance-reduction methods (MARS, Adan, AdEMAMix, Cautious AdamW), memory-efficient variants (Adafactor, GaLore, Lion), schedule-free approaches (Schedule-Free AdamW), curvature-aware methods (Sophia), second-order preconditioners (Shampoo, SOAP), and orthogonality-oriented optimizers (Muon, Turbo-Muon).
     \item \textbf{Quantization and Deployment}: Integrated deployment pipeline supporting ternary weight packing and INT8 activation quantization with size estimates following $1.58$-bit storage approximation.
     \item \textbf{Sentence-Embedding Workflows}: SBERT-inspired training and inference pipelines supporting similarity scoring, retrieval, clustering, and persistent embedding export.
@@ -373,6 +373,23 @@ The authoritative contract is \texttt{configs/schema.yaml}. It enforces three to
     \item \texttt{training}
 \end{itemize}
 
+\paragraph{Model Class Selection.}
+The \texttt{model\_class} field determines the architectural variant instantiated by the training pipeline. Three options are supported:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{frankenstein}: Mixed-architecture encoder models supporting diverse attention mechanisms (standard, sigmoid, retentive, state-space, sparse, and gated mixers) with MoE (Mixture of Experts) and advanced features. Optimized for bidirectional encoder-style training with masked language modeling (MLM) objectives.
+    \item \textbf{mini}: Simplified encoder variant designed for smaller-scale training scenarios. Provides reduced parameter overhead and faster iteration for experimentation and prototyping.
+    \item \textbf{frankesteindecoder}: Autoregressive causal decoder for LLM-style next-token generation. Enables causal attention masking for sequential text generation tasks. When this class is selected, runtime enforces \texttt{mode='decoder'}. 
+\end{itemize}
+
+\paragraph{Training Mode Selection.}
+The \texttt{model.mode} field controls attention masking behavior across the model:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{encoder}: Uses bidirectional attention where all tokens attend to all other tokens in the sequence. Suitable for masked language modeling (MLM) pre-training tasks where the model learns to predict randomly masked tokens based on full context.
+    \item \textbf{decoder}: Uses causal masking where each token can only attend to previous tokens in the sequence. Required for autoregressive (AR) next-token prediction tasks such as language modeling and text generation. When \texttt{model\_class='frankesteindecoder'}, the system automatically forces \texttt{mode='decoder'} at runtime.
+\end{itemize}
+
+This dual architecture support enables the system to handle both encoder-style pre-training (MLM on bidirectional contexts) and decoder-style generation (causal autoregressive prediction) through a unified configuration interface.
+
 The \texttt{model.layer\_pattern} supports legacy, sparse, and gated blocks:
 \begin{itemize}[leftmargin=*]
     \item \textbf{Retentive Network (RetNet)} --- internal reference: \texttt{sun\_retentive\_2023} --- code name: \texttt{retnet}, \texttt{retnet\_attn}
@@ -461,6 +478,8 @@ Thus, \texttt{rms\_norm} is \textbf{not} a valid schema value in the current con
 \textbf{Field} & \textbf{Type/Range} & \textbf{Meaning} \\
 \midrule
 \endhead
+\texttt{model\_class} & enum & Architecture variant: \texttt{frankenstein} (mixed-architecture encoder), \texttt{mini} (simplified encoder), \texttt{frankesteindecoder} (autoregressive decoder). \\
+\texttt{model.mode} & enum & Attention mode: \texttt{encoder} (bidirectional, for MLM) or \texttt{decoder} (causal, for AR). When \texttt{model\_class='frankesteindecoder'}, forces \texttt{mode='decoder'}. \\
 \texttt{vocab\_size} & int $\ge 1$ & Vocabulary size. \\
 \texttt{hidden\_size} & int $\ge 1$ & Hidden dimension. \\
 \texttt{num\_layers} & int $\ge 1$ & Physical layer count. \\
@@ -495,6 +514,28 @@ L_{\text{logical}} = \texttt{num\_layers} \times \texttt{num\_loops}
 \]
 which is the configuration-level definition of looped blocks.
 
+\subsection{Training Task Types}
+
+The \texttt{training.task} field determines the training objective, working in conjunction with \texttt{model.mode} to define how the model learns:
+
+\paragraph{Masked Language Modeling (MLM).}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Mode}: Requires \texttt{mode='encoder'} for bidirectional attention.
+    \item \textbf{Objective}: Randomly mask tokens in input sequence (typically 15\%) and train model to predict masked tokens based on full bidirectional context.
+    \item \textbf{Use Case}: Pre-training encoders for representation learning, following BERT-style methodology \citep{devlin_bert_2019}. Model learns bidirectional representations capturing context from both left and right.
+    \item \textbf{Configuration}: Uses \texttt{mlm\_probability} parameter to control masking fraction.
+\end{itemize}
+
+\paragraph{Autoregressive (AR) Next-Token Prediction.}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Mode}: Requires \texttt{mode='decoder'} for causal masking.
+    \item \textbf{Objective}: Train model to predict next token in sequence given all previous tokens only.
+    \item \textbf{Use Case}: Language generation and LLM-style tasks following GPT methodology. Model learns sequential dependencies with causal attention where each token can only attend to preceding tokens.
+    \item \textbf{Model Class}: Typically uses \texttt{model\_class='frankesteindecoder'} for autoregressive decoder architectures.
+\end{itemize}
+
+This dual task support enables unified experimentation across both encoder-style pre-training (MLM for bidirectional understanding) and decoder-style generation (AR for sequential text production) within the same codebase.
+
 \subsection{Complete Training Feature Inventory}
 
 \small
@@ -506,7 +547,8 @@ which is the configuration-level definition of looped blocks.
 \texttt{batch\_size} & int $\ge 1$ & Loader batch size. \\
 \texttt{dataloader\_workers} & int $\ge 0$ & PyTorch dataloader workers. \\
 \texttt{max\_length} & int $\ge 1$ & Sequence length cap. \\
-\texttt{mlm\_probability} & float $[0,1]$ & MLM masking probability. \\
+\texttt{task} & enum & Training objective: \texttt{mlm} (masked language modeling) or \texttt{sbert} (sentence embedding). \\
+\texttt{mlm\_probability} & float $[0,1]$ & MLM masking probability (applies only when \texttt{task='mlm'}). \\
 \texttt{max\_samples} & int $\ge 1$ & Maximum streamed samples. \\
 \texttt{dataset\_batch\_size} & int $\ge 1$ & Internal streaming dataset chunk size. \\
 \texttt{num\_workers} & int $\ge 0$ & Streaming dataset workers. \\
