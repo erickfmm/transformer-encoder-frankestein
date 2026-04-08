@@ -148,6 +148,164 @@ Schema metadata (title and description fields) are extracted and rendered system
     \item SBERT-specific training and inference parameters
 \end{itemize}
 
+\section{Conceptual Introduction: Transformers and Attention Mechanism for Beginners}
+
+This section explains the fundamental concepts of transformers and the attention mechanism in an accessible manner, without requiring deep prior knowledge in deep learning. Transformers are the engine behind modern artificial intelligence systems like ChatGPT, but their operation can be understood through real-world analogies.
+
+\subsection{What is a Transformer?}
+
+A transformer is a neural architecture that processes text or data sequences by interpreting the meaning of each word while considering all other words in context. Imagine you read a sentence:
+
+\begin{center}
+\textit{``The bank was full of people waiting. Mary went to the bank.''}
+\end{center}
+
+What does ``bank'' mean in each case? In the first sentence, it refers to a financial institution (or a bench). In the second, it is less clear without context. A transformer solves this automatically by looking at all surrounding words. In the second sentence, seeing ``Mary went'', the model better understands that it probably is a riverbank (where she goes to swim) or a financial institution (where she goes to conduct a transaction).
+
+This ability to understand the complete meaning of a word by considering the entire sentence is called \emph{contextualization}, and it is the heart of how modern transformers work.
+
+\subsection{The Attention Mechanism: An Analogy}
+
+The attention mechanism is the ``magic trick'' that allows transformers to understand context. Think of it as participating in an important conversation in a noisy room:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Lots of noise}: Someone is speaking and being very important to you.
+    \item \textbf{You ignore the rest}: Your brain automatically focuses attention on that person, ignoring other sounds.
+    \item \textbf{You understand better}: By concentrating, you catch every word clearly.
+\end{enumerate}
+
+The neural attention mechanism works the same way: each word ``asks'' how important every other word is to understanding its meaning, then ``focuses'' its attention on the most relevant ones.
+
+\subsection{Practical Example Step-by-Step}
+
+Let's see how a transformer understands the word ``eats'' in two different contexts:
+
+\subsubsection{Context 1: ``The cat eats fish''}
+
+The transformer, when processing ``eats'', internally asks:
+\begin{itemize}[leftmargin=*]
+    \item How relevant is ``The''? Little (it's just an article). \textbf{Low attention}.
+    \item How relevant is ``cat''? Very relevant (it's the subject, who eats). \textbf{High attention}.
+    \item How relevant is ``fish''? Very relevant (it's what is eaten). \textbf{High attention}.
+\end{itemize}
+
+Thus, the mental representation of ``eats'' focuses primarily on ``cat'' and ``fish''.
+
+\subsubsection{Context 2: ``The restaurant eats into profit margins''}
+
+Here the transformer asks in a different context:
+\begin{itemize}[leftmargin=*]
+    \item How relevant is ``restaurant''? Very relevant (it's the subject). \textbf{High attention}.
+    \item How relevant is ``profit''? Very relevant (it's affected). \textbf{High attention}.
+    \item How relevant is ``margins''? Very relevant (it's what's being consumed). \textbf{High attention}.
+\end{itemize}
+
+The word ``eats'' gets a completely different representation because it ``attends'' to different words in different contexts.
+
+\subsection{How Attention Works Mathematically (Simple Version)}
+
+Behind the attention shift is mathematics. Here is the simplified version without too much technical detail:
+
+\subsubsection{Step 1: Queries, Keys, and Values}
+
+Each word in the sentence is transformed into three versions:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Query}: ``What information do I need to know?''
+    \item \textbf{Key}: ``What information do I have?''
+    \item \textbf{Value}: ``Here is my important information.''
+\end{itemize}
+
+Imagine in a library, each visitor is a ``query'', each book is a ``key'', and the content is the ``value''. The librarian (attention) matches queries with the most relevant keys to access the correct value.
+
+\subsubsection{Step 2: Compatibility}
+
+The system examines how \emph{compatible} each query is with each key. Queries similar to keys get a \emph{high} compatibility score. This is calculated by multiplying the query by the key (mathematically, the dot product).
+
+\subsubsection{Step 3: Focus}
+
+The compatibility scores are converted into ``focus weights''. High compatibilities mean ``focus attention here'', and low ones mean ``ignore this''. Mathematically, a function called \texttt{softmax} converts scores into percentages (like: 40\% attention here, 35\% here, 25\% there).
+
+\subsubsection{Step 4: Combine}
+
+Finally, the system combines all values, weighted by the focus weights. If a word has 80\% attention on the subject, 80\% of the subject's information gets blended into that word's representation.
+
+\subsection{Multiple Attention Heads: Multiple Perspectives}
+
+A key feature is that transformers do not use a single attention but \emph{multiple attention heads} in parallel. It's as if you had 8 people analyzing the sentence \emph{simultaneously}, each paying attention to different aspects:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Person 1}: ``I focus on subject-verb relationships.''
+    \item \textbf{Person 2}: ``I search for the direct object.''
+    \item \textbf{Person 3}: ``I track information about verb tense.''
+    \item \textbf{Person 4}: ``I search for modifiers and adjectives.''
+\end{itemize}
+
+Each ``head'' learns to focus on different language patterns. Together, they capture much richer understanding than a single head.
+
+\subsection{Stacking Layers}
+
+Transformers process information in \emph{multiple layers} (usually 12 to 48 for practical models). Imagine editing an essay:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{First pass}: You fix spelling and basic grammar.
+    \item \textbf{Second pass}: You improve clarity and sentence structure.
+    \item \textbf{Third pass}: You ensure consistency and narrative flow.
+\end{enumerate}
+
+Transformers work the same way: each layer refines text understanding. The first layer captures basic features (simple words, genders), while later layers understand complex concepts (word relationships, abstract meanings).
+
+\subsection{Why Does It Matter?}
+
+The attention mechanism was revolutionary because:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Parallelism}: It finds context for \emph{any word with any other word}, without processing them sequentially (unlike earlier systems). This makes it very fast.
+    \item \textbf{Flexibility}: It learns what patterns to look for automatically from data, without you needing to program rules manually.
+    \item \textbf{Scalability}: It works from small texts to contexts with millions of words.
+    \item \textbf{General Capabilities}: The same mechanism works for translation, summarization, question-answering, text generation, computer vision, and more.
+\end{enumerate}
+
+\subsection{Practical Challenges}
+
+Despite the extraordinary success of transformers, they present challenges:
+
+\subsubsection{Computational Complexity}
+
+If a sentence has 1,000 words, the standard attention mechanism must compare each word with all other 1,000 words. That's $1,000 \times 1,000 = 1,000,000$ comparisons. For long documents with millions of words, this becomes prohibitively expensive in time and memory.
+
+\subsubsection{Memory Requirements}
+
+Especially during inference (when using trained models), storing the entire attention matrix can consume enormous amounts of RAM or GPU memory, limiting the sequence lengths you can process.
+
+\subsubsection{Device Efficiency}
+
+Transformers were designed for powerful TPUs and GPUs. Running them on phones or embedded devices is challenging.
+
+\subsection{Modern Solutions}
+
+To solve these challenges, research has proposed many variants:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Sparse Attention}: Instead of comparing each word with ALL others, it compares only with a strategic subset (nearby neighbors, periodic patterns). Reduces complexity from $\mathcal{O}(n^2)$ to $\mathcal{O}(n \log n)$ or $\mathcal{O}(n)$.
+    \item \textbf{Recurrent Models}: Like Mamba, they incorporate aspects of old recurrent neural networks but with better modern efficiency.
+    \item \textbf{Gated Attention}: Mechanisms that selectively learn what information to pass forward, reducing storage needs.
+    \item \textbf{Quantization}: Use smaller numbers (integers instead of decimals) to reduce memory without losing too much precision.
+\end{itemize}
+
+These innovations are what this toolkit (Frankenstein) allows you to experiment with easily.
+
+\subsection{Key Takeaways}
+
+\begin{itemize}[leftmargin=*]
+    \item A \textbf{transformer} is a neural network that understands language context very well.
+    \item The \textbf{attention mechanism} allows each word to ``focus'' on which other words are relevant to understanding its meaning.
+    \item Attention works by computing \textbf{compatibility} between each word (query) and all others (keys), then combining information based on that compatibility (values).
+    \item \textbf{Multiple heads} of attention explore different patterns in parallel.
+    \item \textbf{Multiple layers} progressively refine understanding.
+    \item The main challenge is that standard attention has quadratic complexity, which is expensive for long texts.
+    \item Many \textbf{modern solutions} (sparse attention, recurrent models, quantization) address these challenges, and this toolkit lets you explore all of them.
+\end{itemize}
+
+With this intuitive understanding, you are ready to explore the technical details that follow. Welcome to the frontier of language processing!
+
 \section{Related Work}
 
 This work sits at intersection of three active research areas: alternative attention architectures, sparse attention mechanisms, and advanced optimization algorithms. This section synthesizes relevant literature across these domains to contextualize contributions.
@@ -865,7 +1023,7 @@ The implementation enforces an explicit execution policy for training-free spars
 \end{figure}
 
 \subsection{Implemented Sparse Attention Blocks (Detailed)}
-This codebase includes seven sparse attention families aligned with the sparse attention survey notes in \texttt{docs/bibliography/SPARSE\_TRANSFORMER\_TYPES.md} \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}.
+This codebase includes seven sparse attention families \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}.
 
 \paragraph{Sparse Transformer (\texttt{sparse\_transformer\_attn}).}
 Uses factorized sparse masks (strided + fixed) to approximate dense connectivity at lower cost than full $\mathcal{O}(n^2)$ attention:
@@ -928,7 +1086,7 @@ FASA & No (training-free) & selected-token dependent & dominant frequency chunks
 \normalsize
 
 \subsection{Implemented Gated Attention Blocks (Detailed)}
-This codebase includes seven gated blocks aligned with \texttt{docs/bibliography/GATED\_TRANSFORMER\_TYPES.md} \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,sun_retentive_2023,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}.
+This codebase includes seven gated blocks \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,sun_retentive_2023,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}.
 
 The unifying idea is that gating controls \emph{what information survives}. Some gates act on recurrent state updates (GLA, DeltaNet variants, HGRN2), while others modify the full attention path itself (FoX and Gated Softmax). This makes gating especially useful when the model must trade off recall, recency, and bounded memory.
 
@@ -1356,7 +1514,7 @@ The research trajectory of sequence modeling continues toward hybrid approaches 
 
 \appendix
 
-\section{Annex A: Optimizer Families from \texttt{OPTIMIZERS.md}}
+\section{Annex A: Optimizer Families}
 \label{sec:annex-optimizers}
 
 \subsection{The Evolution of Optimization in Neural Networks}
@@ -1364,61 +1522,599 @@ The optimizer survey frames transformer optimization as a response to three stru
 
 \subsection{Standard Baseline and Adaptive Optimizers}
 \paragraph{SGD with Momentum.}
-The classical update accumulates a momentum buffer and then applies a fixed learning rate. Its strengths are low memory overhead and strong generalization when tuned carefully. Its main weakness in transformer workloads is poor robustness to heterogeneous curvature and a high dependence on learning-rate schedules.
+The classical update accumulates a momentum buffer and then applies a fixed learning rate. At each iteration $t$, the algorithm maintains an exponential moving average $m_t$ of past gradients:
+\begin{align}
+m_t &= \beta m_{t-1} + g_t \\
+\theta_{t+1} &= \theta_t - \eta m_t
+\end{align}
+where $g_t = \nabla f(\theta_t)$, $\beta \in [0.8, 0.99]$ controls the momentum decay, and $\eta$ is the fixed learning rate. The momentum term acts as velocity: it accelerates movement in consistent directions while dampening oscillations in variable directions. Its strengths are low memory overhead (single momentum buffer per parameter) and strong generalization when tuned carefully. Its main weakness in transformer workloads is poor robustness to heterogeneous curvature (different Hessian spectra across parameter groups) and strong dependence on learning-rate schedules.
+
+\begin{algorithm}[H]
+\caption{SGD with Momentum}
+\label{alg:sgd-momentum}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, momentum coefficient $\beta$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: momentum buffer $m \gets 0$
+\For{$t = 0, 1, 2, \ldots, T-1$}
+    \State Compute gradient: $g_t \gets \nabla f(\theta_t)$
+    \If{weight\_decay $> 0$}
+        \State $g_t \gets g_t + \lambda \theta_t$ \Comment{L2 regularization}
+    \EndIf
+    \State Update momentum: $m \gets \beta \cdot m + g_t$
+    \State Update parameters: $\theta_{t+1} \gets \theta_t - \eta \cdot m$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
 
 \paragraph{Adam and AdamW.}
-Adam tracks first and second moments of the gradient; AdamW decouples weight decay from the adaptive step. The report treats AdamW as the practical baseline for transformer fine-tuning because it converges quickly and is relatively forgiving. The tradeoff is state cost, since both moment tensors must be stored for every parameter.
+Adam tracks exponential moving averages of both first moment (mean) and second moment (uncentered variance) to achieve element-wise adaptive learning rates. The update rule is:
+\begin{align}
+m_t &= \beta_1 m_{t-1} + (1-\beta_1) g_t \\
+v_t &= \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \\
+\hat{m}_t &= \frac{m_t}{1-\beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1-\beta_2^t} \quad \text{(bias correction)} \\
+\theta_{t+1} &= \theta_t - \eta \left(\frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon}\right)
+\end{align}
+AdamW introduces a crucial modification: weight decay is applied directly to parameters (decoupled from gradients): $\theta_t \gets \theta_t(1-\eta\lambda)$ rather than adding $\lambda\theta_t$ to the gradient. This decoupling prevents the adaptive scaling from interfering with regularization strength. The report treats AdamW as the practical baseline for transformer fine-tuning because it converges quickly and is relatively forgiving to hyperparameter variation. The tradeoff is memory cost: both moment tensors must be stored for every parameter, doubling optimizer-state memory relative to SGD.
 
-\paragraph{RAdam.}
-RAdam introduces variance rectification in early training, motivated by the observation that Adam's adaptive denominator is unreliable during initial steps. It is positioned as a way to reduce warmup sensitivity without abandoning the Adam family.
+\begin{algorithm}[H]
+\caption{AdamW (Adam with Decoupled Weight Decay)}
+\label{alg:adamw}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, exponential decay rates $\beta_1, \beta_2 \in [0,1)$
+\Require Momentum constant $\epsilon$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: first moment $m \gets 0$, second moment $v \gets 0$, step counter $t \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State Compute gradient: $g_t \gets \nabla f(\theta_{t-1})$
+    \State Weight decay (decoupled): $\theta_{t-1} \gets \theta_{t-1}(1 - \eta\lambda)$
+    \State Update moments: $m \gets \beta_1 m + (1-\beta_1) g_t$
+    \State $v \gets \beta_2 v + (1-\beta_2) g_t^2$
+    \State Bias correction: $\hat{m} \gets m / (1 - \beta_1^t)$, $\hat{v} \gets v / (1 - \beta_2^t)$
+    \State Update parameters: $\theta_t \gets \theta_{t-1} - \eta (\hat{m} / (\sqrt{\hat{v}} + \epsilon))$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{RAdam (Rectified Adam).}
+RAdam addresses Adam's instability in early training by dynamically rectifying the adaptive learning rate. The key observation is that the second moment $v_t$ has very high variance in the first few steps, causing unreliable adaptive scaling. RAdam computes the effective simple moving average (SMA) window length:
+\[\rho_t = \rho_{\infty} - \frac{2t\beta_2^t}{1-\beta_2^t}, \quad \text{where} \quad \rho_{\infty} = \frac{2}{1-\beta_2}-1\]
+When $\rho_t > 4$ (sufficient samples for variance estimation), RAdam applies adaptive scaling with a rectification term:
+\[r_t = \sqrt{\frac{(\rho_t-4)(\rho_t-2)\rho_{\infty}}{(\rho_{\infty}-4)(\rho_{\infty}-2)\rho_t}}, \quad \theta_{t+1} = \theta_t - \eta r_t \frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon}\]
+When $\rho_t \leq 4$, RAdam falls back to SGD with momentum: $\theta_{t+1} = \theta_t - \eta\hat{m}_t$. This graceful transition eliminates the need for manual learning-rate warmup schedules and improves robustness.
+
+\begin{algorithm}[H]
+\caption{RAdam (Rectified Adam)}
+\label{alg:radam}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1, \beta_2$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $m \gets 0$, $v \gets 0$, $t \gets 0$
+\State Compute: $\rho_\infty \gets 2/(1-\beta_2) - 1$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla f(\theta_{t-1})$
+    \If{weight\_decay $> 0$}
+        \State $\theta_{t-1} \gets \theta_{t-1}(1 - \eta\lambda)$
+    \EndIf
+    \State $m \gets \beta_1 m + (1-\beta_1) g_t$
+    \State $v \gets \beta_2 v + (1-\beta_2) g_t^2$
+    \State $\hat{m} \gets m/(1-\beta_1^t)$, $\hat{v} \gets v/(1-\beta_2^t)$
+    \State $\rho_t \gets \rho_\infty - 2t \beta_2^t / (1 - \beta_2^t)$
+    \If{$\rho_t > 4$}
+        \State $r_t \gets \sqrt{((\rho_t-4)(\rho_t-2)\rho_\infty) / ((\rho_\infty-4)(\rho_\infty-2)\rho_t)}$
+        \State $\theta_t \gets \theta_{t-1} - \eta r_t \hat{m} / (\sqrt{\hat{v}} + \epsilon)$
+    \Else
+        \State $\theta_t \gets \theta_{t-1} - \eta \hat{m}$ \Comment{SGD with momentum}
+    \EndIf
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Advanced Momentum and Variance Reduction (2024--2025)}
-\paragraph{Adan.}
-Adan reformulates Nesterov-style momentum so that it does not need the extra forward/backward pass of classical Nesterov acceleration. The survey emphasizes its fast convergence across CNNs, GANs, and transformers, but also notes the cost of keeping three momentum-like states.
+\paragraph{Adan (Adaptive Nesterov Momentum).}
+Adan reformulates Nesterov acceleration without the extra gradient computation required by classical Nesterov SGD. The algorithm maintains three momentum buffers:
+\begin{align}
+m_t &= (1-\beta_1)m_{t-1} + \beta_1 g_t \quad\text{(first moment)} \\
+v_t &= (1-\beta_2)v_{t-1} + \beta_2(g_t - g_{t-1}) \quad\text{(velocity/gradient difference)} \\
+n_t &= (1-\beta_3)n_{t-1} + \beta_3[g_t + (1-\beta_1)(g_t-g_{t-1})]^2 \quad\text{(Nesterov second moment)}
+\end{align}
+The \textbf{Nesterov Momentum Estimation} (NME) term $\bar{g}_t = g_t + (1-\beta_1)(g_t-g_{t-1})$ estimates the gradient at a future position without evaluating it. The update combines momentum with velocity:
+\[\bar{m}_t = m_t + (1-\beta_1)v_t, \quad \theta_{t+1} = \theta_t - \eta\frac{\bar{m}_t}{\sqrt{n_t}+\epsilon}\]
+Adan achieves fast convergence across diverse architectures (CNNs, GANs, Transformers) through this acceleration. The cost is maintaining three momentum-like buffers, increasing memory overhead relative to Adam.
 
-\paragraph{ADOPT.}
-ADOPT modifies Adam's update ordering to address theoretical non-convergence issues. In the report it is presented as a drop-in adaptive optimizer with stronger convergence guarantees and broad empirical performance, especially when one wants Adam-like behavior with fewer theoretical caveats.
+\begin{algorithm}[H]
+\caption{Adan (Adaptive Nesterov Momentum)}
+\label{alg:adan}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1, \beta_2, \beta_3 \in (0,1)$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $m \gets 0$, $v \gets 0$, $n \gets 0$, $g_{-1} \gets 0$ (previous gradient)
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla f(\theta_{t-1})$
+    \State $m \gets (1-\beta_1) m + \beta_1 g_t$
+    \State $\Delta g_t \gets g_t - g_{t-1}$
+    \State $v \gets (1-\beta_2) v + \beta_2 \Delta g_t$
+    \State Nesterov estimation: $\bar{g}_t \gets g_t + (1-\beta_1) \Delta g_t$
+    \State $n \gets (1-\beta_3) n + \beta_3 \bar{g}_t^2$
+    \State Combined momentum: $\bar{m} \gets m + (1-\beta_1) v$
+    \State $\theta_t \gets \theta_{t-1} - \eta (\bar{m} / (\sqrt{n} + \epsilon))$
+    \State $g_{t-1} \gets g_t$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
 
-\paragraph{AdEMAMix.}
-AdEMAMix mixes short-horizon and long-horizon exponential moving averages. The key idea is to combine fast adaptation with slower historical smoothing so the optimizer can respond to sharp local changes without discarding longer-term signal.
+\paragraph{ADOPT (Adam with Optimal Pruned Tuning).}
+ADOPT fixes a fundamental theoretical issue in Adam: the gradient appears in both the first moment and second moment estimates, creating circularity. ADOPT \textbf{decouples} by using the previous step's second moment for the denominator:
+\begin{align}
+v_t &= \beta_2 v_{t-1} + (1-\beta_2)g_t^2 \\
+m_t &= \beta_1 m_{t-1} + (1-\beta_1)\frac{g_t}{\sqrt{v_{t-1}}+\epsilon} \quad\text{(uses $v_{t-1}$, not $v_t$)} \\
+\theta_{t+1} &= \theta_t - \eta m_t
+\end{align}
+This simple reordering achieves the optimal convergence rate $O(1/\sqrt{T})$ with \textbf{any} choice of $\beta_2 \in (0,1)$, without bounded-noise assumptions. The practical consequence is that ADOPT is a drop-in replacement for Adam with stronger theoretical guarantees and comparable or superior empirical performance across vision, NLP, RL, and generative modeling domains.
 
-\paragraph{MARS.}
-MARS belongs to the variance-reduction line of work. The survey frames it as a way to make preconditioned adaptive optimization more stable by correcting momentum recursion and reducing gradient noise.
+\begin{algorithm}[H]
+\caption{ADOPT (Adam with Optimal Pruned Tuning)}
+\label{alg:adopt}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1, \beta_2$, tolerance $\epsilon$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $m \gets 0$, $v \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla f(\theta_{t-1})$
+    \If{weight\_decay $> 0$}
+        \State $\theta_{t-1} \gets \theta_{t-1}(1 - \eta\lambda)$
+    \EndIf
+    \State Use \textbf{previous} second moment: $\text{denom} \gets \sqrt{\max(v, \epsilon)} + \epsilon$
+    \State Update first moment using previous variance: $m \gets \beta_1 m + (1-\beta_1)(g_t / \text{denom})$
+    \State Update second moment with \textbf{current} gradient: $v \gets \beta_2 v + (1-\beta_2) g_t^2$
+    \State $\theta_t \gets \theta_{t-1} - \eta m$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
 
-\paragraph{Cautious Optimizers.}
-Cautious AdamW and related variants mask updates when the momentum direction and the current gradient disagree. The intended effect is to suppress harmful steps and keep only sign-consistent motion.
+\paragraph{AdEMAMix (Exponential Moving Average Mixture).}
+AdEMAMix replaces Adam's single EMA of gradients with a \textbf{mixture of two EMAs}: one fast-decaying and one slow-decaying. This addresses the observation that gradients remain informative over tens of thousands of steps, not just hundreds:
+\begin{align}
+m_{1,t} &= \beta_1 m_{1,t-1} + (1-\beta_1)g_t \quad\text{(fast EMA, $\beta_1 \approx 0.9$)} \\
+m_{2,t} &= \beta_3 m_{2,t-1} + (1-\beta_3)g_t \quad\text{(slow EMA, $\beta_3 \approx 0.9999$)} \\
+v_t &= \beta_2 v_{t-1} + (1-\beta_2)g_t^2 \\
+m_t &= m_{1,t} + \alpha_t m_{2,t} \quad\text{(mixture with scheduled weight $\alpha_t$)} \\
+\theta_{t+1} &= \theta_t - \eta\frac{m_t}{\sqrt{v_t}+\epsilon}
+\end{align}
+The mixture weight $\alpha_t$ typically increases during training, allowing the fast EMA to provide immediate adaptation while the slow EMA accumulates long-range gradient correlations. Empirically, a 1.3B model on 101B tokens achieves similar loss to AdamW on 197B tokens (95\% data efficiency gain), suggesting the slow EMA significantly reduces model forgetting.
+
+\begin{algorithm}[H]
+\caption{AdEMAMix (Exponential Moving Average Mixture)}
+\label{alg:ademamix}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1$ (fast), $\beta_3$ (slow), $\beta_2$ (second moment)
+\Require Mixture weight $\alpha_t$ (typically increasing), tolerance $\epsilon$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $m_1 \gets 0$ (fast EMA), $m_2 \gets 0$ (slow EMA), $v \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla f(\theta_{t-1})$
+    \If{weight\_decay $> 0$}
+        \State $\theta_{t-1} \gets \theta_{t-1}(1 - \eta\lambda)$
+    \EndIf
+    \State $m_1 \gets \beta_1 m_1 + (1-\beta_1) g_t$ \Comment{Fast EMA}
+    \State $m_2 \gets \beta_3 m_2 + (1-\beta_3) g_t$ \Comment{Slow EMA}
+    \State $v \gets \beta_2 v + (1-\beta_2) g_t^2$
+    \State $m_t \gets m_1 + \alpha_t m_2$ \Comment{Mixture}
+    \State $\theta_t \gets \theta_{t-1} - \eta (m_t / (\sqrt{v} + \epsilon))$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{MARS (Make Adaptive learning Rates Shine).}
+MARS combines preconditioned gradient methods (e.g., AdamW) with \textbf{variance reduction} via scaled stochastic recursive momentum. The core innovation is a variance-reduced gradient estimate:
+\begin{align}
+c_t &= g_t + \gamma(c_{t-1} - g_{t-1}) \quad\text{(SVRG-style recursive estimate)} \\
+m_t &= \beta_1 m_{t-1} + (1-\beta_1)c_t \\
+v_t &= \beta_2 v_{t-1} + (1-\beta_2)c_t^2 \\
+\theta_{t+1} &= \theta_t - \eta\frac{m_t}{\sqrt{v_t}+\epsilon}
+\end{align}
+where $\gamma \in [0.01, 0.1]$ controls how much historical gradient information is retained. The variance-reduced gradient $c_t$ acts as an implicit noise filter, amplifying consistent signal directions and dampening contradictory noise. MARS-AdamW consistently outperforms bare AdamW by significant margins on GPT-2 pretraining, suggesting that variance reduction substantially improves convergence in mini-batch stochastic training.
+
+\begin{algorithm}[H]
+\caption{MARS (Make Adaptive learning Rates Shine)}
+\label{alg:mars}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1, \beta_2$, weight decay $\lambda$
+\Require Variance reduction coefficient $\gamma \in [0.01, 0.1]$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $m \gets 0$, $v \gets 0$, $c \gets 0$ (variance-reduced gradient), $g_{-1} \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla f(\theta_{t-1})$
+    \State Variance reduction: $c \gets g_t + \gamma(c - g_{t-1})$
+    \State $m \gets \beta_1 m + (1-\beta_1) c$
+    \State $v \gets \beta_2 v + (1-\beta_2) c^2$
+    \If{weight\_decay $> 0$}
+        \State $\theta_{t-1} \gets \theta_{t-1}(1 - \eta\lambda)$
+    \EndIf
+    \State $\theta_t \gets \theta_{t-1} - \eta (m / (\sqrt{v} + \epsilon))$
+    \State $g_{t-1} \gets g_t$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Cautious Optimizers (Cautious AdamW, Cautious Lion).}
+The Cautious framework applies a \textbf{one-line modification} to any momentum-based optimizer: mask the update so that only dimensions where momentum and gradient directions agree are applied:
+\begin{align}
+\text{mask}_i &= \begin{cases} 1 & \text{if } m_t[i] \cdot g_t[i] > 0 \quad\text{(agreement)} \\ 0 & \text{otherwise} \end{cases} \\
+u_t &= \left(\frac{m_t}{\sqrt{v_t}+\epsilon}\right) \odot \text{mask} \quad\text{(element-wise masking)} \\
+\theta_{t+1} &= \theta_t - \eta u_t
+\end{align}
+The intuition: momentum $m_t$ estimates the gradient direction from history; the current gradient $g_t$ is instantaneous signal. When both agree, the optimizer is confident and should update aggressively. When they disagree, the optimizer is conflicted---the historical trend points toward a region that may have been good before, but current evidence contradicts it. By masking conflicted dimensions, Cautious becomes more conservative and avoids corrupted steps. Empirically, this simple masking achieves up to \textbf{1.47$\times$ speedup} on Llama and MAE pretraining while preserving convergence guarantees.
+
+\begin{algorithm}[H]
+\caption{Cautious AdamW (Consensus-based Update Masking)}
+\label{alg:cautious}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1, \beta_2$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $m \gets 0$, $v \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla f(\theta_{t-1})$
+    \State $m \gets \beta_1 m + (1-\beta_1) g_t$
+    \State $v \gets \beta_2 v + (1-\beta_2) g_t^2$
+    \State Consensus mask: $\text{mask}_i \gets 1$ if $m[i] \cdot g_t[i] > 0$, else $0$ \Comment{Agreement}
+    \State Base Adam update: $u \gets m / (\sqrt{v} + \epsilon)$
+    \State Apply mask: $u_{\text{masked}} \gets u \odot \text{mask}$ \Comment{Element-wise}
+    \If{weight\_decay $> 0$}
+        \State $\theta_{t-1} \gets \theta_{t-1}(1 - \eta\lambda)$
+    \EndIf
+    \State $\theta_t \gets \theta_{t-1} - \eta u_{\text{masked}}$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Large-Batch, Memory-Efficient, and Parameter-Free Optimizers}
-\paragraph{LAMB.}
-LAMB is included in the survey as a large-batch optimizer that scales updates layerwise. Its practical role is to keep optimization stable when batch sizes become very large.
+\paragraph{LAMB (Layer-wise Adaptive Moments optimizer for Batch training).}
+LAMB extends Adam with \textbf{layer-wise adaptive rate scaling} (inspired by LARS), enabling stable training with extreme batch sizes (e.g., 64K on BERT):
+\begin{align}
+m_t^L &= \beta_1 m_{t-1}^L + (1-\beta_1)g_t^L \quad\text{(layer-wise first moment)} \\
+v_t^L &= \beta_2 v_{t-1}^L + (1-\beta_2)(g_t^L)^2 \\
+u_{\text{adam}}^L &= \frac{m_t^L}{\sqrt{v_t^L}+\epsilon} + \lambda\theta_{t-1}^L \quad\text{(base adaptive step with decay)} \\
+\phi^L &= \frac{\|\theta_{t-1}^L\|_2}{\|u_{\text{adam}}^L\|_2} \quad\text{(trust ratio: layer normalization)} \\
+\theta_t^L &= \theta_{t-1}^L - \eta \cdot \phi^L \cdot u_{\text{adam}}^L
+\end{align}
+The \textbf{trust ratio} $\phi^L = \|\theta^L\|_2 / \|u_{\text{adam}}^L\|_2$ normalizes the effective update step relative to weight magnitude. In very large batches, stochastic gradient noise can exceed signal, destabilizing layer-wise learning rates. By scaling updates proportionally to weight norms, LAMB ensures relative changes rather than absolute ones, preventing small confident updates in large vectors from dominating. LAMB preserves small-batch generalization benefits while enabling efficient large-batch training.
+
+\begin{algorithm}[H]
+\caption{LAMB (Layer-wise Adaptive Moments optimizer for Batch training)}
+\label{alg:lamb}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1, \beta_2$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: For each layer $L$: $m^L \gets 0$, $v^L \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \For{each layer $L$}
+        \State $g_t^L \gets \nabla f(\theta_t^L)$
+        \State $m^L \gets \beta_1 m^L + (1-\beta_1) g_t^L$
+        \State $v^L \gets \beta_2 v^L + (1-\beta_2) (g_t^L)^2$
+        \State Base Adam: $u_{\text{adam}}^L \gets m^L / (\sqrt{v^L} + \epsilon)$
+        \If{weight\_decay $> 0$}
+            \State $u_{\text{adam}}^L \gets u_{\text{adam}}^L + \lambda \theta_{t-1}^L$
+        \EndIf
+        \State Trust ratio: $\phi^L \gets \|\theta_{t-1}^L\|_2 / \|u_{\text{adam}}^L\|_2$ if both nonzero, else $1$
+        \State $\theta_t^L \gets \theta_{t-1}^L - \eta \phi^L u_{\text{adam}}^L$
+    \EndFor
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
 
 \paragraph{Schedule-Free AdamW.}
-Schedule-free methods remove explicit scheduler design from the optimization recipe. The markdown emphasizes operational simplicity: instead of investing effort in warmup and decay design, one can use an optimizer whose update dynamics absorb part of that responsibility.
+Schedule-free methods remove explicit scheduler design from the optimization recipe. The algorithm maintains two parameter streams: $z_t$ (exploration) and $x_t$ (smooth average):
+\begin{align}
+v_t &= \beta_2 v_{t-1} + (1-\beta_2)g_t^2 \quad\text{(variance)} \\
+z_t &= z_{t-1}(1-\eta\lambda) - \eta\frac{g_t}{\sqrt{v_t}+\epsilon} \quad\text{(adaptive step with decay)} \\
+c_t &= \frac{1}{t+1} \quad\text{(averaging coefficient, decreases over time)} \\
+x_t &= (1-c_t)x_{t-1} + c_t z_t \quad\text{(iterate averaging)} \\
+y_t &= (1-\beta)z_t + \beta x_t \quad\text{(interpolation for evaluation point)}
+\end{align}
+The averaging coefficient $c_t = 1/(t+1)$ implements an implicit learning-rate schedule without explicitly specifying total steps $T$. This framework unifies scheduling and iterate averaging: the algorithm explores via $z_t$ while accumulating stable direction via $x_t$. The evaluation point $y_t$ (used for gradient computation) interpolates between exploration and stability. Schedule-Free achieves state-of-the-art convergence across convex optimization, large-scale deep learning, and reinforcement learning, while removing a major hyperparameter.
+
+\begin{algorithm}[H]
+\caption{Schedule-Free AdamW}
+\label{alg:schedulefree}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$ (fixed), $\beta_1, \beta_2$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$ or averaging $x_T$
+\State Initialize: $z \gets \theta_0$ (exploration), $x \gets \theta_0$ (average), $v \gets 0$, $t \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla f(y_{t-1})$ (gradient at interpolation point)
+    \State $v \gets \beta_2 v + (1-\beta_2) g_t^2$ \Comment{Variance}
+    \State Weight decay on $z$: $z \gets z(1 - \eta\lambda)$
+    \State $z \gets z - \eta g_t / (\sqrt{v} + \epsilon)$ \Comment{Adaptive step on raw}
+    \State $c_t \gets 1 / (t+1)$ \Comment{Averaging coefficient}
+    \State $x \gets (1-c_t) x + c_t z$ \Comment{Iterate averaging}
+    \State $y_t \gets (1-\beta_1) z + \beta_1 x$ \Comment{Interpolation for next eval}
+\EndFor
+\Return $x_T$ or $y_T$
+\end{algorithmic}
+\end{algorithm}
 
 \paragraph{Adafactor.}
-Adafactor factorizes second-moment statistics for matrix-shaped parameters, dramatically reducing optimizer-state memory. It is most attractive when memory is the bottleneck and some loss in optimizer simplicity is acceptable.
+Adafactor reduces optimizer memory by \textbf{factorizing} second-moment statistics for matrix-shaped parameters, storing only row and column accumulators rather than dense variance states. For a gradient matrix $G_t \in \mathbb{R}^{m \times n}$:
+\begin{align}
+R_t &= \beta_2 R_{t-1} + (1-\beta_2)(G_t^2) \mathbf{1}_n^T \quad\text{(row variance)} \\
+C_t &= \beta_2 C_{t-1} + (1-\beta_2) \mathbf{1}_m^\top (G_t^2) \quad\text{(column variance)} \\
+\hat{V}_t &= \frac{R_t C_t}{\mathbf{1}_n^\top R_t} \quad\text{(reconstructed variance via outer product)} \\
+U_t &= \frac{G_t}{\sqrt{\hat{V}_t}+\epsilon} \quad\text{(normalized adaptive step)} \\
+\hat{U}_t &= \frac{U_t}{\max(1, \text{RMS}(U_t))} \quad\text{(stability clipping)}
+\end{align}
+Instead of storing $m \times n$ second-moment values, Adafactor stores only $m + n$ accumulators, reducing memory from $O(n_{\text{params}})$ to $O(\sqrt{n_{\text{params}}})$. This is most attractive when VRAM is dominated by optimizer state rather than activations. The tradeoff is reduced optimization expressiveness and potential instability on some tasks.
 
-\paragraph{GaLore.}
-GaLore projects gradients into a low-rank subspace before optimization. The report treats it as a complementary memory-saving path that is especially relevant when the model is too large for full-rank optimizer state.
+\begin{algorithm}[H]
+\caption{Adafactor (Factorized Second-Moment Statistics)}
+\label{alg:adafactor}
+\begin{algorithmic}[1]
+\Require Gradient matrix $G_t \in \mathbb{R}^{m \times n}$, learning rate $\eta$, $\beta_2 \approx 0.999$
+\Ensure Updated parameters
+\State Initialize: Row accumulators $R \gets \epsilon \mathbf{1}^T_m$, Column $C \gets \epsilon \mathbf{1}_n$
+\For{$t = 1, 2, \ldots, T$}
+    \State $G_t \gets \nabla f(\theta_t)$ (matrix gradient)
+    \State $R \gets \beta_2 R + (1-\beta_2) (G_t^2) \mathbf{1}_n^T$ \Comment{Row inner products}
+    \State $C \gets \beta_2 C + (1-\beta_2) \mathbf{1}_m^\top (G_t^2)$ \Comment{Column inner products}
+    \State Reconstructed variance: $\hat{V} \gets (R \cdot C) / (\mathbf{1}_n^\top R)$ \Comment{Via outer product}
+    \State Normalized adaptive step: $U_t \gets G_t / (\sqrt{\hat{V}} + \epsilon)$
+    \State Per-row RMS clipping: $\hat{U}_t \gets U_t / \max(1, \text{RMS}(U_t))$
+    \State $\theta_{t+1} \gets \theta_t - \eta \hat{U}_t$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
 
-\paragraph{Prodigy.}
-Prodigy is grouped under parameter-free or distance-adaptive methods. The core claim is that it estimates effective step sizes from optimization geometry, reducing the need for explicit learning-rate tuning.
+\paragraph{GaLore (Gradient Low-Rank Projection).}
+GaLore projects 2D gradients into a low-rank subspace before optimization, reducing optimizer-state memory while maintaining adaptive step scaling. For a 2D parameter matrix $W \in \mathbb{R}^{m \times n}$:
+\begin{align}
+U, S, V &= \text{SVD}(G_t) \quad\text{(compute singular decomposition)} \\
+P &\in \mathbb{R}^{n \times r} \quad\text{or} \quad P^\top \in \mathbb{R}^{r \times m} \quad\text{(select top-$r$ singular vectors)} \\
+G_{\text{low}} &= P^\top G_t \quad\text{(project to low-rank space)} \\
+\Delta_{\text{low}} &= \text{Adam}(G_{\text{low}}) \quad\text{(optimize in compressed space)} \\
+\Delta &= P \Delta_{\text{low}} \quad\text{(reconstruct in original space)}
+\end{align}
+By projecting into a rank-$r$ subspace (typically $r \ll \min(m,n)$), optimizer state is reduced from $O(mn)$ to $O(r(m+n))$ for 2D parameters. This complementary memory-saving approach is especially relevant when the model is too large for full-rank optimizer state. GaLore works synergistically with other techniques and has shown strong empirical results on billion-parameter models.
+
+\begin{algorithm}[H]
+\caption{GaLore (Gradient Low-Rank Projection)}
+\label{alg:galore}
+\begin{algorithmic}[1]
+\Require 2D parameter matrix $W \in \mathbb{R}^{m \times n}$, learning rate $\eta$, rank $r \ll \min(m,n)$
+\Ensure Updated parameters
+\State Initialize: Adam state in low-rank space (if rank-2 variant)
+\For{$t = 1, 2, \ldots, T$}
+    \State $G_t \gets \nabla f(W_t)$
+    \If{$t \mod K = 1$}  \Comment{Periodic SVD}
+        \State $U_t, S_t, V_t^\top \gets \text{SVD}(G_t)$ (full or thin)
+        \State Select projection: $P \gets U_t[:, :r]$ or $P \gets V_t[:, :r]$
+    \EndIf
+    \State Project gradient: $G_{\text{low}} \gets P^\top G_t$ (or $G_t P^\top$ for right projection)
+    \State Run Adam on low-rank: $\Delta_{\text{low}} \gets \text{Adam}(G_{\text{low}})$
+    \State Reconstruct in original space: $\Delta \gets P \Delta_{\text{low}}$ (or $\Delta_{\text{low}} P^\top$)
+    \State $W_t \gets W_t - \eta \Delta$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Prodigy (Approximating the Distance Estimate).}
+Prodigy adapts the effective step scale through a running distance-like statistic, eliminating the need for explicit learning-rate tuning. The algorithm maintains a cumulative distance estimate:
+\begin{align}
+u_t &= \frac{g_t}{\sqrt{v_t}+\epsilon} \quad\text{(unnormalized adaptive step)} \\
+s_t &= s_{t-1} + \langle u_t, \theta_t - \theta_0 \rangle \quad\text{(cumulative signed distance)} \\
+d_t &= \max(d_{t-1}, d_0 + d_{\text{coef}} \cdot s_t) \quad\text{(distance estimate with lower bound)} \\
+\theta_{t+1} &= \theta_t - \eta \cdot d_t \cdot u_t
+\end{align}
+where $d_0$ is an initial bound and $d_{\text{coef}}$ controls how aggressively the estimate adapts. The distance estimate $d_t$ captures the combined magnitude of past gradients weighted by actual parameter displacement, implementing an implicit effective learning rate. This distance-aware scaling achieves robust convergence across problem scales and batch sizes without requiring a learning-rate schedule. Prodigy reduces hyperparameter sensitivity by estimating step sizes from optimization geometry rather than problem-specific prior knowledge.
+
+\begin{algorithm}[H]
+\caption{Prodigy (Approximating the Distance Estimate)}
+\label{alg:prodigy}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, coeff $d_{\text{coef}}$, initial dist $d_0 > 0$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $s \gets 0$ (cumulative signed distance), $d \gets d_0$
+\For{$t = 1, 2, \ldots, T$}
+    \State $g_t \gets \nabla f(\theta_{t-1})$
+    \State $v_t \gets \beta_2 v_{t-1} + (1-\beta_2) g_t^2$ \Comment{Second moment}
+    \State $u_t \gets g_t / (\sqrt{v_t} + \epsilon)$ \Comment{Unnormalized adaptive}
+    \State Update distance: $s \gets s + \langle u_t, \theta_t - \theta_0 \rangle$ \Comment{Signed distance}
+    \State $d \gets \max(d, d_0 + d_{\text{coef}} \cdot s)$ \Comment{Lower-bounded distance}
+    \State $\theta_t \gets \theta_{t-1} - \eta \cdot d \cdot u_t$ \Comment{Distance-scaled update}
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Second-Order, Geometric, and Orthogonality Optimizers}
-\paragraph{Shampoo.}
-Shampoo computes matrix preconditioners from Kronecker-structured statistics. It is one of the most explicit second-order methods in the report and is motivated by conditioning improvements rather than minimal implementation complexity.
 
-\paragraph{SOAP.}
-SOAP keeps Adam-style tracking in the eigenbasis of a Shampoo-like preconditioner. The survey presents it as a hybrid between full matrix preconditioning and adaptive first-order behavior.
+\begin{algorithm}[H]
+\caption{Shampoo (Matrix Preconditioning via Kronecker Products)}
+\label{alg:shampoo}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, eigendecomposition interval $K$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $L \gets \epsilon I_m$, $R \gets \epsilon I_n$ (left and right Gram matrices)
+\For{$t = 1, 2, \ldots, T$}
+    \State $G \gets \nabla f(\theta_{t-1})$ \Comment{Gradient}
+    \State Update Gram matrices: $L \gets L + G G^\top$, $R \gets R + G^\top G$
+    \If{$t \mod K == 0$}
+        \State $Q_L, \Lambda_L \gets \text{eigh}(L)$ \Comment{Eigendecomposition of $L$}
+        \State $Q_R, \Lambda_R \gets \text{eigh}(R)$ \Comment{Eigendecomposition of $R$}
+        \State $L^{-1/4} \gets Q_L (\Lambda_L + \epsilon)^{-1/4} Q_L^\top$
+        \State $R^{-1/4} \gets Q_R (\Lambda_R + \epsilon)^{-1/4} Q_R^\top$
+    \EndIf
+    \State $\Delta \theta \gets L^{-1/4} G R^{-1/4}$ \Comment{Preconditioned gradient}
+    \State $\theta_t \gets \theta_{t-1} - \eta \cdot \Delta \theta$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
 
-\paragraph{Lion.}
-Lion uses sign momentum updates and therefore carries much smaller state than Adam-like methods. The markdown positions it as a low-memory, high-throughput alternative rather than a universally superior optimizer.
+\paragraph{Shampoo (Matrix Preconditioning via Kronecker Products).}
+Shampoo is a \textbf{structured second-order method} that computes matrix preconditioners from Kronecker-structured outer-product statistics. For a 2D parameter matrix $W \in \mathbb{R}^{m \times n}$:
+\begin{align}
+L_t &= L_{t-1} + G_t G_t^\top \quad\text{(left/row Gram matrix, $m \times m$)} \\
+R_t &= R_{t-1} + G_t^\top G_t \quad\text{(right/column Gram matrix, $n \times n$)} \\
+L_t^{-1/4} &= Q_L (\Lambda_L)^{-1/4} Q_L^\top \quad\text{(via eigendecomposition)} \\
+R_t^{-1/4} &= Q_R (\Lambda_R)^{-1/4} Q_R^\top \\
+\Delta W_t &= L_t^{-1/4} G_t R_t^{-1/4} \quad\text{(preconditioned gradient)}
+\end{align}
+Shampoo approximates the full-matrix Adagrad preconditioner $H^{-1/2}$ (where $H$ is the Hessian) using Kronecker-factored structure. Instead of storing a $(mn) \times (mn)$ preconditioner, Shampoo maintains two smaller matrices ($m \times m$ and $n \times n$), capturing cross-parameter correlations within and across groups. The method has proven effective at scale (Google production systems) and is well-suited to transformer architectures with high-rank structure. Eigendecompositions are performed periodically (e.g., every $K=10$ steps) to amortize cost. Tradeoff: higher per-step compute and periodic $O(m^3 + n^3)$ eigendecomposition versus  improved conditioning and accelerated convergence.
 
-\paragraph{Sophia.}
-Sophia uses approximate second-order information through diagonal Hessian estimates and clipped updates. It belongs to the family of curvature-aware methods that seek better conditioning without paying the full cost of dense second-order optimization.
+\paragraph{SOAP (Shampoo with Adam in eigenbasis).}
+SOAP is a simplified variant of Shampoo that decouples preconditioning from momentum tracking. Instead of complex matrix algebra on preconditioned gradients, SOAP runs standard Adam in the eigenbasis of Shampoo's preconditioners:
+\begin{align}
+L_t &= L_{t-1} + G_t G_t^\top, \quad R_t = R_{t-1} + G_t^\top G_t \quad\text{(Gram accumulation)} \\
+Q_L, \Lambda_L &= \text{eigh}(L_t), \quad Q_R, \Lambda_R = \text{eigh}(R_t) \quad\text{(periodic eigendecomposition)} \\
+G_t^{\text{rot}} &= Q_L^\top G_t Q_R \quad\text{(rotate gradient into eigenbasis)} \\
+m_t^{\text{rot}} &= \beta_1 m_{t-1}^{\text{rot}} + (1-\beta_1) G_t^{\text{rot}} \\
+v_t^{\text{rot}} &= \beta_2 v_{t-1}^{\text{rot}} + (1-\beta_2)(G_t^{\text{rot}})^2 \quad\text{(Adam in rotated space)} \\
+U_t^{\text{rot}} &= \frac{m_t^{\text{rot}}}{\sqrt{v_t^{\text{rot}}}+\epsilon}, \quad U_t = Q_L U_t^{\text{rot}} Q_R^\top \quad\text{(rotate back)}
+\end{align}
+The key insight: all momentum tracking occurs in the well-conditioned eigenbasis, simplifying numerical stability and theoretical analysis. SOAP combines benefits of Shampoo (explicit curvature structure) and Adam (proven momentum mechanics), while being cleaner and often more stable than full Shampoo. Eigendecompositions are recomputed every $K$ steps, amortizing the cost.
 
-\paragraph{Muon and Turbo-Muon.}
-Muon and Turbo-Muon are described as orthogonality-oriented optimizers that explicitly reshape update geometry. Turbo-Muon adds faster Newton--Schulz-style orthogonalization, making the same basic idea more practical at scale.
+\begin{algorithm}[H]
+\caption{SOAP (Shampoo with Adam in Eigenbasis)}
+\label{alg:soap}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1, \beta_2$, eigendecomposition interval $K$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $L \gets \epsilon I_m$, $R \gets \epsilon I_n$, $m \gets 0$, $v \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+    \State $G \gets \nabla f(\theta_{t-1})$ \Comment{Gradient}
+    \State Update Gram: $L \gets L + G G^\top$, $R \gets R + G^\top G$
+    \If{$t \mod K == 0$}
+        \State $Q_L, \Lambda_L \gets \text{eigh}(L)$, $Q_R, \Lambda_R \gets \text{eigh}(R)$
+    \EndIf
+    \State $G^{\text{rot}} \gets Q_L^\top G Q_R$ \Comment{Rotate gradient into eigenbasis}
+    \State $m \gets \beta_1 m + (1-\beta_1) G^{\text{rot}}$ \Comment{Exponential moving average (bias-correct outside)}
+    \State $v \gets \beta_2 v + (1-\beta_2) (G^{\text{rot}})^2$ \Comment{Second moment (bias-correct outside)}
+    \State $u \gets m / (\sqrt{v} + \epsilon)$ \Comment{Adaptive step in eigenbasis}
+    \State $\Delta \theta \gets Q_L u Q_R^\top$ \Comment{Rotate back to parameter space}
+    \State $\theta_t \gets \theta_{t-1} - \eta \cdot \Delta \theta$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Lion (EvoLved Sign Momentum).}
+Lion achieves \textbf{minimal memory overhead} by using sign-based updates instead of full adaptive scaling:\begin{align}
+c_t &= \beta_1 m_t + (1-\beta_1) g_t \quad\text{(momentum input)} \\
+\theta_{t+1} &= \theta_t - \eta \left(\text{sign}(c_t) + \lambda\theta_t\right) \quad\text{(sign operator update)} \\
+m_{t+1} &= \beta_2 m_t + (1-\beta_2) g_t \quad\text{(momentum accumulation)}
+\end{align}
+All element-wise scaling operations are replaced with \texttt{sign()}, which outputs $\{-1, 0, +1\}$. This dramatically reduces memory compared to Adam-like methods: Lion stores only the momentum buffer, no second moment variance. The tradeoff: sign-based updates sacrifice the element-wise learning-rate adaptation that makes Adam effective. Lion is positioned not as a universally superior optimizer but as a specialized low-memory, high-throughput alternative for scenarios where activation memory dominates and some optimizer sophistication can be sacrificed. Works well in large-batch regimes and when hardware throughput is the primary constraint.
+
+\begin{algorithm}[H]
+\caption{Lion (EvoLved Sign Momentum)}
+\label{alg:lion}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1, \beta_2$, weight decay $\lambda$
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $m \gets 0$ (momentum buffer)
+\For{$t = 1, 2, \ldots, T$}
+    \State $g \gets \nabla f(\theta_{t-1})$ \Comment{Gradient}
+    \State $c \gets \beta_1 m + (1-\beta_1) g$ \Comment{Momentum input}
+    \State $\theta_t \gets \theta_{t-1} - \eta (\text{sign}(c) + \lambda \theta_{t-1})$ \Comment{Sign-based update with weight decay}
+    \State $m \gets \beta_2 m + (1-\beta_2) g$ \Comment{Momentum accumulation (decoupled)}
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Sophia (Second-Order Hessian Information with Optimized Approximation).}
+Sophia uses \textbf{diagonal Hessian estimates} for curvature-aware scaling without the memory and compute cost of dense second-order methods.\begin{align}
+m_t &= \beta_1 m_{t-1} + (1-\beta_1) g_t \quad\text{(first moment)} \\
+h_t &= \beta_2 h_{t-(k-1)} + (1-\beta_2) \hat{h}_t \quad\text{(diagonal Hessian, updated every $k$ steps)} \\
+\text{clip}(x, C) &= \min(\max(x, -C), C) \quad\text{(element-wise clipping)} \\
+\theta_{t+1} &= \theta_t - \eta \cdot \text{clip}\left(\frac{m_t}{\max(\gamma h_t, \epsilon)}, 1\right)
+\end{align}
+where $\hat{h}_t$ is a diagonal estimate (e.g., Hutchinson-trace estimator) and $\gamma$ is a scaling factor. The diagonal Hessian $h_t$ captures local curvature, allowing the optimizer to take smaller steps in sharp directions and larger steps in flat directions. The clipping operation $\text{clip}(\\cdot, 1)$ prevents adaptive steps from exploding. Sophia belongs to the family of curvature-aware methods seeking better conditioning without the $O(n^2)$ or $O(n^3)$ cost of full second-order methods. Works particularly well in second-pass fine-tuning scenarios.
+
+\begin{algorithm}[H]
+\caption{Sophia (Diagonal Hessian with Clipped Updates)}
+\label{alg:sophia}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta_0$, learning rate $\eta$, $\beta_1, \beta_2$, Hessian update freq $k$, clip threshold $C$ 
+\Ensure Updated parameters $\theta_T$
+\State Initialize: $m \gets 0$, $h \gets \epsilon$ (diagonal Hessian estimate)
+\For{$t = 1, 2, \ldots, T$}
+    \State $g \gets \nabla f(\theta_{t-1})$
+    \State $m \gets \beta_1 m + (1-\beta_1) g$ \Comment{First moment (bias-correct outside)}
+    \If{$t \mod k == 0$}
+        \State $\hat{h} \gets \text{HutchinsonEstimate}(g)$ \Comment{Diagonal Hessian via Hutchinson}
+        \State $h \gets \beta_2 h + (1-\beta_2) \hat{h}$ \Comment{Update Hessian estimate}
+    \EndIf
+    \State $u \gets \frac{m}{\max(\gamma h, \epsilon)}$ \Comment{Adaptive step (element-wise)}
+    \State $u \gets \text{clip}(u, C)$ \Comment{Element-wise clipping to $[-C, C]$}
+    \State $\theta_t \gets \theta_{t-1} - \eta \cdot u$
+\EndFor
+\Return $\theta_T$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Muon and Turbo-Muon (Orthogonality-Based Optimizers).}
+Muon and Turbo-Muon are \textbf{orthogonality-oriented optimizers} that reshape update geometry using Newton-Schulz polynomial iterations for orthogonalization. For a 2D parameter matrix $W$ with gradient $G_t$:
+\begin{align}
+X_0 &= \frac{G_t}{\|G_t\|_F + \epsilon} \quad\text{(normalized gradient)} \\
+A_k &= X_k X_k^\top \quad\text{(Gramian)} \\
+B_k &= b A_k + c A_k^2 \quad\text{(polynomial step, coefficients $b, c$ from Newton-Schulz)} \\
+X_{k+1} &= a X_k + B_k X_k \quad\text{(iteration $k=0,1,\ldots,4$)} \\
+W_{t+1} &= W_t - \eta X_K \quad\text{(update with orthogonalized direction)}
+\end{align}
+Muon performs 5 Newton-Schulz iterations to produce an approximately orthogonal direction, ensuring updates respect geometric constraints. Turbo-Muon adds an \textbf{almost-orthogonal preconditioning} (AOL) step before iterations, reducing the number of required orthogonalization steps to 4. The rationale: orthogonal updates preserve norms during training, avoiding the norm creep observed in momentum-based methods. These optimizers show promise on large-scale training but require custom CUDA kernels for efficiency. Tradeoff: high per-step compute (matrix multiplications and polynomial iterations) versus fundamentally better-conditioned update geometry.
+
+\begin{algorithm}[H]
+\caption{Muon (Newton-Schulz Orthogonalization)}
+\label{alg:muon}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta$ (matrices), learning rate $\eta$, Newton-Schulz iters $K$
+\Ensure Updated parameters $\theta$
+\For{each 2D parameter matrix $W$}
+    \State $G \gets \nabla f(W)$ \Comment{Gradient}
+    \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalize gradient by Frobenius norm}
+    \For{$k = 0, 1, \ldots, K-1$}
+        \State $A_k \gets X_k X_k^\top$ \Comment{Gramian (cost: $O(mn^2)$ or $O(m^2n)$ for tall/wide)}
+        \State $B_k \gets (3/2) A_k - (1/2) A_k^2$ \Comment{Newton-Schulz coefficients}
+        \State $X_{k+1} \gets B_k X_k$ \Comment{Polynomial step}
+    \EndFor
+    \State $W \gets W - \eta X_K$ \Comment{Update with orthogonalized direction}
+\EndFor
+\Return updated $\theta$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Turbo-Muon (AOL-Preconditioned Orthogonalization)}
+\label{alg:turbo-muon}
+\begin{algorithmic}[1]
+\Require Initial parameters $\theta$ (matrices), learning rate $\eta$, Newton-Schulz iters $K'$ (typically 4)
+\Ensure Updated parameters $\theta$
+\For{each 2D parameter matrix $W$}
+    \State $G \gets \nabla f(W)$ \Comment{Gradient}
+    \State $X_0 \gets \frac{G}{\|G\|_F + \epsilon}$ \Comment{Normalize gradient}
+    \State \bf{AOL (Almost-Orthogonal preconditioner):} \Comment{Preconditioning step}
+    \State $P \gets (1.5 I - 0.5 X_0 X_0^\top)$ \Comment{Preconditioning matrix}
+    \State $X_0 \gets P X_0$ \Comment{Preconditioned start}
+    \For{$k = 0, 1, \ldots, K'-1$}
+        \State $A_k \gets X_k X_k^\top$
+        \State $B_k \gets (3/2) A_k - (1/2) A_k^2$
+        \State $X_{k+1} \gets B_k X_k$ \Comment{Reduced iterations due to AOL preconditioning}
+    \EndFor
+    \State $W \gets W - \eta X_{K'}$ \Comment{Update with preconditioned orthogonalized direction}
+\EndFor
+\Return updated $\theta$
+\end{algorithmic}
+\end{algorithm}
 
 \small
 \begin{longtable}{p{2.5cm}p{3.5cm}p{2.0cm}p{5.3cm}}
@@ -1436,203 +2132,1149 @@ Geometry-oriented & Muon, Turbo-Muon & orthogonalized update structure & Special
 \end{longtable}
 \normalsize
 
-\section{Annex B: Transformer Families from \texttt{TRANSFORMER\_TYPES.md}}
+\section{Annex B: Dense, Recurrent, and Memory-Augmented Transformers}
 \label{sec:annex-transformer}
 
-\subsection{Standard Attention}
-The markdown presents standard attention as the reference architecture for global contextualization. Every token attends to every other token through a softmax-normalized similarity matrix. Its major advantage is expressiveness: it can preserve perfect historical recall inside the active context window and it parallelizes well during training. Its main limitations are the quadratic training footprint and the KV-cache burden during decoding.
+This comprehensive annex synthesizes modern transformer architectures beyond the standard softmax baseline. The field has evolved toward six primary paradigms: dense global attention with variants, recurrent state compression with decay, selective state-space models, continuous-depth numerical integration, memory-augmented architectures, and hybrid approaches. Understanding this taxonomy illuminates fundamental tradeoffs between expressiveness, computational cost, memory footprint, and deployment simplicity.
 
-\subsection{Sigmoid Attention}
-Sigmoid attention keeps the same query--key similarity matrix but replaces row-wise softmax normalization with an elementwise sigmoid. The survey highlights three implications: token competition is reduced, the computation avoids some row-wise synchronization, and the method can be more hardware-friendly. The cost is training instability at scale, which motivated the ``hybrid-norm'' stabilization techniques discussed in the source document.
+\subsection{Dense Attention Baselines: Standard and Sigmoid}
 
-\subsection{RetNet}
-RetNet is presented as a bridge between attention and recurrence. In parallel form it resembles an attention-like interaction masked by exponential decay; in recurrent form it compresses history into a fixed-size state updated with decay. The report emphasizes its triple computation modes: parallel, recurrent, and chunkwise recurrent. The main tradeoff is that the fixed decay law imposes a stronger inductive bias than unconstrained softmax attention.
+\subsubsection{Standard Softmax Attention}
+Standard multi-head self-attention \citep{vaswani_attention_2017} computes scaled dot-product similarity between token embeddings:
 
-\subsection{Mamba}
-Mamba replaces explicit attention with a selective state-space recurrence whose parameters depend on the input. The annex source stresses that its importance lies not only in linear asymptotic complexity but also in the hardware-aware scan algorithm that makes the linear recurrence practical on accelerators. The downside is that state compression can weaken exact recall and copying behavior relative to full attention.
+\begin{algorithmic}[1]
+\State \textbf{Input:} Query matrix $\mathbf{Q} \in \mathbb{R}^{n \times d}$, Key matrix $\mathbf{K} \in \mathbb{R}^{n \times d}$, Value matrix $\mathbf{V} \in \mathbb{R}^{n \times d}$
+\State $\text{scores} \gets \frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d}} \in \mathbb{R}^{n \times n}$ \Comment{compute pairwise similarities}
+\State $\text{attention\_weights} \gets \texttt{softmax}(\text{scores}, \text{axis}=1) \in \mathbb{R}^{n \times n}$ \Comment{normalize across keys}
+\State \textbf{Output:} $\mathbf{Y} = \text{attention\_weights} \cdot \mathbf{V} \in \mathbb{R}^{n \times d}$ \Comment{weighted value combination}
+\end{algorithmic}
 
-\subsection{ODE Transformer}
-The ODE transformer treats depth as numerical integration over a continuous dynamical system. The source discusses Runge--Kutta refinement as a way to reduce truncation error and improve sequence generation quality. The benefit is a more expressive intra-block trajectory with weight sharing; the drawback is higher cost because each block now behaves like several solver stages.
+For autoregressive generation, KV caching stores past keys and values to avoid $\mathcal{O}(n^2)$ recomputation. However, this linearly growing cache occupies $\sim n \cdot d_{\text{hidden}}$ bytes, which can consume hundreds of gigabytes for billion-parameter models. Standard attention achieves \textbf{perfect expressiveness} within the context window---any token can attend to any other token with learned weights---but pays the price of dense computation.
 
-\subsection{Titans}
-Titans introduces test-time neural memorization: instead of storing only activations, the model updates an internal memory using surprise-driven learning signals during inference. The markdown frames this as a way to handle extremely long contexts and associative recall beyond what fixed-state recurrent models typically support. The systems cost is higher implementation complexity because inference now includes memory adaptation logic.
-
-\subsection{Synthesis and Systemic Insights}
-The transformer survey ends with four synthesis claims:
 \begin{itemize}[leftmargin=*]
-    \item sequence modeling is shaped by an expressivity-versus-compression tradeoff,
-    \item hardware substrate constraints now strongly influence which architectures win,
-    \item continuous-time views provide a useful language for understanding depth and refinement,
-    \item the field is converging toward hybrid models that mix compression, recurrence, sparse routing, and test-time adaptation.
+    \item \textbf{Training complexity}: $\mathcal{O}(n^2 \cdot d)$ time, $\mathcal{O}(n^2)$ space (attention matrix materialization).
+    \item \textbf{Inference complexity}: $\mathcal{O}(n)$ time per token, $\mathcal{O}(n)$ space (KV cache).
+    \item \textbf{Strengths}: Unparalleled expressiveness; perfect history recall; highly parallelizable.
+    \item \textbf{Weaknesses}: Quadratic bottleneck prohibits very long contexts; KV cache dominates memory during generation.
 \end{itemize}
 
-\begin{figure}[t]
-\centering
-\fitfigure{\begin{tikzpicture}[node distance=1.2cm and 1.0cm]
-\node[box, fill=blue!8] (pair) {Pairwise token interaction\\Standard / Sigmoid attention};
-\node[box, fill=green!8, below=of pair] (decay) {Decayed recurrent state\\RetNet / HGRN2 / GLA};
-\node[box, fill=yellow!10, below left=of decay, xshift=-1.7cm] (ssm) {Selective state evolution\\Mamba-like SSMs};
-\node[box, fill=orange!12, below right=of decay, xshift=1.7cm] (memory) {Adaptive external memory\\Titans-style updates};
-\draw[line] (pair) -- (decay);
-\draw[line] (decay) -- (ssm);
-\draw[line] (decay) -- (memory);
-\end{tikzpicture}}
-\caption{Annex view of transformer evolution: the field moves from explicit pairwise routing toward progressively more compressed or adaptive memory formulations.}
-\label{fig:annex-transformer-evolution}
-\end{figure}
+\subsubsection{Sigmoid Attention}
+Sigmoid attention replaces row-wise softmax with element-wise sigmoid activation \citep{ramapuram_theory_2024}:
+
+\begin{algorithmic}[1]
+\State \textbf{Input:} $\mathbf{Q}, \mathbf{K}, \mathbf{V}$ as above, learnable bias $\mathbf{b} \in \mathbb{R}^{n \times n}$
+\State $\text{logits} \gets \frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d}} + \mathbf{b}$
+\State $\text{attention\_weights} \gets \sigma(\text{logits})$ \Comment{element-wise sigmoid, not softmax}
+\State \textbf{Output:} $\mathbf{Y} = \text{attention\_weights} \odot \mathbf{V}$
+\end{algorithmic}
+
+Unlike softmax, sigmoid does not enforce a probability distribution (weights need not sum to 1), enabling stronger token independence. Theoretical analysis via mixture-of-experts shows sigmoid achieves superior sample complexity: $\mathcal{O}(n^{-0.51})$ convergence for ReLU experts versus softmax's $\mathcal{O}(n^{-0.24})$. However, empirical training revealed gradient instabilities at scale. The remedy is \textbf{hybrid-norm}---adding normalization after the attention output---which stabilizes gradients without sacrificing the theoretical benefits of element-wise gating.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n^2 \cdot d)$ (identical to standard), but element-wise operations enable 17\% inference speedup via FlashSigmoid.
+    \item \textbf{Inference complexity}: $\mathcal{O}(n)$ per token with KV cache (asymptotically same, but lower constant factors).
+    \item \textbf{Strengths}: Overcomes zero-sum competition; avoids row-wise synchronization; hardware-friendly implementation.
+    \item \textbf{Weaknesses}: Requires careful stabilization (hybrid-norm); training instability at large scales without auxiliary loss.
+\end{itemize}
+
+\subsection{Recurrent and Retentive Architectures}
+
+\subsubsection{Retentive Networks (RetNet)}
+RetNet \citep{sun_retentive_2023} unifies three computation paradigms: parallel training, recurrent inference, and chunkwise deployment. Its core innovation is the \textbf{retention mechanism}, which uses a fixed exponential decay matrix to model temporal importance:
+
+\begin{algorithmic}[1]
+\State \textbf{Parallel (training) form:}
+\State $\text{decay\_matrix}[i,j] \gets \gamma^{i-j}$ for $i \geq j$, else $0$ \Comment{causal exponential decay}
+\State $\text{decay\_matrix}[i,j] \gets 0$ for $i < j$ \Comment{causal masking}
+\State $\mathbf{Y}_{\text{parallel}} \gets (\mathbf{Q}\mathbf{K}^\top \odot \text{decay\_matrix}) \mathbf{V}$ \Comment{element-wise multiplication with decay}
+\end{algorithmic}
+
+\begin{algorithmic}[1]
+\State \textbf{Recurrent (inference) form:}
+\For{$t = 1, \ldots, n$}
+    \State $\mathbf{s}_t \gets \gamma \mathbf{s}_{t-1} + \mathbf{k}_t \mathbf{v}_t^\top$ \Comment{state update with decay}
+    \State $\mathbf{y}_t \gets \mathbf{q}_t \mathbf{s}_t$ \Comment{output via query-state interaction}
+\EndFor
+\end{algorithmic}
+
+The decay scalar $\gamma \in (0,1)$ controls the temporal window. RetNet uses \textbf{multi-scale retention} with different $\gamma$ values per head (e.g., $\gamma = 1 - 2^{-5}, 1 - 2^{-6}, \ldots$), allowing short-term and long-term dependencies simultaneously. Chunkwise recurrent mode divides sequences into chunks, processes each chunk in parallel, and threads a recurrent state between chunks.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n^2 \cdot d)$ (parallel), or $\mathcal{O}(n \cdot c \cdot d)$ (chunkwise recurrent with chunk size $c$).
+    \item \textbf{Inference complexity}: $\mathcal{O}(1)$ per token, $\mathcal{O}(d^2)$ state space (fixed matrix).
+    \item \textbf{Strengths}: Constant-time inference; triple computation paradigm; multi-scale consolidation.
+    \item \textbf{Weaknesses}: Fixed decay imposes rigid inductive bias; may truncate learned long-range patterns.
+\end{itemize}
+
+\subsubsection{Mamba: Selective State-Space Models}
+Mamba \citep{gu_mamba_2023} frames recurrence as a continuous-time dynamical system with input-dependent parameters, achieving both linear training and constant-time inference:
+
+\begin{algorithmic}[1]
+\State \textbf{Continuous dynamics:} $h'(t) = \mathbf{A} h(t) + \mathbf{B} x(t)$, \quad $y(t) = \mathbf{C} h(t)$
+\State \textbf{Discretization with step size $\Delta_t$:}
+\State $\bar{\mathbf{A}}_t \gets \exp(\Delta_t \mathbf{A})$
+\State $\bar{\mathbf{B}}_t \gets (\Delta_t \mathbf{A})^{-1} (\exp(\Delta_t \mathbf{A}) - \mathbf{I}) \Delta_t \mathbf{B}_t$
+\State \textbf{Recurrent update:}
+\For{$t = 1, \ldots, n$}
+    \State $\Delta_t \gets \text{softplus}(\text{Linear}(x_t))$ \Comment{input-dependent step size}
+    \State $\mathbf{B}_t \gets \text{Linear}(x_t)$, \quad $\mathbf{C}_t \gets \text{Linear}(x_t)$ \Comment{input-dependent projection matrices}
+    \State $h_t \gets \bar{\mathbf{A}}_t h_{t-1} + \bar{\mathbf{B}}_t x_t$ \Comment{state transition}
+    \State $y_t \gets \mathbf{C}_t h_t$ \Comment{output projectionContinuous}
+\EndFor
+\end{algorithmic}
+
+The critical innovation is that $\mathbf{A}$ (the system matrix) is \textit{not} input-dependent, but $\Delta_t$, $\mathbf{B}_t$, and $\mathbf{C}_t$ are, making the system \textbf{time-varying}. This selectivity allows the model to \textit{ignore} irrelevant information by setting $\Delta_t$ near zero, effectively creating a gate. A hardware-aware parallel scan algorithm implements the recurrence efficiently on GPUs by fusing computation within SRAM, avoiding expensive HBM bandwidth.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(n \cdot d)$ via hardware-aware scan (linear in sequence length).
+    \item \textbf{Inference complexity}: $\mathcal{O}(1)$ per token, $\mathcal{O}(d)$ state (hidden vector).
+    \item \textbf{Strengths}: Achieves linear training and constant-inference simultaneously; practical on long sequences (millions of tokens).
+    \item \textbf{Weaknesses}: State vector compression can weaken exact copying and dense associative recall versus full attention.
+\end{itemize}
+
+\subsection{Continuous-Depth Transformers: ODE Integration}
+
+\subsubsection{ODE Transformer}
+The ODE Transformer \citep{zhang_continuous_2021} interprets network depth as numerical integration of a continuous dynamical system, using higher-order Runge-Kutta solvers to reduce truncation error:
+
+\begin{algorithmic}[1]
+\State \textbf{Continuous formulation:} $\frac{dh(t)}{dt} = f_\theta(h(t), t)$ where $f_\theta$ is the transformer sub-network
+\State \textbf{Runge-Kutta-4 discrete approximation:}
+\State $k_1 \gets f_\theta(h_t, t)$
+\State $k_2 \gets f_\theta(h_t + \tfrac{1}{2}k_1, t + \tfrac{1}{2}\Delta t)$
+\State $k_3 \gets f_\theta(h_t + \tfrac{1}{2}k_2, t + \tfrac{1}{2}\Delta t)$
+\State $k_4 \gets f_\theta(h_t + k_3, t + \Delta t)$
+\State $h_{t+1} \gets h_t + \frac{\Delta t}{6}(k_1 + 2k_2 + 2k_3 + k_4)$ \Comment{weighted combination}
+\end{algorithmic}
+
+Instead of simple Euler residual connections $h_{t+1} = h_t + f_\theta(h_t)$, the RK4 block computes four intermediate evaluations and combines them with classical RK4 weights. To avoid vanishing gradients, the architecture introduces \textbf{learned gating} that interpolates between intermediate approximations:
+
+\begin{algorithmic}[1]
+\State $g \gets \sigma(\text{Linear}([k_1, k_2, k_3, k_4]))$ \Comment{learnable gate}
+\State $h_{t+1} \gets h_t + g \cdot k_1 + (1-g) \cdot k_2$ \Comment{interpolated refinement}
+\end{algorithmic}
+
+This formulation reduces the effective number of parameters through weight sharing---the same $f_\theta$ is evaluated multiple times---while providing richer trajectory refinement.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: $\mathcal{O}(k \cdot n^2 \cdot d)$ where $k$ is the RK order (4 for RK4).
+    \item \textbf{Inference complexity}: $\mathcal{O}(k \cdot n)$ per token (higher constant overhead).
+    \item \textbf{Strengths}: Significantly higher accuracy on generation tasks (state-of-the-art BLEU); parameter-efficient via weight sharing.
+    \item \textbf{Weaknesses}: High per-step compute; inference latency increases by constant factor $k$; complex gating required for stability.
+\end{itemize}
+
+\subsection{Test-Time Memory: Titans}
+
+The Titans architecture \citep{behrouz_titans_2025} introduces an orthogonal dimension: instead of static weights, the model maintains a learnable memory that is \textit{updated during inference} based on a surprise-driven signal:
+
+\begin{algorithmic}[1]
+\State \textbf{Local short-term attention:} Apply standard or sparse attention within a fixed context window $c$
+\State $y_t^{\text{local}} \gets \text{Attention}(q_t, k_{[t-c:t]}, v_{[t-c:t]})$
+\State \textbf{Memory update signal (surprise):}
+\State $S_t \gets \eta_t S_{t-1} - \theta_t \nabla_\ell(\mathcal{M}_{t-1}; x_t)$ \Comment{surprise as gradient of loss w.r.t. memory}
+\State $\mathcal{M}_t \gets (1 - \alpha_t) \mathcal{M}_{t-1} + S_t$ \Comment{memory updated via EMA}
+\State \textbf{Long-term memory retrieval:}
+\State $y_t^{\text{memory}} \gets \mathcal{M}_t^* (q_t)$ \Comment{query memory module for retrieved information}
+\State \textbf{Output combination:}
+\State $y_t \gets y_t^{\text{local}} + \text{gate}(y_t^{\text{memory}})$ \Comment{combine local and retrieved memory}
+\end{algorithmic}
+
+The memory module $\mathcal{M}$ is literally updated during the forward pass by computing gradients of an associative loss and applying SGD steps with momentum. The decay rates $\eta_t, \theta_t, \alpha_t$ are themselves input-dependent, allowing the model to switch memory paradigms when context shifts.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training complexity}: Roughly $\mathcal{O}(c^2 + n \cdot f)$ where $c$ is local window and $f$ is memory update overhead.
+    \item \textbf{Inference complexity}: $\mathcal{O}(c^2)$ local attention plus $\mathcal{O}(1)$ memory retrieval per token.
+    \item \textbf{Strengths}: Handles extreme context lengths; enables true associative recall; memory adapts to input.
+    \item \textbf{Weaknesses}: Significantly more complex; inference includes gradient computation; higher coordination overhead.
+\end{itemize}
+
+\subsection{Architectural Comparison and Synthesis}
 
 \small
-\begin{longtable}{p{2.4cm}p{2.1cm}p{2.2cm}p{5.7cm}}
+\begin{longtable}{p{2.0cm}p{1.8cm}p{1.6cm}p{1.6cm}p{4.5cm}}
 \toprule
-\textbf{Architecture} & \textbf{Training Trend} & \textbf{Inference Trend} & \textbf{Main Characterization in the Markdown} \\
+\textbf{Architecture} & \textbf{Train} & \textbf{Infer} & \textbf{State} & \textbf{Key Characteristic} \\
 \midrule
 \endhead
-Standard Attention & quadratic & KV-cache based, linear per step & Highest expressiveness and direct token routing, but bottlenecked by dense pairwise interactions. \\
-Sigmoid Attention & quadratic & linear per step & Removes zero-sum competition and improves kernel behavior, but needs stabilization for large-scale training. \\
-RetNet & chunkwise or quadratic & constant-state recurrent inference & Unifies attention-style training with recurrent deployment through retention and decay. \\
-Mamba & linear & constant-state recurrent inference & Selective state-space model with hardware-aware scan; strong long-context efficiency. \\
-ODE Transformer & solver-dependent & solver-dependent & Continuous-depth interpretation with accuracy gains from multi-stage numerical integration. \\
-Titans & roughly linear in sequence length & memory-retrieval centered & Adds test-time adaptive memorization for extreme context and recall. \\
+Standard Attention & $O(n^2 d)$ & $O(n)$ cache & $O(nd)$ & Perfect expressiveness, full token routing, KV bottleneck. \\
+Sigmoid Attention & $O(n^2 d)$ & $O(n)$ cache & $O(nd)$ & Element-wise gating, hardware-efficient, stable at scale with hybrid-norm. \\
+RetNet & $O(n^2 d)$ & $O(1)$ & $O(d^2)$ & Multi-scale decay, triple computation mode, fixed forgetting pattern. \\
+Mamba & $O(nd)$ & $O(1)$ & $O(d)$ & Selective input-dependent dynamics, linear training and inference, hardware scan. \\
+ODE Transformer & $O(kn^2 d)$ & $O(kn)$ & $O(nd)$ & Numerical integration refinement, weight sharing via stages, higher accuracy. \\
+Titans & $O(c^2 + nf)$ & $O(c^2 + 1)$ & $O(1)$ & Test-time memory adaptation, extreme context, on-inference parameter updates. \\
 \bottomrule
 \end{longtable}
 \normalsize
 
-\section{Annex C: Sparse Attention Families from \texttt{SPARSE\_TRANSFORMER\_TYPES.md}}
+The field exhibits a clear progression along two axes: (i) \textbf{computational efficiency}, moving from $O(n^2)$ to $O(n)$ or $O(1)$, and (ii) \textbf{memory adaptivity}, shifting from static weights to dynamic, test-time updated models. Standard attention remains the expressiveness baseline; Mamba and RetNet represent the practical efficiency frontier; Titans introduces an orthogonal innovation axis (test-time learning). The choice of architecture reflects the fundamental engineering constraint: expressiveness versus deployment cost.
+
+\section{Annex C: Comprehensive Sparse Attention Mechanisms}
 \label{sec:annex-sparse}
 
 \subsection{Executive Summary}
-The sparse-attention report treats sparsity as a full design space rather than a single approximation trick. The methods vary along three axes: whether the sparse pattern is fixed or data-dependent, whether the mechanism is trainable or training-free, and whether the sparsity unit is a token, a window, or a block.
 
-\subsection{Sparse Transformer}
-Sparse Transformer uses factorized sparse masks built from strided and fixed connectivity patterns. The markdown emphasizes that two sparse heads can approximate full reachability with much lower cost than dense attention. The advantages are strong early empirical results and sub-quadratic complexity; the drawback is that the pattern is data-agnostic.
+Sparse attention mechanisms address the prohibitive $\mathcal{O}(n^2)$ computational and memory complexity of standard scaled dot-product attention by restricting the set of attended key-value pairs. Modern sparse attention spans a rich design space distinguished by four orthogonal dimensions: (i) \textbf{sparsity pattern} (fixed geometric, data-dependent, or frequency-based), (ii) \textbf{trainability} (end-to-end trained or inference-only), (iii) \textbf{sparsity unit} (individual tokens, local windows, or blocks), and (iv) \textbf{mechanism} (masking, selection, filtering, or compression). This annex synthesizes seven major sparse attention families---Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, and FASA---providing mathematical formulations, algorithmic pseudocode, and comprehensive architectural comparisons.
 
-\subsection{Longformer}
-Longformer combines sliding-window locality, optional dilation, and task-specific global tokens. Its main value is practical linear scaling for long documents. The report notes that it is a drop-in replacement for standard attention in many settings, but window size and global-token selection remain task-dependent design choices.
+\subsection{Sparse Transformer: Factorized Strided and Fixed Patterns}
 
-\subsection{BigBird}
-BigBird mixes local windows, random connections, and global tokens. The sparse-attention markdown highlights its theoretical guarantees: universal approximation and Turing completeness can be preserved with sparse graphs as long as enough global structure is retained.
+\subsubsection{Mathematical Formulation}
 
-\subsection{FASA}
-FASA is a training-free decode-time method that predicts token importance from dominant frequency chunks in RoPE-based models. The key claims in the source are strong KV-cache compression and decoding speedup, plus compatibility with other compression methods. The limitations are its dependence on a frequency-analysis step and its focus on decoding rather than full training-time attention.
+The Sparse Transformer \citep{child_sparse_transformer_2019} reduces quadratic complexity to $\mathcal{O}(n\sqrt{n})$ by factorizing sparse attention into two complementary sparse heads. Let $n$ be the sequence length and $l = \lfloor\sqrt{n}\rfloor$ be the stride.
 
-\subsection{NSA}
-Native Sparse Attention is a trainable three-branch architecture composed of compressed, selected, and window branches. The report frames it as hardware-aligned sparse attention designed to use tensor cores efficiently. Its complexity is not only algorithmic but also architectural because the method introduces multiple branches and gating logic.
+\paragraph{Strided attention head}: Each position $i$ attends to every $l$-th previous position:
+\[
+\mathcal{A}_i^{(\text{strided})} = \{j : j \leq i,\; (i - j) \bmod l = 0\}
+\]
 
-\subsection{SparseK}
-SparseK uses a differentiable top-$k$ selection mechanism to determine which key/value pairs should participate in attention. The report presents it as end-to-end trainable and especially attractive for generation because the active memory can remain small. The weakness is that top-$k$ selection may lead to irregular memory access patterns.
+\paragraph{Fixed attention head}: Each position $i$ attends to positions within its local block plus fixed summary columns:
+\[
+\mathcal{A}_i^{(\text{fixed})} = \{j : \lfloor j/l \rfloor = \lfloor i/l \rfloor\} \cup \{j : j \bmod l \in \{l-c, \ldots, l-1\}\}
+\]
+where $c$ is a hyperparameter controlling the number of summary columns (typically $c=1$ or $c=2$).
 
-\subsection{SpargeAttn}
-SpargeAttn is a training-free universal sparse method that first predicts negligible interactions and then applies softmax-aware filtering. The survey highlights that it applies beyond language models to image and video diffusion workloads as well. Its performance depends on whether the model already contains enough inherent sparsity to exploit.
+The attention computation for each head $h$ follows standard scaled dot-product rules restricted to the sparse set:
+\[
+\text{Attn}_h(Q, K, V)_i = \text{softmax}\left(\frac{q_i^h K_{\mathcal{A}_i}^h\top}{\sqrt{d_k}}\right) V_{\mathcal{A}_i}^h
+\]
 
-\subsection{Comparison Pattern}
-Across the markdown source, the methods naturally group into:
-\begin{enumerate}[leftmargin=*]
-    \item patterned sparsity: Sparse Transformer and Longformer,
-    \item graph sparsity: BigBird,
-    \item learned or predicted selection: SparseK and NSA,
-    \item training-free acceleration: SpargeAttn and FASA.
-\end{enumerate}
+The key insight is that with the two factorized heads operating in parallel across a depth of $L$ transformer layers, every position can reach every other position through a path of length at most $L + 1$, preserving long-range reachability with a fraction of dense attention cost.
 
-\small
-\begin{longtable}{p{2.4cm}p{2.8cm}p{1.8cm}p{2.2cm}p{4.8cm}}
-\toprule
-\textbf{Method} & \textbf{Mechanism} & \textbf{Trainable} & \textbf{Sparsity Unit} & \textbf{Main Takeaway from the Markdown} \\
-\midrule
-\endhead
-Sparse Transformer & strided + fixed factorized masks & Yes & token neighborhood & Structured reachability lowers cost but remains data-agnostic. \\
-Longformer & sliding window + dilation + global tokens & Yes & local window + global anchors & Practical linear scaling for long documents with selective global access. \\
-BigBird & random + local + global sparse graph & Yes & sparse edge set / blocks & Preserves strong theoretical properties while remaining sparse. \\
-FASA & frequency-aware decode-time selection & No & selected tokens / cache entries & Training-free KV compression guided by RoPE frequency structure. \\
-NSA & compressed + selected + window branches & Yes & branchwise reduced views & Hardware-aligned trainable sparsity with learned branch fusion. \\
-SparseK & differentiable top-$k$ selection & Yes & selected key/value pairs & End-to-end selective attention with small active memory. \\
-SpargeAttn & two-stage online block filtering & No & attention blocks & Training-free acceleration path for already trained dense models. \\
-\bottomrule
-\end{longtable}
-\normalsize
+\subsubsection{Algorithmic Pseudocode}
 
-\small
-\begin{longtable}{p{2.6cm}p{2.2cm}p{2.1cm}p{5.1cm}}
-\toprule
-\textbf{Method} & \textbf{Complexity Trend} & \textbf{Training-Free?} & \textbf{Pros / Cons Emphasized in the Markdown} \\
-\midrule
-\endhead
-Sparse Transformer & sub-quadratic & No & Strong early benchmarks and long-sequence reach, but fixed patterns may miss important interactions. \\
-Longformer & linear in sequence length for fixed window & No & Scales well and is flexible, but still depends heavily on window and global-token design. \\
-BigBird & near-linear & No & Strong theory and long-context performance, but randomness and block structure complicate tuning. \\
-FASA & decode-time selective & Yes & Plug-and-play compression and speedup, but depends on RoPE/frequency analysis quality. \\
-NSA & reduced-token multi-branch & No & High speedups and strong benchmark results, but requires custom kernels and extra architecture complexity. \\
-SparseK & linear train / small active generation state & No & Differentiable and trainable, but adds scoring overhead and scattered access. \\
-SpargeAttn & sparsity-dependent acceleration & Yes & Universal and training-free, but gains depend on how sparse the underlying model already is. \\
-\bottomrule
-\end{longtable}
-\normalsize
+\begin{algorithm}[H]
+\caption{Sparse Transformer Attention: Strided + Fixed Dual Heads}
+\begin{algorithmic}[1]
+\Require Query $\mathbf{Q} \in \mathbb{R}^{n \times d}$, Key $\mathbf{K} \in \mathbb{R}^{n \times d}$, Value $\mathbf{V} \in \mathbb{R}^{n \times d}$
+\Require Stride $l = \lfloor\sqrt{n}\rfloor$, summary columns $c \in \{1, 2\}$
+\Ensure Output $\mathbf{Y} \in \mathbb{R}^{n \times d}$
+\State \textbf{Head 1: Strided Attention}
+\For{$i = 1, \ldots, n$}
+    \State $\mathcal{A}_i \gets \{j : j \leq i \text{ and } (i-j) \bmod l = 0\}$ \Comment{Every $l$-th position}
+    \State $\text{scores}_{i} \gets \mathbf{q}_i \mathbf{K}_{\mathcal{A}_i}^\top / \sqrt{d_k}$
+    \State $\text{attn}_{i} \gets \text{softmax}(\text{scores}_{i})$
+    \State $\mathbf{y}_i^{(1)} \gets \text{attn}_{i} \mathbf{V}_{\mathcal{A}_i}$
+\EndFor
+\State \textbf{Head 2: Fixed Block + Summary Attention}
+\For{$i = 1, \ldots, n$}
+    \State $\text{block\_start} \gets \lfloor i/l \rfloor \cdot l$, $\text{block\_end} \gets \min(i+1, \text{block\_start}+l)$
+    \State $\mathcal{A}_i \gets [\text{block\_start}, \text{block\_end}) \cup \{\text{cols from last } c \text{ columns}\}$
+    \State $\text{scores}_{i} \gets \mathbf{q}_i \mathbf{K}_{\mathcal{A}_i}^\top / \sqrt{d_k}$
+    \State $\text{attn}_{i} \gets \text{softmax}(\text{scores}_{i})$
+    \State $\mathbf{y}_i^{(2)} \gets \text{attn}_{i} \mathbf{V}_{\mathcal{A}_i}$
+\EndFor
+\State Concatenate: $\mathbf{Y} = [\mathbf{y}^{(1)} \| \mathbf{y}^{(2)}]$ and project via output linear layer
+\Return $\mathbf{Y}$
+\end{algorithmic}
+\end{algorithm}
 
-\section{Annex D: Gated Attention Families from \texttt{GATED\_TRANSFORMER\_TYPES.md}}
-\label{sec:annex-gated}
+\subsubsection{Key Characteristics}
 
-\subsection{Executive Summary}
-The gated-attention survey argues that gating is the missing control mechanism in many linear-attention and recurrent alternatives. Without it, memory only accumulates. With it, the model can forget, rewrite, or selectively scale information. The source splits the field into recurrent-state gating and softmax-path gating.
-
-\subsection{Gated Linear Attention (GLA)}
-GLA augments linear attention with a data-dependent multiplicative decay gate. The survey emphasizes that this directly addresses memory overload in additive recurrent states and that chunkwise training makes the method hardware friendly. The tradeoff is that the gate is still less expressive than full attention on retrieval-heavy tasks.
-
-\subsection{DeltaNet}
-DeltaNet replaces pure accumulation with a delta-rule update: the memory is corrected by comparing the retrieved value against the desired value. The source frames this as online error correction and connects it to test-time training ideas. Its strength is strong associative recall; its weakness is memory crowding because there is no explicit global forgetting.
-
-\subsection{Gated DeltaNet}
-Gated DeltaNet combines the two ideas above: a decay gate controls forgetting while the delta rule controls targeted writing. In the markdown this is presented as the most balanced pure linear recurrent design because it supports rapid erasure and precise updates at the same time.
-
-\subsection{RetNet}
-RetNet appears again in the gated survey because fixed exponential decay can be interpreted as a gate. The report contrasts it with fully data-dependent methods: RetNet is simpler and efficient, but its forgetting pattern is predetermined rather than learned token by token.
-
-\subsection{HGRN2}
-HGRN2 uses lower-bounded hierarchical forget gates with outer-product state expansion. The markdown stresses that the hierarchical bounds encourage different layers to specialize to different timescales, though the method still lags behind stronger retrieval-oriented gated models.
-
-\subsection{Forgetting Transformer (FoX)}
-FoX keeps full softmax attention but adds a forget gate in logit space. The report treats it as a conservative modification for users who want the expressive power of dense attention while still imposing recency-aware memory control. Its main limitation remains quadratic complexity.
-
-\subsection{Gated Attention after SDPA}
-The final architecture in the source applies a sigmoid gate after scaled dot-product attention. The survey highlights two claimed benefits: the extra nonlinearity breaks part of the low-rank bottleneck in the output path, and the gate helps suppress the attention-sink phenomenon. This is the least disruptive gated variant because it leaves the core attention operator intact.
-
-\subsection{Taxonomy and Comparison Dimensions}
-The source also adds two useful comparison lenses:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{state type}: fixed recurrent matrix state versus full attention matrix,
-    \item \textbf{gate location}: recurrent decay, write strength, logit bias, or post-attention modulation.
+    \item \textbf{Complexity}: $\mathcal{O}(n\sqrt{n} \cdot d)$ during training; $\mathcal{O}(n)$ per token during generation.
+    \item \textbf{Trainable}: Yes; full backpropagation through selected positions.
+    \item \textbf{Sparsity pattern}: Fixed and data-agnostic; patterns do not adapt to content.
+    \item \textbf{Strength}: Structured reachability guarantees long-range dependencies; proven effective on long sequences (Enwik8, text images).
+    \item \textbf{Limitation}: Fixed patterns may miss important but non-contiguous relationships; requires custom CUDA kernels for practical efficiency.
 \end{itemize}
 
-\small
-\begin{longtable}{p{2.6cm}p{2.4cm}p{2.1cm}p{5.1cm}}
+\subsection{Longformer: Sliding Window, Dilation, and Global Tokens}
+
+\subsubsection{Mathematical Formulation}
+
+Longformer \citep{beltagy_longformer_2020} achieves linear $\mathcal{O}(n \cdot w)$ complexity by combining three complementary attention patterns.
+
+\paragraph{Sliding window attention}: Local neighborhood of size $w$:
+\[
+\mathcal{A}_i^{(\text{window})} = \{j : |i - j| \leq w/2\}
+\]
+
+\paragraph{Dilated sliding window}: Windowed attention with dilation $d$, skipping stride $d+1$:
+\[
+\mathcal{A}_i^{(\text{dilated})} = \{j : |i - j| \leq (w/2)(d+1) \text{ and } (i-j) \bmod (d+1) = 0\}
+\]
+
+\paragraph{Global attention}: Designated global tokens (e.g., $[\text{CLS}]$) attend to all positions and are attended by all:
+\[
+\mathcal{A}_i^{(\text{global})} = \begin{cases}
+\{1, \ldots, n\} & \text{if } i \in \mathcal{G} \\
+\mathcal{A}_i^{(\text{window})} \cup \mathcal{G} & \text{otherwise}
+\end{cases}
+\]
+
+The three patterns are applied via separate projections. The local and global attention can use either the same projections or task-specific separate ones.
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{Longformer: Sliding Window + Dilated + Global}
+\begin{algorithmic}[1]
+\Require Query $\mathbf{Q} \in \mathbb{R}^{n \times d}$, Key $\mathbf{K}$, Value $\mathbf{V}$, window size $w$, dilation $d$, global token indices $\mathcal{G}$
+\Ensure Output $\mathbf{Y}$
+\For{$i = 1, \ldots, n$}
+    \If{$i \in \mathcal{G}$}
+        \State $\mathcal{A}_i \gets \{1, \ldots, n\}$ \Comment{Global token attends to all}
+    \Else
+        \State Local window: $\mathcal{A}^{(\text{local})} \gets [i - w/2, i + w/2] \cap [1, n]$
+        \State Dilated offsets: $\mathcal{A}^{(\text{dilated})} \gets \{j : (i-j) \bmod (d+1) = 0\} \cap \mathcal{A}^{(\text{dilated range})}$
+        \State Combine: $\mathcal{A}_i \gets \mathcal{A}^{(\text{local})} \cup \mathcal{A}^{(\text{dilated})} \cup \mathcal{G}$
+    \EndIf
+    \State $\text{scores}_i \gets \mathbf{q}_i \mathbf{K}_{\mathcal{A}_i}^\top / \sqrt{d_k}$
+    \State $\text{attn}_i \gets \text{softmax}(\text{scores}_i)$
+    \State $\mathbf{y}_i \gets \text{attn}_i \mathbf{V}_{\mathcal{A}_i}$
+\EndFor
+\Return $\mathbf{Y}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: $\mathcal{O}(n \cdot w)$ where $w$ is the window size (linear when $w \ll n$).
+    \item \textbf{Trainable}: Yes; drop-in replacement for standard attention.
+    \item \textbf{Coverage}: With $L$ layers and window size $w$, receptive field grows to $L \times w$, covering entire sequence with shallow networks.
+    \item \textbf{Strength}: Practical for document-level tasks; dilation expands local receptive fields with minimal overhead; global tokens provide query-document correspondence.
+    \item \textbf{Limitation}: Window size remains a design hyperparameter; suboptimal for tasks requiring dense attention patterns.
+\end{itemize}
+
+\subsection{BigBird: Random, Local, and Global Sparse Graph}
+
+\subsubsection{Mathematical Formulation}
+
+BigBird \citep{zaheer_bigbird_2020} preserves universal approximation and Turing completeness using a principled mix of three sparsity patterns.
+
+\paragraph{Random connections}: Each position connects to $r$ randomly sampled positions:
+\[
+\mathcal{A}_i^{(\text{random})} = \text{RandomSample}(\{1, \ldots, n\}, r)
+\]
+
+\paragraph{Local window}: Sliding window neighborhood:
+\[
+\mathcal{A}_i^{(\text{local})} = \{j : |i-j| \leq w/2\}
+\]
+
+\paragraph{Global tokens}: Task-specific global anchors:
+\[
+\mathcal{A}_i^{(\text{global})} = \begin{cases}
+\{1, \ldots, n\} & \text{if } i \in \mathcal{G} \\
+\mathcal{A}_i^{(\text{random})} \cup \mathcal{A}_i^{(\text{local})} \cup \mathcal{G} & \text{otherwise}
+\end{cases}
+\]
+
+The composite sparse mask $M$ is:
+\[
+M_{ij} = \mathbf{1}[j \in \mathcal{A}_i^{(\text{random})} \cup \mathcal{A}_i^{(\text{local})} \cup \mathcal{A}_i^{(\text{global})}]
+\]
+
+In practice, BigBird groups tokens into blocks of size $b$ and applies the sparsity decision at the block level, enabling efficient block-sparse implementations.
+
+\subsubsection{Theoretical Guarantee}
+
+The authors prove that with $O(1)$ random connections and global tokens, the sparse graph maintains the same universal approximation and Turing completeness properties as dense attention. Formally, any computable function can be represented and any sequence of operations can be simulated within the BigBird connectivity graph.
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{BigBird: Random + Local + Global Block-Sparse Attention}
+\begin{algorithmic}[1]
+\Require Query $\mathbf{Q}$, Key $\mathbf{K}$, Value $\mathbf{V}$, block size $b$, random links per block $r$, global indices $\mathcal{G}$
+\Ensure Output $\mathbf{Y}$
+\State Reshape into blocks: $n_b = \lceil n / b \rceil$ blocks
+\For{block $i = 0, \ldots, n_b-1$}
+    \For{position $j$ in block $i$}
+        \State \textbf{Local window}: $\mathcal{A}_j^{(\text{local})} = \text{nearby positions in block} \cup \text{boundary positions}$
+        \State \textbf{Random block sampling}: Sample $r$ blocks uniformly at random, add all positions from those blocks
+        \State \textbf{Global}: Add all global token positions
+        \State $\mathcal{A}_j \gets \mathcal{A}_j^{(\text{local})} \cup \mathcal{A}_j^{(\text{random})} \cup \mathcal{G}$
+    \EndFor
+\EndFor
+\For{$i = 1, \ldots, n$}
+    \State $\text{scores}_i \gets \mathbf{q}_i \mathbf{K}_{\mathcal{A}_i}^\top / \sqrt{d_k}$
+    \State $\text{attn}_i \gets \text{softmax}(\text{scores}_i)$
+    \State $\mathbf{y}_i \gets \text{attn}_i \mathbf{V}_{\mathcal{A}_i}$
+\EndFor
+\Return $\mathbf{Y}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: $\mathcal{O}(n)$ or near-linear in optimal block-sparse implementation.
+    \item \textbf{Trainable}: Yes.
+    \item \textbf{Theoretical grounding}: Provably maintains universal approximation and Turing-completeness with sparse connectivity.
+    \item \textbf{Strength}: Strong long-document performance on question answering, summarization, and genomics tasks.
+    \item \textbf{Limitation}: Random sampling introduces variance and non-determinism; tuning of $r, w, g$ hyperparameters remains task-dependent.
+\end{itemize}
+
+\subsection{SparseK Attention: Differentiable Top-$k$ Selection}
+
+\subsubsection{Mathematical Formulation}
+
+SparseK \citep{lou_sparsek_2024} enables learnable sparsity via a \textbf{differentiable top-$k$ operator}. A scoring network $\phi_\theta$ evaluates key-value pair importance:
+
+\[
+u_j = \phi_\theta(\mathbf{k}_j, \mathbf{q}_i) \in \mathbb{R}
+\]
+
+The \textbf{SparseK operator} selects the top-$k$ scores while remaining differentiable. It computes a threshold $\tau(u)$ such that the sum of active scores equals $k$:
+
+\[
+\text{SparseK}(u, k)_j = \max(u_j - \tau(u), 0), \quad \text{where} \quad \sum_j \max(u_j - \tau, 0) = k
+\]
+
+The threshold $\tau$ is found via bisection. The attention becomes:
+
+\[
+m_j = \text{SparseK}(u, k)_j, \quad \text{Attn}_i = \text{softmax}\left(\frac{\mathbf{q}_i K_{\text{sel}}^\top}{\sqrt{d_k}}\right) V_{\text{sel}}
+\]
+
+where $K_{\text{sel}}, V_{\text{sel}}$ contain only the top-$k$ entries (those with $m_j > 0$).
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{SparseK: Differentiable Top-$k$ Attention}
+\begin{algorithmic}[1]
+\Require Query $\mathbf{q} \in \mathbb{R}^d$, Key matrix $\mathbf{K} \in \mathbb{R}^{n \times d}$, Value matrix $\mathbf{V} \in \mathbb{R}^{n \times d}$
+\Require Scoring network $\phi_\theta$, target sparsity $k$
+\Ensure Attention output $\mathbf{y}$
+\State \textbf{Compute importance scores:}
+\For{$j = 1, \ldots, n$}
+    \State $u_j \gets \phi_\theta(\mathbf{k}_j, \mathbf{q})$
+\EndFor
+\State \textbf{Compute differentiable top-$k$ via threshold:}
+\State $u_{\text{sorted}} \gets \text{sort}(u, \text{descending}=\text{True})$
+\State $\text{cumsum} \gets \text{cumsum}(u_{\text{sorted}})$
+\State Find $\rho = \max\{i : u_{\text{sorted}}[i] > 0 \text{ and cumsum}[i] \leq k\}$
+\State $\tau \gets (u_{\text{sorted}}[\rho] - k) / (\rho + 1)$ \Comment{Threshold for $k$ active elements}
+\State $m \gets \max(u - \tau, 0)$ \Comment{Differentiable selection mask}
+\State \textbf{Apply mask and compute attention:}
+\State $K_{\text{sel}} \gets K[m > 0]$, $V_{\text{sel}} \gets V[m > 0]$
+\State $\text{scores} \gets \mathbf{q} K_{\text{sel}}^\top / \sqrt{d_k}$
+\State $\text{attn} \gets \text{softmax}(\text{scores})$
+\State $\mathbf{y} \gets \text{attn} \cdot V_{\text{sel}}$
+\Return $\mathbf{y}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: $\mathcal{O}(n \cdot d)$ during training (linear in sequence length); $\mathcal{O}(k)$ per token during generation.
+    \item \textbf{Trainable}: Yes; end-to-end gradient flow through the SparseK operator.
+    \item \textbf{Incremental generation}: Supports efficient constant-memory autoregressive generation.
+    \item \textbf{Strength}: Seamlessly integrates into existing LLM architectures; minimal fine-tuning needed.
+    \item \textbf{Limitation}: Scattered memory access from top-$k$ selection may limit cache efficiency on some hardware; scoring network adds overhead.
+\end{itemize}
+
+\subsection{NSA (Native Sparse Attention): Hardware-Aligned Hierarchical Branches}
+
+\subsubsection{Mathematical Formulation}
+
+NSA \citep{yuan_nsa_2025} decomposes sparse attention into three parallel branches that are combined through learned gates.
+
+\paragraph{Compression branch}: A learnable MLP $\varphi$ compresses key-value blocks:
+
+\[
+\tilde{K}_t^{\text{cmp}} = \left[\varphi(k_{id+1:id+l})\right]_{\substack{1 \leq i \leq \lfloor(t-l)/d\rfloor}} \quad, \quad \tilde{V}_t^{\text{cmp}} = \left[\varphi(v_{id+1:id+l})\right]
+\]
+
+\paragraph{Selection branch}: High-importance blocks are selected based on compressed scores:
+
+\[
+p_t^{\text{cmp}} = \text{softmax}(q_t^\top \tilde{K}_t^{\text{cmp}} / \sqrt{d}), \quad I_t = \mathrm{TopK}(p_t^{\text{cmp}}, n), \quad \tilde{K}_t^{\text{sel}} = \mathrm{Gather}(K, I_t)
+\]
+
+\paragraph{Sliding window branch}: Fixed local context:
+
+\[
+\tilde{K}_t^{\text{win}} = K_{t-w:t}, \quad \tilde{V}_t^{\text{win}} = V_{t-w:t}
+\]
+
+\paragraph{Gated combination}: The three attention outputs are combined via learned gates:
+
+\[
+\alpha_t^{(\text{cmp})} = \sigma(\text{Linear}_\text{cmp}(q_t)), \quad \alpha_t^{(\text{sel})} = \sigma(\text{Linear}_\text{sel}(q_t)), \quad \alpha_t^{(\text{win})} = \sigma(\text{Linear}_\text{win}(q_t))
+\]
+
+\[
+y_t = \alpha_t^{(\text{cmp})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{cmp}}, \tilde{V}^{\text{cmp}}) + \alpha_t^{(\text{sel})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{sel}}, \tilde{V}^{\text{sel}}) + \alpha_t^{(\text{win})} \cdot \text{Attn}(q_t, \tilde{K}^{\text{win}}, \tilde{V}^{\text{win}})
+\]
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{NSA: Compressed + Selected + Window Branches with Learned Gating}
+\begin{algorithmic}[1]
+\Require Query $\mathbf{q}_t$, cached Key/Value sequences, block size $l$, stride $d$, selection count $n$, window $w$
+\Require Compression MLP $\varphi$, gate networks $\text{Linear}_{\text{cmp}}, \text{Linear}_{\text{sel}}, \text{Linear}_{\text{win}}$
+\Ensure Output $\mathbf{y}_t$
+\State \textbf{Compression branch:}
+\For{$i = 1$ to $\lfloor t/d \rfloor$}
+    \State $k_i^{\text{cmp}} \gets \varphi(\mathbf{K}_{id+1:id+l})$ \Comment{Compress block via MLP}
+    \State $v_i^{\text{cmp}} \gets \varphi(\mathbf{V}_{id+1:id+l})$
+\EndFor
+\State $\tilde{\mathbf{K}}^{\text{cmp}} \gets [k_1^{\text{cmp}}, \ldots, k_{\lfloor t/d \rfloor}^{\text{cmp}}]$, $\tilde{\mathbf{V}}^{\text{cmp}} \gets [v_1^{\text{cmp}}, \ldots, v_{\lfloor t/d \rfloor}^{\text{cmp}}]$
+\State $\mathbf{y}_t^{(\text{cmp})} \gets \text{SDPA}(\mathbf{q}_t, \tilde{\mathbf{K}}^{\text{cmp}}, \tilde{\mathbf{V}}^{\text{cmp}})$
+\State \textbf{Selection branch:}
+\State Compute scores on compressed: $\mathbf{s} \gets \text{softmax}(\mathbf{q}_t \tilde{\mathbf{K}}^{\text{cmp}\top} / \sqrt{d})$
+\State Select top-$n$ important blocks: $I \gets \mathrm{TopK}(\mathbf{s}, n)$
+\State Gather full blocks: $\tilde{\mathbf{K}}^{\text{sel}} \gets [\mathbf{K}_{I_i d+1:I_i d+l}]_i$, $\tilde{\mathbf{V}}^{\text{sel}} \gets [\mathbf{V}_{I_i d+1:I_i d+l}]_i$
+\State $\mathbf{y}_t^{(\text{sel})} \gets \text{SDPA}(\mathbf{q}_t, \tilde{\mathbf{K}}^{\text{sel}}, \tilde{\mathbf{V}}^{\text{sel}})$
+\State \textbf{Window branch:}
+\State $\mathbf{y}_t^{(\text{win})} \gets \text{SDPA}(\mathbf{q}_t, \mathbf{K}_{t-w:t}, \mathbf{V}_{t-w:t})$
+\State \textbf{Gated fusion:}
+\State $\alpha^{(\text{cmp})} \gets \sigma(\text{Linear}_{\text{cmp}}(\mathbf{q}_t))$, $\alpha^{(\text{sel})} \gets \sigma(\text{Linear}_{\text{sel}}(\mathbf{q}_t))$, $\alpha^{(\text{win})} \gets \sigma(\text{Linear}_{\text{win}}(\mathbf{q}_t))$
+\State $\mathbf{y}_t \gets \alpha^{(\text{cmp})} \mathbf{y}_t^{(\text{cmp})} + \alpha^{(\text{sel})} \mathbf{y}_t^{(\text{sel})} + \alpha^{(\text{win})} \mathbf{y}_t^{(\text{win})}$
+\Return $\mathbf{y}_t$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: $\mathcal{O}(t/d + n \cdot l + w)$ tokens attended per step (significantly reduced versus $\mathcal{O}(t)$ for dense).
+    \item \textbf{Trainable}: Yes; direct training with all branches differentiable.
+    \item \textbf{Hardware alignment}: Designed for efficient tensor core utilization; compression and selection reduce memory bandwidth pressure.
+    \item \textbf{Strength}: 11.6$\times$ decoding speedup and 9$\times$ forward speedup on 64k sequences; outperforms full attention on many tasks.
+    \item \textbf{Limitation}: Requires custom Triton/CUDA kernels; complex multi-branch architecture increases engineering overhead.
+\end{itemize}
+
+\subsection{FASA: Frequency-Aware Sparse Attention}
+
+\subsubsection{Mathematical Formulation}
+
+FASA \citep{wang_fasa_2026} is a \textbf{training-free inference-time method} that exploits rotary position embedding (RoPE) structure. Under RoPE, the token embedding is rotated by $\theta_i = B^{-2(i-1)/d}$, decomposing the $d$-dimensional space into $d/2$ frequency chunks (FCs).
+
+\paragraph{Key insight}: Only a small subset ($ < 1\%$) of FCs matter for contextual awareness; most encode positional patterns.
+
+\paragraph{Dominant frequency chunk identification}: For each layer $l$ and head $h$, identify dominant FCs via contextual agreement (CA):
+
+\[
+\text{CA}^{l,h,i} = \frac{|\text{TopK}(\alpha^{l,h}) \cap \text{TopK}(\alpha^{l,h,i})|}{K}
+\]
+
+where $\alpha^{l,h}$ is the full attention mask and $\alpha^{l,h,i}$ is the mask using only FC $i$. Dominant FCs have high CA---they contribute meaningfully to the final attention pattern.
+
+\paragraph{Token importance prediction (TIP) stage}: Using only dominant FCs, compute lightweight importance per token:
+
+\[
+S_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \alpha^{l,h,i}(\mathbf{q}_t, \mathbf{K}_{1:t}), \quad \mathcal{T}_t = \text{TopK-Indices}(S_t, N_{\text{fac}})
+\]
+
+\paragraph{Focused attention computation (FAC) stage}: Compute full-precision attention on selected tokens:
+
+\[
+\hat{\alpha}_{\text{FAC}} = \text{softmax}\left(\frac{\mathbf{q}_t \mathbf{K}_{\mathcal{T}_t}^\top}{\sqrt{d}}\right), \quad \mathbf{o}_t = \hat{\alpha}_{\text{FAC}} \mathbf{V}_{\mathcal{T}_t}
+\]
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{FASA: Frequency-Aware Sparse Attention (Inference-Time)}
+\begin{algorithmic}[1]
+\Require Current query $\mathbf{q}_t$, cached Key/Value $\mathbf{K}_{1:t}, \mathbf{V}_{1:t}$, RoPE base $B$, dominant FCs $\mathcal{I}_{\text{dom}}$
+\Require TIP token budget $N_{\text{tip}}$, FAC token budget $N_{\text{fac}}$
+\Ensure Output $\mathbf{o}_t$
+\State \textbf{Stage 1: Token Importance Prediction (TIP)}
+\For{layer $l$ and head $h$}
+    \For{position $i = 1$ to $t$}
+        \State Compute importance from dominant FCs: $s_i \gets 0$
+        \For{$fc \in \mathcal{I}_{\text{dom}}^{l,h}$}
+            \State Rotate query and key into FC $fc$: $\mathbf{q}^{(fc)}, \mathbf{k}_i^{(fc)}$
+            \State $s_i^{(fc)} \gets \text{softmax}(\mathbf{q}^{(fc)} \mathbf{k}_i^{(fc)\top} / \sqrt{d}) $
+            \State $s_i \gets s_i + s_i^{(fc)}$
+        \EndFor
+    \EndFor
+    \State $\mathcal{T}_t \gets \mathrm{TopK-Indices}([s_1, \ldots, s_t], N_{\text{fac}})$ \Comment{Select top tokens}
+\EndFor
+\State \textbf{Stage 2: Focused Attention Computation (FAC)}
+\State $\text{scores}_{\text{fac}} \gets \mathbf{q}_t \mathbf{K}_{\mathcal{T}_t}^\top / \sqrt{d}$ \Comment{Full-precision dot product}
+\State $\alpha_{\text{fac}} \gets \text{softmax}(\text{scores}_{\text{fac}})$ \Comment{Full softmax}
+\State $\mathbf{o}_t \gets \alpha_{\text{fac}} \mathbf{V}_{\mathcal{T}_t}$ \Comment{Weighted value sum}
+\Return $\mathbf{o}_t$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: TIP is $\mathcal{O}(t \cdot N_{\text{tip}})$; FAC is $\mathcal{O}(N_{\text{fac}} \cdot d)$.
+    \item \textbf{Trainable}: No; training-free inference optimization.
+    \item \textbf{Applicability}: Requires RoPE-based models; extended to ALiBi and MLA with modifications.
+    \item \textbf{Strength}: Near-oracle accuracy with $\leq 256$ tokens out of millions; up to 2.56$\times$ decoding speedup; orthogonal to quantization.
+    \item \textbf{Limitation}: Offline offline calibration required; dominant FC identification adds preprocessing overhead.
+\end{itemize}
+
+\subsection{SpargeAttn: Two-Stage Block-Level Filtering}
+
+\subsubsection{Mathematical Formulation}
+
+SpargeAttn \citep{zhang_spargeattn_2025} is a \textbf{universal training-free method} that predicts which blocks of the attention matrix will contain negligible values and skips computation for those blocks.
+
+\paragraph{Stage 1 --- Sparse prediction}: Compute low-cost proxy importance $\hat{s}_{ij}$ for block $(i,j)$:
+
+\[
+\hat{s}_{ij} = f_{\text{pred}}(\mathbf{Q}_i, \mathbf{K}_j; \text{hyperparams}), \quad \text{skip if } \hat{s}_{ij} < \epsilon_1
+\]
+
+Common predictors include block-mean similarity or self-similarity statistics.
+
+\paragraph{Stage 2 --- Softmax-aware filtering}: After computing $\tilde{P}_{ij} = \text{softmax}(Q_i K_j^\top/\sqrt{d})$, check if the block's maximum probability is negligible relative to the running softmax maximum:
+
+\[
+\text{skip } P_{ij} V_j \quad \text{if} \quad \max(\tilde{P}_{ij}) < e^{m_{\text{old}} - m_{\text{new}}} \cdot \epsilon_2
+\]
+
+where $m_{\text{old}}, m_{\text{new}}$ are online softmax running maxima (computed via FlashAttention-style numerics).
+
+\subsubsection{Algorithmic Pseudocode}
+
+\begin{algorithm}[H]
+\caption{SpargeAttn: Two-Stage Block-Sparse Filtering}
+\begin{algorithmic}[1]
+\Require Query blocks $\mathbf{Q}_i$ for $i = 1, \ldots, n_b$, Key blocks $\mathbf{K}_j$ for $j = 1, \ldots, n_b$, Value blocks $\mathbf{V}_j$
+\Require Prediction threshold $\epsilon_1$, softmax threshold $\epsilon_2$, block size $b_s$
+\Ensure Output $\mathbf{Y}$
+\State Initialize: online softmax max $m_{\text{global}} \gets -\infty$
+\For{block row $i = 1$ to $n_b$}
+    \State Initialize: block row output $\mathbf{Y}_i \gets 0$, local max $m_i \gets -\infty$
+    \For{block column $j = 1$ to $n_b$}
+        \State \textbf{Stage 1: Sparse Prediction}
+        \State Compute proxy importance: $\hat{s}_{ij} \gets f_{\text{pred}}(\mathbf{Q}_i, \mathbf{K}_j)$
+        \If{$\hat{s}_{ij} < \epsilon_1$}
+            \State \textbf{skip} this block $[i,j]$  \Comment{Early termination}
+            \State \textbf{continue} \Comment{Move to next block}
+        \EndIf
+        \State \textbf{Stage 2: Compute and Filter}
+        \State $\tilde{P}_{ij} \gets \text{softmax}(\mathbf{Q}_i \mathbf{K}_j^\top / \sqrt{d})$
+        \State $m_{\text{block}} \gets \max(\tilde{P}_{ij})$
+        \If{$m_{\text{block}} < e^{m_i - m_{\text{global}}} \cdot \epsilon_2$}
+            \State Block contributes negligibly; skip  \Comment{Softmax-aware pruning}
+            \State \textbf{continue}
+        \EndIf
+        \State Update global max: $m_i \gets \max(m_i, m_{\text{block}})$
+        \State Accumulate: $\mathbf{Y}_i \gets \mathbf{Y}_i + \tilde{P}_{ij} \mathbf{V}_j$
+    \EndFor
+    \State $m_{\text{global}} \gets \max(m_{\text{global}}, m_i)$
+\EndFor
+\Return $\mathbf{Y}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Characteristics}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complexity}: Empirical $\mathcal{O}(n^2 \cdot s)$ where $s$ is the fraction of non-skipped blocks (typically 0.2--0.5).
+    \item \textbf{Trainable}: No; plug-and-play acceleration for existing models.
+    \item \textbf{Universality}: Works on language models, image diffusion models, and video generation.
+    \item \textbf{Strength}: 2.5--5$\times$ speedup compared to dense or previous sparse methods; compatible with quantization (SageAttention integration).
+    \item \textbf{Limitation}: Speedup depends on inherent sparsity; block-level granularity may miss finer patterns; threshold tuning required per model family.
+\end{itemize}
+
+\subsection{Comparative Summary}
+
+\footnotesize
+\begin{longtable}{p{1.9cm}p{1.7cm}p{1.6cm}p{1.6cm}p{1.1cm}p{3.5cm}}
 \toprule
-\textbf{Method} & \textbf{Gate Location} & \textbf{Dense Softmax?} & \textbf{Main Interpretation in the Markdown} \\
+\textbf{Method} & \textbf{Complexity} & \textbf{Trainable} & \textbf{Unit} & \textbf{Year} & \textbf{Primary Contribution} \\
 \midrule
 \endhead
-GLA & recurrent state decay & No & Adds forgetting to linear attention to avoid uncontrolled memory accumulation. \\
-DeltaNet & write strength in recurrent update & No & Uses error-correcting writes for targeted memory replacement. \\
-Gated DeltaNet & decay + write gates & No & Combines global forgetting with local corrective memory editing. \\
-RetNet & fixed decay in retention state & No & Uses deterministic multi-scale decay rather than a fully data-dependent gate. \\
-HGRN2 & lower-bounded recurrent forget gates & No & Hierarchical gating distributes time scales across depth. \\
-FoX & attention-logit bias & Yes & Injects forget dynamics into the standard softmax pipeline. \\
-Gated Softmax & post-attention output gate & Yes & Keeps SDPA intact and adds multiplicative modulation afterward. \\
+Sparse Transformer & $O(n\sqrt{n}d)$ & Y & Token pattern & 2019 & Factorized strided + fixed masks \\
+Longformer & $O(nwd)$ & Y & Local + global & 2020 & Linear scaling with dilation \\
+BigBird & $O(n)$ & Y & Graph sparse & 2020 & Theoretical completeness proof \\
+SparseK & $O(nd)$ & Y & Top-$k$ tokens & 2024 & Differentiable selection \\
+NSA & $O((t/d+nl'+w)d)$ & Y & Multi-branch & 2025 & Hardware-aligned 3-branch design \\
+FASA & $O(tN_{\text{tip}}+N_{\text{fac}}d)$ & N & Freq chunks & 2026 & RoPE frequency insight \\
+SpargeAttn & $O(n^2 s \cdot d)$ & N & Block filter & 2025 & Two-stage universal filtering \\
 \bottomrule
 \end{longtable}
 \normalsize
 
+\subsection{Design Space and Selection Criteria}
+
+The seven sparse attention methods occupy complementary positions in a multidimensional design space:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Geometric/fixed patterns} (Sparse Transformer, Longformer): Simple to implement and analyze, but patterns do not adapt to content.
+    \item \textbf{Learned selection} (SparseK, NSA): Enable adaptation through trainable selection networks, at the cost of higher implementation complexity.
+    \item \textbf{Training-free acceleration} (FASA, SpargeAttn): Enable drop-in speedup of existing models without retraining, suited for deployed systems.
+    \item \textbf{Theoretical guarantees} (BigBird): Provide formal proofs of expressive completeness, important for understanding safety margins.
+\end{itemize}
+
+\textbf{Selection guidance:}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{New model training} where resources permit: NSA or SparseK for maximal inference speedup; BigBird for theoretical assurance.
+    \item \textbf{Long-context document understanding}: Longformer or FASA for practical simplicity; NSA for extreme scale.
+    \item \textbf{Accelerating existing models}: FASA for RoPE-based LLMs; SpargeAttn for any architecture.
+    \item \textbf{Constrained environments}: Sparse Transformer for simplicity and proven efficiency at moderate scale.
+\end{enumerate}
+
+\section{Annex D: Gated Attention Families---Complete Literature Analysis}
+\label{sec:annex-gated}
+
+\subsection{Executive Summary: Gating for Memory Control}
+
+The emerging field of \emph{gated attention mechanisms} addresses a fundamental challenge in sequence modeling: how should information be retained, forgotten, and updated as the model processes new tokens? Traditional additive recurrent states accumulate all information without erasure, leading to memory saturation and inability to adapt to changing context. Softmax attention provides full expressiveness but uses $\mathcal{O}(Ld)$ KV cache during inference, limiting context window size. Gated mechanisms provide a middle ground: selective control over information survival.
+
+The unifying principle across gated architectures is that gating controls \textit{what information survives}. Gates operate at three distinct levels:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Recurrent state decay} (GLA, HGRN2): Multiplicative gates on the memory matrix $S_t$ control how much previous state persists into the next step.
+    \item \textbf{Write strength in recurrent updates} (DeltaNet, Gated DeltaNet): Gates control the magnitude of new information written into memory.
+    \item \textbf{Softmax logit biasing} (FoX): Gates inject token-level recency bias into attention logit computation.
+    \item \textbf{Post-attention sparsity} (Gated Softmax): Gates selectively scale SDPA output channels.
+\end{enumerate}
+
+This appendix synthesizes seven major gated-attention architectures published 2023--2025, analyzing their mathematical foundations, hardware efficiency characteristics, and empirical trade-offs.
+
+\subsection{1. Gated Linear Attention (GLA)}
+
+\subsubsection{Mathematical Foundation}
+
+Gated Linear Attention \citep{yang_gla_2023} augments vanilla linear attention (which uses a matrix-valued recurrent state) with data-dependent multiplicative decay. Standard linear attention reformulates the traditional softmax mechanism as a recurrence over hidden states:
+\[
+\mathbf{S}_t = \mathbf{S}_{t-1} + \mathbf{v}_t \mathbf{k}_t^\top, \quad \mathbf{o}_t = \mathbf{S}_t \mathbf{q}_t
+\]
+where state $\mathbf{S}_t \in \mathbb{R}^{d_v \times d_k}$ accumulates outer products. This purely additive formulation suffers from ``memory overload'': information accumulates monotonically and cannot be erased, degrading performance on tasks requiring context selection.
+
+GLA introduces a data-dependent \textbf{diagonal gating matrix} $\mathbf{G}_t \in [0,1]^{d_k \times d_k}$:
+\[
+\mathbf{S}_t = \mathbf{G}_t \odot \mathbf{S}_{t-1} + \mathbf{v}_t \mathbf{k}_t^\top, \quad \mathbf{o}_t = \mathbf{S}_t \mathbf{q}_t
+\]
+The gate $\mathbf{G}_t$ is parameterized with an outer-product structure:
+\[
+\mathbf{G}_t = \mathbf{1} \boldsymbol{\alpha}_t^\top, \quad \boldsymbol{\alpha}_t = \text{logsigmoid}\left(\mathbf{W}_{gk} \mathbf{x}_t\right) / c
+\]
+where $\mathbf{W}_{gk}$ is a low-rank projection ($\mathbb{R}^{d \to d_k}$) and $c \approx 16$ is a normalizer. The logsigmoid activation maps $\alpha_t \in \mathbb{R}$ to approximately $[-1/2, 0]$, and division by $c$ further contracts this to near-identity for initialization. The resulting gate $G_t = 1 + \alpha_t \approx 1$ near initialization, then learns to decay $(\alpha_t \to -\infty)$ historical information.
+
+\begin{algorithm}[H]
+\caption{Gated Linear Attention (Recurrent Form)}
+\begin{algorithmic}[1]
+\Require Input $\mathbf{x}_t$; prior state $\mathbf{S}_{t-1}$
+\Require Projections: $W_q, W_k, W_v$ (standard); $W_{gk}$ (gate projection)
+\Ensure Output $\mathbf{o}_t$ and updated state $\mathbf{S}_t$
+\State $\mathbf{q}_t \gets W_q \mathbf{x}_t$
+\State $\mathbf{k}_t \gets W_k \mathbf{x}_t$
+\State $\mathbf{v}_t \gets W_v \mathbf{x}_t$
+\State Compute gate: $\boldsymbol{\alpha}_t \gets \text{logsigmoid}(W_{gk} \mathbf{x}_t) / 16$ \Comment{Per-key-dim decay}
+\State Apply outer-product gating: $\mathbf{G}_t \gets \mathbf{1} \boldsymbol{\alpha}_t^\top$  \Comment{diagonal outer product}
+\State Decay previous state: $\mathbf{S}_t^\text{decay} \gets \mathbf{G}_t \odot \mathbf{S}_{t-1}$ \Comment{element-wise product}
+\State Add new association: $\mathbf{S}_t \gets \mathbf{S}_t^\text{decay} + \mathbf{v}_t \mathbf{k}_t^\top$
+\State Retrieve via query: $\mathbf{o}_t^\text{raw} \gets \mathbf{S}_t \mathbf{q}_t$
+\State Apply output gate: $\mathbf{o}_t \gets \text{GroupNorm}(\mathbf{o}_t^\text{raw}) \otimes \text{SiLU}(W_g \mathbf{x}_t)$
+\Return $\mathbf{o}_t$, $\mathbf{S}_t$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Hardware-Efficient Training}
+
+For parallel training, GLA uses a chunkwise block-wise algorithm that groups tokens into chunks $C$ and computes recurrent transitions in parallel:
+\[
+\mathbf{O}_{[t]} = \overleftarrow{\mathbf{Q}}_{[t]} \mathbf{S}_{[t]}^\top + \left(\mathbf{Q}_{[t]} \mathbf{K}_{[t]}^\top \odot \mathbf{\Gamma}_{[t]}\right) \mathbf{V}_{[t]}
+\]
+where $\overleftarrow{\mathbf{Q}}_{[t]}$ are attending to the state at the chunk boundary (lookback), and $\mathbf{\Gamma}_{[t]}$ is the causal mask with decay-aware scaling:
+\[
+\mathbf{\Gamma}_{[t],ij} = \begin{cases} \prod_{l=j}^{i-1} \alpha_l & \text{if } i > j \text{ (lookback)} \\ \prod_{l=1}^{i-j} \alpha_l & \text{if } i \le j \text{ (in-chunk)} \end{cases}
+\]
+This design maximizes matmul operations susceptible to tensor-core acceleration, achieving sub-quadratic total complexity $\mathcal{O}(nLd^2/C)$ where $L$ is the number of attention heads and $C$ is chunk size.
+
+\subsubsection{Strengths and Limitations}
+
+\begin{table}[H]
+\centering
 \small
-\begin{longtable}{p{2.6cm}p{2.0cm}p{2.0cm}p{5.5cm}}
+\begin{tabularx}{0.95\linewidth}{Xp{4cm}p{4cm}}
 \toprule
-\textbf{Architecture} & \textbf{State Type} & \textbf{Recall Strength} & \textbf{Pros / Cons Emphasized in the Markdown} \\
+\textbf{Aspect} & \textbf{Strengths} & \textbf{Limitations} \\
+\midrule
+Computational efficiency & Sub-quadratic training via chunkwise parallelism. Constant-memory inference $O(d^2)$. & Requires custom CUDA/Triton kernels; not available in all frameworks. \\
+Context generalization & Extends 2K-token training to 20K+ tokens with negligible perplexity degradation. & Still underperforms softmax on retrieval-heavy benchmarks (needle-in-haystack). \\
+Selectivity & Per-key-dimension data-dependent decay. & Gate structure limits per-key-value selectivity; no direct control over which specific associations to erase. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{2. DeltaNet: Error-Correcting Linear Attention}
+
+\subsubsection{Mathematical Foundation}
+
+DeltaNet \citep{yang_deltanet_2024} applies a classical \textbf{delta learning rule} to linear attention state updates. Instead of additive accumulation, DeltaNet computes the difference between the predicted value (retrieved from memory) and the target value, then performs an error-correcting update:
+\[
+\mathbf{S}_t = \mathbf{S}_{t-1}(\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top) + \beta_t \mathbf{v}_t \mathbf{k}_t^\top
+\]
+where $\beta_t \in (0,1)$ is a data-dependent \textbf{writing strength} scalar. This update can be decomposed as an erase-write operation:
+\[
+\mathbf{v}_t^\text{old} = \mathbf{S}_{t-1} \mathbf{k}_t \quad \text{(current prediction)}, \quad
+\mathbf{v}_t^\text{updated} = \beta_t \mathbf{v}_t + (1-\beta_t)\mathbf{v}_t^\text{old} \quad \text{(blend old/new)}
+\]
+so that:
+\[
+\mathbf{S}_t = \mathbf{S}_{t-1} - \mathbf{v}_t^\text{old}\mathbf{k}_t^\top + \mathbf{v}_t^\text{updated}\mathbf{k}_t^\top
+\]
+The key insight is that this update rule minimizes an online MSE loss at each timestep:
+\[
+\mathcal{L}_t(\mathbf{S}) = \tfrac{1}{2}\|\mathbf{S}\mathbf{k}_t - \mathbf{v}_t\|^2 \Rightarrow \nabla_{\mathbf{S}} \mathcal{L}_t = (\mathbf{S}\mathbf{k}_t - \mathbf{v}_t)\mathbf{k}_t^\top
+\]
+One step of SGD with learning rate $\beta_t$ yields the delta rule update. This connection to test-time training (TTT) provides theoretical grounding: DeltaNet is directly optimizing for value prediction at inference time.
+
+\subsubsection{Efficient Parallel Training}
+
+DeltaNet's transition matrix $\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top$ is a generalized Householder matrix (rank-1 update to identity). For chunkwise training, DeltaNet uses the \textbf{WY representation}, which represents the product of $m$ such rank-1 updates compactly:
+\[
+\prod_{i=1}^{m} (\mathbf{I} - \beta_i \mathbf{k}_i \mathbf{k}_i^\top) = \mathbf{I} - \mathbf{W}\mathbf{Y}^\top
+\]
+where $\mathbf{W}, \mathbf{Y} \in \mathbb{R}^{d \times m}$ are constructed recursively. This factorization enables matmul-rich parallelism without materializing the full product, keeping chunkwise training efficient.
+
+\begin{algorithm}[H]
+\caption{DeltaNet State Update with WY Representation}
+\begin{algorithmic}[1]
+\Require Input chunk $\mathbf{X}_{[t]}$; prior state $\mathbf{S}_{t-1}$
+\Require L2-normalized queries $\hat{\mathbf{Q}}_t$, keys $\hat{\mathbf{K}}_t$, values $\mathbf{V}_t$
+\Ensure Output $\mathbf{O}_{[t]}$ and updated state $\mathbf{S}_t$
+\State \textbf{Chunkwise phase:}
+\For{position $i = 1$ to chunk\_size}
+    \State Normalize: $\hat{\mathbf{k}}_i \gets \hat{\mathbf{K}}_t[i] / \|\hat{\mathbf{K}}_t[i]\|$, $\hat{\mathbf{q}}_i \gets \hat{\mathbf{Q}}_t[i] / \|\hat{\mathbf{Q}}_t[i]\|$
+    \State Compute write strength: $\beta_i \gets \text{sigmoid}(W_\beta \mathbf{x}_i)$
+    \State Prediction: $\hat{\mathbf{v}}^\text{pred} \gets \mathbf{S}_{i-1}^\text{in-chunk} \hat{\mathbf{k}}_i$
+    \State Error-aware blend: $\mathbf{v}_i^\text{update} \gets \beta_i(\mathbf{v}_i - \hat{\mathbf{v}}^\text{pred})$
+    \State Erase-write: $\mathbf{S}_i^\text{in-chunk} \gets \mathbf{S}_{i-1}^\text{in-chunk} - \hat{\mathbf{v}}^\text{pred}\hat{\mathbf{k}}_i^\top + (\beta_i \mathbf{v}_i + (1-\beta_i)\hat{\mathbf{v}}^\text{pred})\hat{\mathbf{k}}_i^\top$
+    \State Output: $\mathbf{o}_i \gets \mathbf{S}_i^\text{in-chunk} \hat{\mathbf{q}}_i$
+\EndFor
+\State \textbf{Inter-chunk phase:} Use WY representation of transition products
+\Return $\mathbf{O}_{[t]}$, $\mathbf{S}_{t}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Strengths and Limitations}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.95\linewidth}{Xp{4cm}p{4cm}}
+\toprule
+\textbf{Aspect} & \textbf{Strengths} & \textbf{Limitations} \\
+\midrule
+Associative recall & Perfect recall on Multi-Query Associative Recall (MQAR) benchmark; error-correcting semantics naturally fit retrieval patterns. & Without global forgetting, memory still crowds over extreme sequence lengths; requires periodic reset mechanisms for unbounded context. \\
+Theory & Grounded in online MSE optimization; clear connection to test-time training paradigm. & Requires L2-normalized keys for numerical stability; double-width normalization adds overhead. \\
+Throughput & WY representation enables efficient chunkwise training. & Slightly slower than Mamba2 per-token due to richer transition matrices (rank-1 instead of diagonal). \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{3. Gated DeltaNet: Synthesis of Gating and Error Correction}
+
+\subsubsection{Mathematical Foundation}
+
+Gated DeltaNet \citep{yang_gated_deltanet_2024} synthesizes the strengths of GLA and DeltaNet by combining a \textbf{decay gate} $\alpha_t$ (from GLA) with the \textbf{writing strength gate} $\beta_t$ (from DeltaNet):
+\[
+\mathbf{S}_t = \mathbf{S}_{t-1}\left(\alpha_t (\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top)\right) + \beta_t \mathbf{v}_t \mathbf{k}_t^\top
+\]
+Rewriting for clarity:
+\[
+\mathbf{S}_t = \alpha_t \mathbf{S}_{t-1}(\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top) + \beta_t \mathbf{v}_t \mathbf{k}_t^\top
+\]
+The two gates are complementary:
+\begin{itemize}[leftmargin=*]
+    \item $\alpha_t \to 0$ rapidly erases historical state: $\mathbf{S}_t \approx \beta_t \mathbf{v}_t \mathbf{k}_t^\top$ (context reset).
+    \item $\alpha_t \to 1$ recovers pure delta-rule behavior: $\mathbf{S}_t \approx \mathbf{S}_{t-1}(\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top) + \beta_t \mathbf{v}_t \mathbf{k}_t^\top$ (targeted updates).
+    \item $\beta_t \to 0$ skips writing but decays: $\mathbf{S}_t \approx \alpha_t \mathbf{S}_{t-1}$ (pure forgetting).
+    \item $\beta_t \to 1$ replaces memory aggressively: $\mathbf{S}_t \approx \alpha_t \mathbf{S}_{t-1} + \mathbf{v}_t \mathbf{k}_t^\top$ (replacement).
+\end{itemize}
+
+From an online learning perspective, Gated DeltaNet corresponds to:
+\[
+\min_{\mathbf{S}_t} \|\mathbf{S}_t - \alpha_t \mathbf{S}_{t-1}\|_F^2 - 2\langle \mathbf{S}_t \mathbf{k}_t, \beta_t(\mathbf{v}_t - \alpha_t \mathbf{S}_{t-1} \mathbf{k}_t)\rangle
+\]
+which introduces an adaptive weight decay $\alpha_t$ into an SGD-like update---analogous to decoupled weight decay in deep learning optimization.
+
+\begin{algorithm}[H]
+\caption{Gated DeltaNet Parallel Chunkwise Forward}
+\begin{algorithmic}[1]
+\Require Input chunk  $\mathbf{X}_{[i]}$; prior state $\mathbf{S}_{i-1}$; chunk size $C$
+\Require Projections: $W_q, W_k, W_v, W_\alpha, W_\beta$
+\Ensure Output $\mathbf{O}_{[i]}$ and state $\mathbf{S}_i$
+\State \textbf{In-chunk computation:}
+\For{$j = 1$ to $C$}
+    \State $\mathbf{q}_j \gets W_q \mathbf{x}_j$, $\mathbf{k}_j \gets W_k \mathbf{x}_j$, $\mathbf{v}_j \gets W_v \mathbf{x}_j$
+    \State $\alpha_j \gets \text{sigmoid}(W_\alpha \mathbf{x}_j)$, $\beta_j \gets \text{sigmoid}(W_\beta \mathbf{x}_j)$
+    \State Apply combined gate: $\mathbf{S}_j \gets \alpha_j \mathbf{S}_{j-1}(\mathbf{I} - \beta_j \mathbf{k}_j \mathbf{k}_j^\top) + \beta_j \mathbf{v}_j \mathbf{k}_j^\top$
+    \State $\mathbf{o}_j \gets \mathbf{S}_j \mathbf{q}_j$
+\EndFor
+\State \textbf{Inter-chunk recurrence:}
+\State $\mathbf{S}_i \gets \mathbf{S}_C$ from in-chunk; propagate across chunks via cumulative $\prod \alpha$ masks
+\State \textbf{Output gating:} $\mathbf{O}_{[i]} \gets \text{GroupNorm}(\mathbf{O}^\text{raw}) \otimes \text{SiLU}(W_g \mathbf{X}_{[i]})$
+\Return $\mathbf{O}_{[i]}$, $\mathbf{S}_i$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Empirical Performance and Trade-offs}
+
+Gated DeltaNet has been integrated into Alibaba's Qwen3-Next and Qwen3.5 production models. Empirically:
+\[
+\begin{array}{l|cccc}
+\textbf{Task} & \textbf{Gated DeltaNet} & \textbf{Mamba2} & \textbf{DeltaNet} & \textbf{GLA} \\
+\hline
+\text{Language Modeling} & \mathbf{1.0\times} & 1.08\times & 1.05\times & 1.12\times \\
+\text{Associative Recall} & \mathbf{1.0\times} & --(no perfect) & \mathbf{1.0\times} & 0.75 \\
+\text{Length Extrapolation} & \mathbf{1.0\times} & 0.98\times & 0.96\times & 0.94\times \\
+\text{Throughput (tokens/sec)} & 0.85\times & \mathbf{1.0\times} & 0.82\times & 0.88\times
+\end{array}
+\]
+Gated DeltaNet achieves the best balance across diverse tasks at the cost of slightly reduced throughput due to richer transition matrices.
+
+\subsection{4. HGRN2: Hierarchical Gating with Outer-Product Expansion}
+
+\subsubsection{Mathematical Foundation}
+
+HGRN2 \citep{qin_hgrn2_2024} uses an outer-product-based state expansion with \textbf{hierarchically lower-bounded forget gates}. The state update is:
+\[
+\mathbf{S}_t = \text{diag}(\mathbf{g}_t) \cdot \mathbf{S}_{t-1} + \mathbf{v}_t \mathbf{k}_t^\top, \quad \mathbf{o}_t = \mathbf{S}_t \mathbf{q}_t
+\]
+where $\mathbf{g}_t \in [b_\ell, 1]^d$ is a lower-bounded forget gate for layer $\ell$. The bounds satisfy:
+\[
+0 \le b_{\ell_{\text{shallow}}} < b_{\ell_{\text{middle}}} < b_{\ell_{\text{deep}}} \le 1
+\]
+i.e., bounds increase (become less restrictive) in the deeper layers. The gate itself is computed as:
+\[
+\mathbf{g}_t = b_\ell + (1 - b_\ell) \cdot \sigma(W_g \mathbf{x}_t)
+\]
+where $\sigma$ is sigmoid. When $W_g$ outputs weakly negative logits, $\mathbf{g}_t \approx b_\ell$ (forced retention at shallow layers). When outputs are strongly positive, $\mathbf{g}_t \approx 1$ (memory refresh at any layer).
+
+The hierarchical structure encourages different layers to specialize to different timescales: shallow layers model local dependencies (high retention due to binding $b_\ell$), while deeper layers capture long-range structure (flexible gating with high upper bound).
+
+\begin{algorithm}[H]
+\caption{HGRN2 Forward with Hierarchical Bounds}
+\begin{algorithmic}[1]
+\Require Input $\mathbf{x}_t$; prior state $\mathbf{S}_{t-1}$; layer index $\ell \in [0, L-1]$
+\Require Non-decreasing bounds: $0 \le b_0 < b_1 < \cdots < b_{L-1} \le 1$
+\Ensure Output $\mathbf{o}_t$ and state $\mathbf{S}_t$
+\State Layer-specific retain bound: $b \gets b_\ell$
+\State Project: $\mathbf{q}_t \gets W_q \mathbf{x}_t$, $\mathbf{k}_t \gets W_k \mathbf{x}_t$, $\mathbf{v}_t \gets W_v \mathbf{x}_t$
+\State Compute forget gate with binding: $\mathbf{g}_t \gets b + (1-b) \cdot \sigma(W_g \mathbf{x}_t)$ \Comment{Constrained to $[b, 1]$}
+\State Diagonal multiplication (vectorized): $\mathbf{S}_t \gets \mathbf{S}_{t-1} \circ \text{diag}(\mathbf{g}_t) + \mathbf{v}_t \mathbf{k}_t^\top$
+\State Retrieve: $\mathbf{o}_t \gets \mathbf{S}_t \mathbf{q}_t$
+\State Optional normalization: $\mathbf{o}_t \gets \text{RMSNorm}(\mathbf{o}_t)$
+\Return $\mathbf{o}_t$, $\mathbf{S}_t$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Scaling and Empirical Results}
+
+At 3B scale on 100B tokens, HGRN2 slightly outperforms Mamba2 and LLaMA-architecture Transformers on language modeling. The hierarchical gating provides multi-scale temporal modeling without explicit layer-wise architectural variants. However, vector-valued diagonal gating (as opposed to element-wise selection) provides less per-item flexibility than delta-rule variants.
+
+\subsection{5. Forgetting Transformer (FoX): Gating in Softmax Logit Space}
+
+\subsubsection{Mathematical Foundation}
+
+Forgetting Transformer (FoX), proposed by Lin et al.~\citep{lin_forgetting_transformer_2025}, embeds a forget gate directly into softmax attention logits. Rather than replacing softmax with linear recurrence, FoX preserves full softmax expressiveness while adding recency control through a data-dependent logit bias.
+
+For each token position $t$ and all keys $j \le t$, compute a scalar forget gate:
+\[
+f_t = \sigma(w_f^\top \mathbf{x}_t + b_f)
+\]
+The logit bias at position $(i,j)$ is the cumulative log-forget product:
+\[
+d_{ij} = \sum_{l=j+1}^{i} \log f_l = \log \prod_{l=j+1}^{i} f_l
+\]
+The full attention output becomes:
+\[
+\mathbf{O} = \text{softmax}\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}} + \mathbf{D}\right) \mathbf{V}
+\]
+where $\mathbf{D}_{ij} = d_{ij}$. Equivalently:
+\[
+\text{Attention}(i,j) = \frac{\exp(\mathbf{q}_i^\top \mathbf{k}_j / \sqrt{d_k} + d_{ij})}{\sum_{j'=1}^{i} \exp(\mathbf{q}_i^\top \mathbf{k}_{j'} / \sqrt{d_k} + d_{ij'})}
+\]
+This weighting down-weights older tokens multiplicatively: a token from 10 steps ago is scaled by $\prod_{l=j+1}^{i} f_l$, which is typically much less than 1 if $f_t < 1$ on average.
+
+The mechanism is mathematically equivalent to a \textbf{data-dependent learnable variant of ALiBi (Attention with Linear Biases)}, where earlier work used fixed $d_{ij} = -\infty \cdot |i-j|$ or $d_{ij} = -(i-j)$.
+
+\begin{algorithm}[H]
+\caption{FoX: Forgetting Attention with Recency Bias}
+\begin{algorithmic}[1]
+\Require Queries $\mathbf{Q}$, keys $\mathbf{K}$, values $\mathbf{V}$; input $\mathbf{X}$
+\Require Forget gate parameters: $w_f \in \mathbb{R}^d$, $b_f \in \mathbb{R}$
+\Ensure Output attention $\mathbf{O}$
+\State \textbf{Compute forget gates:}
+\For{$t = 1$ to $T$}
+    \State $f_t \gets \sigma(w_f^\top \mathbf{x}_t + b_f)$ \Comment{Per-token forget probability}
+\EndFor
+\State \textbf{Compute cumulative log-forget biases:}
+\For{$i = 1$ to $T$}
+    \For{$j = 1$ to $i$}
+        \State $d_{ij} \gets \sum_{l=j+1}^{i} \log f_l$ \Comment{Cumulative product in log space}
+    \EndFor
+\EndFor
+\State \textbf{Standard SDPA with bias:}
+\State Compute scores: $\mathbf{S} \gets \mathbf{Q}\mathbf{K}^\top / \sqrt{d_k}$
+\State Add bias: $\mathbf{S} \gets \mathbf{S} + \mathbf{D}$
+\State Apply softmax: $\mathbf{A} \gets \text{softmax}(\mathbf{S}, \text{dim}=-1)$
+\State Weight values: $\mathbf{O} \gets \mathbf{A} \mathbf{V}$
+\Return $\mathbf{O}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Integration with FlashAttention}
+
+The key advantage of FoX is compatibility with FlashAttention and existing optimized implementations. The forget biases are added in the softmax logit computation, which is already a core operation in FlashAttention's block-wise algorithm. The overhead is:
+\[
+\text{Overhead} \approx 0.5--2\% \text{ wall-clock time}
+\]
+since the bias addition is amortized across matmul operations.
+
+\subsubsection{Strengths and Limitations}
+
+FoX achieves state-of-the-art results on length extrapolation, near-perfect needle-in-haystack retrieval, and superior long-context understanding compared to Transformers. However, it remains $\mathcal{O}(L^2 d)$ at training and $\mathcal{O}(L d)$ per step at inference with KV cache, limiting extreme sequence lengths.
+
+\subsection{6. Gated Attention (Post-SDPA Sigmoid Gating)}
+
+\subsubsection{Mathematical Foundation}
+
+The NeurIPS 2025 Best Paper by the Qwen team proposes applying a sigmoid gate \textbf{after} scaled dot-product attention (SDPA):
+\[
+\mathbf{Y} = \text{SDPA}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{softmax}\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}}\right) \mathbf{V}
+\]
+\[
+\mathbf{Y}' = \mathbf{Y} \odot \sigma\left(\mathbf{X} \mathbf{W}_\theta\right)
+\]
+where the gate score $\sigma(\mathbf{X} \mathbf{W}_\theta)$ can have shape $\mathbb{R}^{n \times q \times d_k}$ (element-wise gating per query head) or $\mathbb{R}^{n \times q}$ (head-wise fixed gating). Across 30+ variants and 15B MoE + 1.7B dense models trained on 3.5T tokens, the team found:
+
+\begin{itemize}[leftmargin=*]
+    \item Headwise gating adds only $\sim 1.6M$ parameters to a 15B model (negligible overhead).
+    \item Effective gates are \textbf{sparse}: mean activation $\approx 0.116$ (i.e., 88\% are zero or near-zero).
+    \item Gates act as query-dependent filters, suppressing low-value channels while preserving high-value signal.
+    \item Gates demonstrably eliminate the \textbf{attention sink} phenomenon, where the attention pattern becomes dominated by a single early token.
+\end{itemize}
+
+\begin{algorithm}[H]
+\caption{Gated Softmax Attention (Post-SDPA)}
+\begin{algorithmic}[1]
+\Require Queries $\mathbf{Q}$, Keys $\mathbf{K}$, Values $\mathbf{V}$; input $\mathbf{X}$
+\Require Gate projection matrix $W_g \in \mathbb{R}^{d \to d_{\text{gate}}}$ where $d_{\text{gate}} \in \{1, d_k\}$
+\Ensure Gated output $\mathbf{Y}'$
+\State \textbf{Standard SDPA:}
+\State Compute attention: $\mathbf{A} \gets \text{softmax}(\mathbf{Q}\mathbf{K}^\top / \sqrt{d_k})$ 
+\State Weight values: $\mathbf{Y} \gets \mathbf{A} \mathbf{V}$
+\State \textbf{Compute gates:}
+\State Project input: $\mathbf{G} \gets \mathbf{X} W_g$  \Comment{shape: $[n, q, d_{\text{gate}}]$}
+\State Apply sigmoid: $\mathbf{G} \gets \sigma(\mathbf{G})$ \Comment{Element-wise gating}
+\State \textbf{Apply gating:}
+\If{$d_{\text{gate}} = 1$}
+    \State Broadcast and scale: $\mathbf{Y}' \gets \mathbf{Y} \cdot \mathbf{G}$ \Comment{Head-wise scaling}
+\Else
+    \Comment{$d_{\text{gate}} = d_k$}
+    \State Element-wise modulation: $\mathbf{Y}' \gets \mathbf{Y} \odot \mathbf{G}$ \Comment{Per-dimension gating}
+\EndIf
+\Return $\mathbf{Y}'$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Key Findings}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Attention-sink suppression}: Gating breaks the feedback loop where softmax concentrates on the first token, enabling more balanced attention.
+    \item \textbf{Training stability}: Models with gating tolerate larger learning rates ($+30\%$ higher stable $\eta_{max}$).
+    \item \textbf{Minimal overhead}: Latency impact is only $1.6\%$ on H100 GPUs; throughput drops at most $2-3\%$.
+    \item \textbf{Scaling law improvement}: Improves loss across model scales from 800M to 110B parameters consistently.
+\end{itemize}
+
+\normalsize
+
+\subsection{Comparative Analysis: Taxonomy of Gated Mechanisms}
+
+\footnotesize
+\begin{longtable}{p{1.8cm}p{1.7cm}p{1.8cm}p{1.6cm}p{2.0cm}p{2.4cm}p{1.3cm}}
+\toprule
+\textbf{Architecture} & \textbf{Publication Year} & \textbf{State Representation} & \textbf{Gate Type} & \textbf{Training Complexity} & \textbf{Inference Complexity} & \textbf{Ref} \\
 \midrule
 \endhead
-GLA & matrix recurrent state & moderate & Good length generalization and chunkwise efficiency, but still weaker than softmax on hard retrieval. \\
-DeltaNet & matrix recurrent state & strong & Excellent associative recall and principled updates, but lacks global forgetting. \\
-Gated DeltaNet & matrix recurrent state & very strong & Best-balanced pure linear recurrent design, but richer transitions reduce throughput. \\
-RetNet & matrix recurrent state & weaker retrieval bias & Efficient and simple with no KV cache, but fixed decay is less adaptive. \\
-HGRN2 & matrix recurrent state & moderate & Multi-scale temporal modeling via hierarchical bounds, but lower recall than DeltaNet variants. \\
-FoX & full attention path & very strong & Preserves softmax expressiveness and improves length extrapolation, but remains quadratic. \\
-Gated Attention & full attention path & strong & Very simple modification with low overhead, but only applicable when dense SDPA is already present. \\
+GLA & 2023 & Matrix (recurrent) & Diagonal decay & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d^2)$ memory & \citep{yang_gla_2023} \\
+DeltaNet & 2024 & Matrix (recurrent) & Scalar write ($\beta$) & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d^2)$ memory & \citep{yang_deltanet_2024} \\
+Gated DeltaNet & 2024 & Matrix (recurrent) & Decay + write & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d^2)$ memory & \citep{yang_gated_deltanet_2024} \\
+RetNet & 2023 & Matrix (recurrent) & Fixed exponential & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d)$ per-step & \citep{sun_retentive_2023} \\
+HGRN2 & 2024 & Matrix (recurrent) & Diagonal (bounded) & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d^2)$ memory & \citep{qin_hgrn2_2024} \\
+FoX & 2025 & Full attention & Logit-space bias & $\mathcal{O}(L^2d)$ & $\mathcal{O}(L)$ KV cache & \citep{lin_forgetting_transformer_2025} \\
+Gated Softmax & 2025 & Full attention & Post-SDPA sigmoid & $\mathcal{O}(L^2d)$ & $\mathcal{O}(L)$ KV cache & \citep{qiu_gated_attention_2025} \\
 \bottomrule
 \end{longtable}
 \normalsize
+
+\medskip
+
+\footnotesize
+\begin{longtable}{p{1.8cm}p{2.0cm}p{2.2cm}p{2.2cm}p{2.2cm}p{1.8cm}}
+\toprule
+\textbf{Architecture} & \textbf{Trainable} & \textbf{In-Context Recall} & \textbf{Associative Recall} & \textbf{Length Extrapolation} & \textbf{Key Advantage} \\
+\midrule
+\endhead
+GLA & Yes & Moderate & Weak & Good (20K) & Hardware efficiency; chunkwise parallelism \\
+DeltaNet & Yes & Strong & Perfect (MQAR) & Good & Error-correcting semantics; strong retrieval \\
+Gated DeltaNet & Yes & Very strong & Perfect & Excellent & Balanced: forgetting + targeted updates \\
+RetNet & Yes & Weak & Weak & Good & Simplicity; no KV cache needed \\
+HGRN2 & Yes & Moderate & Weak & Moderate & Multi-scale temporal modeling \\
+FoX & Yes & Very strong & Very strong (near-perfect) & Excellent & Preserve softmax; minimal overhead \\
+Gated Softmax & Yes & Strong & Good & Good & Simplicity; no replacement of SDPA \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+\medskip
+
+\footnotesize
+\begin{longtable}{p{2.0cm}p{2.4cm}p{2.8cm}p{3.4cm}}
+\toprule
+\textbf{Architecture} & \textbf{Typical Throughput} & \textbf{Memory per-Inference} & \textbf{Primary Use Case} \\
+\midrule
+\endhead
+GLA & High (chunkwise CUDA) & $O(d^2)$ constant & Long-context with memory constraints \\
+DeltaNet & Medium-High & $O(d^2)$ constant & Retrieval and associative reasoning \\
+Gated DeltaNet & Medium & $O(d^2)$ constant & Production: Qwen3-Next, balanced performance \\
+RetNet & High & $O(d)$ per-step & Extremely fast inference; simple models \\
+HGRN2 & Medium-High & $O(d^2)$ constant & Multi-scale temporal patterns \\
+FoX & Moderate (quadratic) & $O(Ld)$ KV cache & Length extrapolation; long-context generation \\
+Gated Softmax & High (minimal overhead) & $O(Ld)$ KV cache & Drop-in improvement for existing models \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+\subsection{Unified Gating Principle}
+
+All seven architectures share a common principle: \textbf{gating is a mechanism to control information flow and selective memory retention}. The specific design choices diverge along several dimensions:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Location of gating}: Recurrent state updates (GLA, DeltaNet, Gated DeltaNet, HGRN2) versus softmax logit/output space (FoX, Gated Softmax, RetNet).
+    \item \textbf{Granularity of control}: Dimension-wise (GLA, HGRN2 diagonal), key-specific (DeltaNet), token-wise (FoX), or head-wise (Gated Softmax).
+    \item \textbf{Data dependence}: Fully data-dependent (GLA, DeltaNet, Gated DeltaNet, FoX, Gated Softmax) versus fixed schedules (RetNet with exponential decay).
+    \item \textbf{Expressiveness trade-off}: Linear recurrent efficiency (GLA, DeltaNet, Gated DeltaNet, HGRN2, RetNet) versus full softmax expressiveness (FoX, Gated Softmax).
+\end{enumerate}
+
+\subsection{Implementation and Practical Guidance}
+
+\subsubsection{When to Use Each Architecture}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{GLA}: Fast inference with moderate-to-long contexts (2K--20K tokens), when custom CUDA kernels are acceptable, and retrieval performance is not critical.
+    \item \textbf{DeltaNet}: Strong associative recall and in-context learning tasks; good for synthetic tasks (MQAR) and key-value association testing.
+    \item \textbf{Gated DeltaNet}: Production models requiring the best balance of recall, forgetting, and throughput (proven in Qwen3-Next; ICLR 2025).
+    \item \textbf{RetNet}: Extremely efficient inference without KV caching; suitable for edge/mobile deployments or toy models.
+    \item \textbf{HGRN2}: Multi-scale temporal hierarchies; when layer-specific forget bounds are desirable.
+    \item \textbf{FoX}: Length extrapolation and long-context understanding; when quadratic training is acceptable and replacing softmax is not desired.
+    \item \textbf{Gated Softmax}: Quick improvement to existing softmax models with minimal code changes; best for practitioners wanting immediate gains without major refactoring.
+\end{enumerate}
+
+\subsubsection{Hardware Considerations}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{0.95\linewidth}{Xp{3.5cm}p{3.5cm}}
+\toprule
+\textbf{Hardware Target} & \textbf{Recommended Architectures} & \textbf{Notes} \\
+\midrule
+GPU (H100/A100) & Gated Softmax, FoX, Gated DeltaNet & Mature softmax/linear implementations. GLA/DeltaNet require custom kernels. \\
+TPU (high memory) & GLA, DeltaNet, Gated DeltaNet, HGRN2 & Hardware supports efficient matmuls; linear recurrent methods shine. \\
+Mobile/Edge & RetNet, lightweight Gated Softmax & Constant-memory inference critical. \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
 \end{document}

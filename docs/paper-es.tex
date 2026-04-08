@@ -44,7 +44,7 @@ Este trabajo no está afiliado \\
 \maketitle
 
 \begin{abstract}
-Transformer Encoder Frankenstein presenta un kit de herramientas unificado basado en configuración para la experimentación sistemática con arquitecturas de codificador modernas, abarcando diecisiete variantes de mezclador de secuencias y veinte familias de optimizadores. Las contribuciones de investigación son triples: (i) un contrato de configuración basado en esquema estricto que permite la experimentación reproducible en diversos mecanismos de atención, incluyendo atención softmax estándar, atención sigmoide, redes retentivas, modelos de espacio de estado selectivos, transformadores de profundidad continua, atención aumentada con memoria, patrones de atención dispersa y mecanismos con compuerta; (ii) un marco integral de enrutamiento de optimizadores que admite métodos de reducción de varianza (MARS, Adan, AdEMAMix), variantes eficientes en memoria (Adafactor, GaLore, Lion), enfoques sin programador y precondicionadores de segundo orden (Shampoo, SOAP, Sophia); y (iii) flujos de trabajo de extremo a extremo que abarcan el despliegue cuantificado mediante empaquetado de pesos ternarios y entrenamiento de incrustaciones de oraciones inspirado en SBERT. El kit de herramientas implementa una interfaz de configuración basada en web que proporciona renderizado de formularios impulsado por esquemas con documentación en línea y validación en tiempo real. Este documento de referencia técnica incluye diagramas arquitectónicos, visualizaciones de flujo de ejecución, tablas de decisión y apéndices integrales que sintetizan la literatura sobre arquitecturas de transformadores, mecanismos de atención dispersa, variantes de atención con compuerta y algoritmos de optimización. El sistema permite iteración rápida mientras mantiene condiciones experimentales reproducibles a través de su filosofía de diseño basada primero en esquemas.
+Transformer Encoder Frankenstein presenta un kit de herramientas unificado basado en configuración para la experimentación sistemática con arquitecturas de transformadores modernas, abarcando diecisiete variantes de mezclador de secuencias y veinte familias de optimizadores. El sistema respalda tanto el entrenamiento estilo codificador con modelado de lenguaje enmascarado (MLM) como el entrenamiento estilo decodificador con predicción autorregresiva de siguiente token mediante configuración flexible de clase de modelo y modo. Las contribuciones de investigación son triples: (i) un contrato de configuración basado en esquema estricto que permite la experimentación reproducible en diversos mecanismos de atención, incluyendo atención softmax estándar, atención sigmoide, redes retentivas, modelos de espacio de estado selectivos, transformadores de profundidad continua, atención aumentada con memoria, patrones de atención dispersa y mecanismos con compuerta; (ii) un marco integral de enrutamiento de optimizadores que admite métodos de reducción de varianza (MARS, Adan, AdEMAMix), variantes eficientes en memoria (Adafactor, GaLore, Lion), enfoques sin programador y precondicionadores de segundo orden (Shampoo, SOAP, Sophia); y (iii) flujos de trabajo de extremo a extremo que abarcan el despliegue cuantificado mediante empaquetado de pesos ternarios y entrenamiento de incrustaciones de oraciones inspirado en SBERT. El kit de herramientas implementa una interfaz de configuración basada en web que proporciona renderizado de formularios impulsado por esquemas con documentación en línea y validación en tiempo real. Este documento de referencia técnica incluye diagramas arquitectónicos, visualizaciones de flujo de ejecución, tablas de decisión y apéndices integrales que sintetizan la literatura sobre arquitecturas de transformadores, mecanismos de atención dispersa, variantes de atención con compuerta y algoritmos de optimización. El sistema permite iteración rápida mientras mantiene condiciones experimentales reproducibles a través de su filosofía de diseño basada primero en esquemas.
 \end{abstract}
 
 \tableofcontents
@@ -147,6 +147,190 @@ Los metadatos del esquema (campos de título y descripción) se extraen y render
     \item Opciones de despliegue y cuantización
     \item Parámetros de entrenamiento e inferencia específicos de SBERT
 \end{itemize}
+
+\subsection{Novedades Recientes: Soporte de Decodificador y Reorganización de Configuración}
+
+Esta versión introduce dos mejoras significativas de arquitectura:
+
+\subsubsection{Implementación de Decodificador Autoregresivo}
+
+El sistema ahora soporta tanto arquitecturas estilo codificador como decodificador a través de la nueva clase \texttt{model\_class='frankesteindecoder'}, permitiendo experimentos unificados de modelado de lenguaje bidireccional (MLM estilo BERT) y generación autorregresiva (AR estilo GPT) dentro de la misma canalización de entrenamiento. El soporte de decodificador incluye:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Enmascaramiento Causal}: El campo \texttt{model.mode='decoder'} activa enmascaramiento causal automático en todas las capas de atención, permitiendo solo que cada token atienda a tokens anteriores en la secuencia.
+    \item \textbf{Predicción de Siguiente Token}: Objetivo de entrenamiento autorregresivo que predice el siguiente token de la secuencia basado solo en contexto causal, replicando la dinámica de entrenamiento de modelos estilo LLM.
+    \item \textbf{Flujos de Trabajo de Generación}: Herramientas integradas para inferencia autorregresiva, incluyendo sampleo con temperatura, top-$k$, top-$p$ y construcción de secuencias de longitud variable con parada por token EOS.
+    \item \textbf{Compatibilidad de Mezcladores}: Todas las diecisiete variantes de mezclador de secuencias (atención densa, recurrente, dispersa y con compuerta) se integran automáticamente en modo decodificador con enmascaramiento causal aplicado transparentemente.
+\end{itemize}
+
+\subsubsection{Reorganización de Configuración para Accesibilidad Mejorada}
+
+Los archivos de esquema de configuración ahora están disponibles directamente desde el directorio raíz del proyecto, además de su ubicación tradicional en \texttt{configs/}, mejorando la discoverabilidad y simplificando la referencia en flujos de trabajo de CI/CD e integración de desarrollo. Beneficios incluyen:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Accesibilidad Mejorada}: El archivo \texttt{schema.yaml} se puede referenciar desde la raíz del proyecto sin navegar subdirectorios, reduciendo fricción para usuarios y herramientas.
+    \item \textbf{Carga de Configuración Simplificada}: Las rutas relativas en scripts de automatización se simplifican cuando los esquemas están a nivel de raíz, habilitando canalizaciones de reproducibilidad más limpias.
+    \item \textbf{Generación por Herramientas}: Las herramientas de generación de documentación y validadores externos pueden ubicar el contrato de esquema sin conocimiento específico de la estructura de directorios interna del proyecto.
+    \item \textbf{Compatibilidad Hacia Atrás}: Los archivos en \texttt{configs/} se mantienen para compatibilidad hacia atrás; el sistema prioriza automáticamente correctamente según disponibilidad según la ruta de búsqueda.
+\end{itemize}
+
+\section{Introducción Conceptual: Transformers y Mecanismo de Atención para Novatos}
+
+Esta sección explica los conceptos fundamentales de los transformers y el mecanismo de atención de manera accesible, sin requerir conocimiento previo profundo en aprendizaje profundo. Los transformers son el motor detrás de sistemas de inteligencia artificial modernos como ChatGPT, pero su funcionamiento puede entenderse con analogías del mundo real.
+
+\subsection{¿Qué es un Transformer?}
+
+Un transformer es una arquitectura neural que procesa textos o secuencias de datos interpretando el significado de cada palabra considerando todas las demás palabras en el contexto. Imagina que lees una oración:
+
+\begin{center}
+\textit{``El banco estaba lleno de gente esperando. María fue al banco.''}
+\end{center}
+
+¿Qué significa ``banco'' en cada caso? En la primera oración, se refiere a una institución financiera (o un asiento). En la segunda, es menos claro sin contexto. Un transformador resuelve esto automáticamente mirando todas las palabras circundantes. En la segunda oración, al ver ``María fue'', el modelo entiende mejor que probablemente sea un banco de peces (donde va a nadar) o una institución (donde va a hacer un trámite).
+
+Esta capacidad de entender el significado completo de una palabra considerando toda la oración se llama \emph{contextualización}, y es el corazón de cómo funcionan los transformers modernos.
+
+\subsection{El Mecanismo de Atención: Una Analogía}
+
+El mecanismo de atención es el ``truco mágico'' que permite a los transformers entender contexto. Piénsalo como en una conversación importante en una habitación ruidosa:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Algunos esúndalo}: Alguien habla siendo muy importante para ti.
+    \item \textbf{Ignoras lo demás}: Tu cerebro automáticamente enfoca atención en esa persona, ignorando otros ruidos.
+    \item \textbf{Entiendes mejor}: Al concentrarte, captas cada palabra claramente.
+\end{enumerate}
+
+El mecanismo de atención neural funciona igual: cada palabra ``pregunta'' qué tan importante es cada otra palabra para entender su significado, luego ``enfoca'' su atención en las más relevantes.
+
+\subsection{Ejemplo Práctico Paso a Paso}
+
+Veamos cómo un transformer entiende la palabra ``come'' en dos contextos diferentes:
+
+\subsubsection{Contexto 1: ``El gato come pescado''}
+
+El transformer, al procesar ``come'', pregunta internamente:
+\begin{itemize}[leftmargin=*]
+    \item ¿Cuán relevante es ``El''? Poco (es solo un artículo). \textbf{Atención baja}.
+    \item ¿Cuán relevante es ``gato''? Muy relevante (es el sujeto, quién come). \textbf{Atención alta}.
+    \item ¿Cuán relevante es ``pescado''? Muy relevante (es lo que se come). \textbf{Atención alta}.
+\end{itemize}
+
+Así, la representación mental de ``come'' se enfoca principalmente en ``gato'' y ``pescado''.
+
+\subsubsection{Contexto 2: ``El restaurante come clientes a buen precio''}
+
+Aquí el transformer pregunta en contexto diferente:
+\begin{itemize}[leftmargin=*]
+    \item ¿Cuán relevante es ``restaurante''? Muy relevante (es el sujeto). \textbf{Atención alta}.
+    \item ¿Cuán relevante es ``clientes''? Muy relevante (es el objeto). \textbf{Atención alta}.
+    \item ¿Cuán relevante es ``buen precio''? Relevante (es la razón). \textbf{Atención media}.
+\end{itemize}
+
+La palabra ``come'' obtiene una representación completamente diferente porque ``atiende'' a palabras distintas en contextos distintos.
+
+\subsection{Cómo Funciona la Atención Matemáticamente (Versión Simple)}
+
+Detrás del cambio de atención hay operaciones matemáticas. Aquí está la versión simplificada sin demasiado detalle técnico:
+
+\subsubsection{Paso 1: Preguntas, Claves y Valores}
+
+Cada palabra en la oración se transforma en tres versiones:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Pregunta (Query)}: ``¿Qué información necesito conocer?''
+    \item \textbf{Clave (Key)}: ``¿Qué información tengo?''
+    \item \textbf{Valor (Value)}: ``Aquí está mi información importante.''
+\end{itemize}
+
+Imagina que en una biblioteca, cada visitante es una ``pregunta'', cada libro es una ``clave'', y el contenido es el ``valor''. El bibliotecario (atención) empareja preguntas con las claves más relevantes para acceder al valor correcto.
+
+\subsubsection{Paso 2: Compatibilidad}
+
+El sistema examina qué tan \emph{compatible} es cada pregunta con cada clave. Preguntas similares a las claves obtienen una puntuación de compatibilidad \emph{alta}. Esto se calcula multiplicando la pregunta por la clave (matemáticamente, el producto punto).
+
+\subsubsection{Paso 3: Enfoque}
+
+Las puntuaciones de compatibilidad se convierten en ``focus weights'' (pesos de enfoque). Las compatibilidades altas significan ``enfoca atención aquí'', y las bajas significan ``ignora esto''. Matemáticamente, se usa una función llamada \texttt{softmax} que convierte puntuaciones en porcentajes (como si fuera: 40\% atención aquí, 35\% aquí, 25\% allá).
+
+\subsubsection{Paso 4: Combinar}
+
+Finalmente, el sistema combina todos los valores, ponderados por los pesos de enfoque. Si una palabra tiene 80\% de atención en el sujeto, el 80\% de la información del sujeto se mezcla en la representación de esa palabra.
+
+\subsection{Múltiples Cabezas de Atención: Exploración Múltiple}
+
+Una característica clave es que los transformers no usan una sola atención, sino \emph{múltiples cabezas de atención} en paralelo. Es como si tuvieras 8 personas analizando la oración \emph{simultáneamente}, cada una prestando atención a diferentes aspectos:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Persona 1}: ``Me enfoco en relaciones de sujeto-verbo.''
+    \item \textbf{Persona 2}: ``Yo busco quién es el objeto directo.''
+    \item \textbf{Persona 3}: ``Yo rastreo información sobre tiempo verbal.''
+    \item \textbf{Persona 4}: ``Yo busco modificadores y adjetivos.''
+\end{itemize}
+
+Cada ``cabeza'' aprende a enfocarse en diferentes patrones de idioma. Juntas, capturan una comprensión mucho más rica que una sola cabeza.
+
+\subsection{Apilamiento de Capas}
+
+Los transformers procesan información en \emph{múltiples capas} (usualmente 12 a 48 para modelos prácticos). Imagina corregir un ensayo:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Primera pasada}: Corriges la ortografía y gramática básica.
+    \item \textbf{Segunda pasada}: Mejoras la claridad y la estructura de oraciones.
+    \item \textbf{Tercera pasada}: Aseguras consistencia y flujo narrativo.
+\end{enumerate}
+
+Las transformers funcionan igual: cada capa refina la comprensión del texto. La primera capa captura características básicas (palabras simples, géneros), mientras que capas posteriores entienden conceptos más complejos (relaciones entre palabras, significados abstractos).
+
+\subsection{¿Por Qué es Importante?}
+
+El mecanismo de atención fue revolucionario porque:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Paralelismo}: Encuentra contexto de \emph{cualquier palabra con cualquier otra palabra}, sin procesarlas secuencialmente (a diferencia de sistemas anteriores). Esto lo hace muy rápido.
+    \item \textbf{Flexibilidad}: Aprende qué patrones buscar automáticamente del datos, sin que necesites programar reglas manualmente.
+    \item \textbf{Escalabilidad}: Funciona desde textos pequeños hast contextos de millones de palabras.
+    \item \textbf{Capacidades Generales}: El mismo mecanismo funciona para traducción, resumen, preguntas-respuestas, generación de texto, visión por computadora, y más.
+\end{enumerate}
+
+\subsection{Desafíos Prácticos}
+
+A pesar del éxito extraordinario de los transformers, presentan desafíos:
+
+\subsubsection{Complejidad Computacional}
+
+Si una oración tiene 1000 palabras, el mecanismo de atención estándar debe comparar cada palabra con todas las otras 1000 palabras. Esto es $1000 \times 1000 = 1,000,000$ comparaciones. Para documentos largos con millones de palabras, esto se vuelve prohibitivamente costoso en tiempo y memoria.
+
+\subsubsection{Requisitos de Memoria}
+
+Especialmente en inferencia (cuando usas modelos entrenados), almacenar toda la matriz de atención puede consumir enormes cantidades de RAM o GPU, limitando la longitud de secuencias que puedes procesar.
+
+\subsubsection{Eficiencia en Dispositivos}
+
+Los transformers fueron diseñados para TPUs y GPUs poderosas. Ejecutarlos en teléfonos o dispositivos embebidos es desafiante.
+
+\subsection{Soluciones Modernas}
+
+Para resolver estos desafíos, la investigación ha propuesto muchas variantes:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Atención Dispersa}: En lugar de comparar cada palabra con TODAS las otras, solo compara con un subconjunto estratégico (vecinos cercanos, patrones periódicos). Reduce complejidad de $\mathcal{O}(n^2)$ a $\mathcal{O}(n \log n)$ o $\mathcal{O}(n)$.
+    \item \textbf{Modelos Recurrentes}: Como Mamba, incorporan aspectos de redes neuronales recurrentes antiguas pero con mejor eficiencia moderna.
+    \item \textbf{Atención con Compuerta}: Mecanismos que aprendan selectivamente qué información pasar forward, reduciendo necesidad de almacenamiento.
+    \item \textbf{Cuantización}: Usar números más pequeños (enteros en lugar de decimales) para reducir memoria sin perder demasiada precisión.
+\end{itemize}
+
+Estas innovaciones son lo que esta herramienta (Frankenstein) te permite experimentar fácilmente.
+
+\subsection{Resumen para Llevar}
+
+\begin{itemize}[leftmargin=*]
+    \item Un \textbf{transformer} es una red neural que entiende contexto de lenguaje muy bien.
+    \item El \textbf{mecanismo de atención} permite a cada palabra ``enfocarse'' en qué otras palabras son relevantes para entender su significado.
+    \item La atención funciona calculando \textbf{compatibilidad} entre cada palabra (pregunta) y todas las otras (claves), luego combinando información basada en esa compatibilidad (valores).
+    \item \textbf{Múltiples cabezas} de atención exploran diferentes patrones en paralelo.
+    \item \textbf{Múltiples capas} refinan progresivamente la comprensión.
+    \item El desafío principal es que la atención estándar tiene complejidad cuadrática, lo cual es caro para textos largos.
+    \item Muchas \textbf{soluciones modernas} (atención dispersa, modelos recurrentes, cuantización) abordan estos desafíos, y esta herramienta te permite explorar todas ellas.
+\end{itemize}
+
+Con esta comprensión intuitiva, estás listo para explorar las detalles técnicos que siguen. ¡Bienvenido a la frontera del procesamiento de lenguaje!
 
 \section{Trabajo Relacionado}
 
@@ -291,15 +475,18 @@ Muon y Turbo-Muon remodelan explícitamente la geometría de actualización medi
 
 El sistema se basa en un contrato de esquema YAML estricto que impone experimentos válidos fallando rápido en configuraciones inválidas. El esquema está estructurado jerárquicamente con \texttt{additionalProperties: false} en todos los niveles para eliminar el comportamiento silencioso de ``tragar'' parámetros desconocidos.
 
+El contrato autoritativo es \texttt{schema.yaml}, accesible tanto desde el directorio raíz como desde el directorio \texttt{configs/} para facilitar el descubrimiento y la accesibilidad. El esquema impone una estructura de objeto de nivel superior con validación estricta de tipos, rangos y enumeraciones.
+
 Los componentes principales del esquema son:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{model}: Arquitectura del codificador (tamaño oculto, capas, tipo de normalización, tipo de mezclador, parámetros específicos del mezclador).
+    \item \textbf{model\_class}: Selección de arquitectura (\texttt{frankenstein} para codificador de arquitectura mixta, \texttt{mini} para variante simplificada, \texttt{frankesteindecoder} para decodificador autorregresivo).
+    \item \textbf{model}: Arquitectura del modelo (tamaño oculto, capas, tipo de normalización, tipo de mezclador, parámetros específicos del mezclador, modo de atención para encoder/decoder).
     \item \textbf{tokenizer}: Tokenización y vocabulario (tipo, ruta del modelo, ruta del vocabulario, longitud máxima).
-    \item \textbf{training}: Tiempo de ejecución de entrenamiento (tamaño de lote, acumulación, programador, cortado, repetición, puntos de control).
-    \item \textbf{optimizer}: Configuración del optimizador (clase, hiperparámetros con prefijo).
-    \item \textbf{data}: Carga de datos (directorio de caché, tamaño máximo de secuencia, probabilidad MLM).
-    \item \textbf{deploy}: Opciones de despliegue (cuantización, ruta del modelo).
-    \item \textbf{sbert}: Configuración específica de SBERT (modo, ruta del corpus, hiperparámetros).
+    \item \textbf{training}: Configuración de tiempo de ejecución (tamaño de lote, acumulación de gradientes, programador, cortado de gradientes, repetición de datasets, puntos de control).
+    \item \textbf{optimizer}: Configuración del optimizador (clase del optimizador, hiperparámetros con prefijo para refinamiento de grupo de parámetros).
+    \item \textbf{data}: Carga de datos (directorio de caché, tamaño máximo de secuencia, probabilidad MLM, tipo de datos).
+    \item \textbf{deploy}: Opciones de despliegue (configuración de cuantización, ruta del modelo de salida).
+    \item \textbf{sbert}: Configuración específica de SBERT (modo, ruta del corpus, hiperparámetros de entrenamiento e inferencia).
 \end{itemize}
 
 \subsection{Validación de Esquema}
@@ -314,6 +501,49 @@ La validación ocurre en la carga de configuración utilizando el validador PyYA
     \item \textbf{Validación de estructura}: Los objetos anidados deben cumplir con sus esquemas anidados.
     \item \textbf{Validación de propiedades adicionales}: Se rechazan campos no declarados explícitamente.
 \end{itemize}
+
+\subsection{Selección de Clase de Modelo}
+
+El campo \texttt{model\_class} determina la variante arquitectónica instanciada por la canalización de entrenamiento. Se soportan tres opciones:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{frankenstein}: Modelos de codificador de arquitectura mixta que admiten diversos mecanismos de atención (softmax estándar, sigmoide, retentivo, espacio de estado, disperso y mecanismos con compuerta) con MoE (Mezcla de Expertos) y características avanzadas. Optimizado para entrenamiento estilo codificador con objetivo de modelado de lenguaje enmascarado (MLM).
+    \item \textbf{mini}: Variante de codificador simplificada diseñada para escenarios de entrenamiento a menor escala. Proporciona sobrecarga reducida de parámetros e iteración más rápida para experimentación y prototipado.
+    \item \textbf{frankesteindecoder}: Decodificador autorregresivo causal para generación de siguiente token estilo LLM. Permite enmascaramiento de atención causal para tareas de generación de texto secuencial. Cuando se selecciona esta clase, el tiempo de ejecución impone \texttt{mode='decoder'}.
+\end{itemize}
+
+\subsection{Selección de Modo de Entrenamiento}
+
+El campo \texttt{model.mode} controla el comportamiento de enmascaramiento de atención en todo el modelo:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{encoder}: Utiliza atención bidireccional donde todos los tokens asisten a todos los otros tokens en la secuencia. Adecuado para tareas de modelado de lenguaje enmascarado (MLM) donde el modelo aprende a predecir tokens enmascarados aleatoriamente basado en contexto completo.
+    \item \textbf{decoder}: Utiliza enmascaramiento causal donde cada token solo puede asistir a tokens anteriores en la secuencia. Requerido para tareas de predicción autorregresiva de siguiente token como modelado de lenguaje y generación de texto. Cuando \texttt{model\_class='frankesteindecoder'}, el sistema automáticamente fuerza \texttt{mode='decoder'} en tiempo de ejecución.
+\end{itemize}
+
+Este soporte dual de arquitectura permite que el sistema maneje tanto el pre-entrenamiento estilo codificador (MLM en contextos bidireccionales) como la generación estilo decodificador (predicción autorregresiva causal) a través de una interfaz de configuración unificada.
+
+\subsection{Tipos de Tarea de Entrenamiento}
+
+El campo \texttt{training.task} determina el objetivo de entrenamiento, trabajando en conjunto con \texttt{model.mode} para definir cómo aprende el modelo:
+
+\paragraph{Modelado de Lenguaje Enmascarado (MLM).}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Modo}: Requiere \texttt{mode='encoder'} para atención bidireccional.
+    \item \textbf{Objetivo}: Enmascarar aleatoriamente tokens en la secuencia de entrada (típicamente 15\%) y entrenar el modelo para predecir tokens enmascarados basado en contexto bidireccional completo.
+    \item \textbf{Caso de Uso}: Pre-entrenamiento de codificadores para aprendizaje de representación, siguiendo metodología estilo BERT \citep{devlin_bert_2019}. El modelo aprende representaciones bidireccionales capturando contexto de izquierda y derecha.
+    \item \textbf{Configuración}: Utiliza parámetro \texttt{mlm\_probability} para controlar fracción de enmascaramiento.
+\end{itemize}
+
+\paragraph{Predicción Autorregresiva de Siguiente Token.}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Modo}: Requiere \texttt{mode='decoder'} para enmascaramiento causal.
+    \item \textbf{Objetivo}: Entrenar modelo para predecir siguiente token en secuencia dado todos tokens anteriores solamente.
+    \item \textbf{Caso de Uso}: Tareas de generación de lenguaje y estilo LLM siguiendo metodología GPT. El modelo aprende dependencias secuenciales con atención causal donde cada token solo puede asistir a tokens precedentes.
+    \item \textbf{Clase de Modelo}: Típicamente utiliza \texttt{model\_class='frankesteindecoder'} para arquitecturas decodificador autorregresivas.
+\end{itemize}
+
+Este soporte dual de tarea permite experimentación unificada a través de tanto pre-entrenamiento estilo codificador (MLM para entendimiento bidireccional) como generación estilo decodificador (AR para producción secuencial de texto) dentro de la misma base de código.
 
 \section{Taxonomía de Arquitectura e Implementación}
 \label{sec:architecture-taxonomy}
@@ -653,6 +883,1789 @@ Las contribuciones principales del sistema son:
 Este trabajo demuestra que un diseño basado en esquemas riguroso puede unificar experimentación a través de arquitecturas y optimizadores diversos mientras mantiene reproducibilidad. El sistema proporciona una plataforma sólida para exploración sistemática de diseño de transformadores, permitiendo a investigadores y profesionales iterar rápidamente en configuraciones experimentales sin comprometer condiciones reproducibles.
 
 El desarrollo futuro se centrará en extender la cobertura arquitectónica (agregando variantes híbridas y mecanismos MoE para atención), mejorar la canalización de despliegue (soportando estrategias de cuantización más sofisticadas y métodos de inferencia eficientes), y refinar la interfaz de configuración (añadiendo asistentes guiados para selección de arquitectura/optimizador y exportación de configuraciones compartibles).
+
+\appendix
+
+\section{Arquitecturas Fundamentales de Transformadores: Análisis Teórico y Empírico Integral}
+\label{sec:appendix_transformer_architectures}
+
+La trayectoria del modelado de secuencias en inteligencia artificial ha sido inexorablemente moldeada por una tensión continua entre expresividad computacional y eficiencia de recursos. El advenimiento del mecanismo de atención estándar transformó fundamentalmente el procesamiento del lenguaje natural, visión por computadora y biología computacional al priorizar la contextualización global sobre la recurrencia secuencial y las convoluciones localizadas. Sin embargo, a medida que la ambición de los modelos fundacionales escala hacia ventanas de contexto de millones de tokens---esencial para análisis genómico, comprensión de código a nivel de repositorio y planificación agéntica a largo plazo---la complejidad computacional cuadrática de la autoatención tradicional ha emergido como un cuello de botella severo. La dependencia de la industria en el almacenamiento en caché de Claves-Valores (KV) durante la decodificación autorregresiva ha expuesto aún más las limitaciones de las arquitecturas estándar, precipitando una crisis de ancho de banda de memoria en los aceleradores de hardware moderno.
+
+En respuesta a estas limitaciones teóricas y de hardware, la comunidad investigadora ha propuesto una proliferación de arquitecturas alternativas. Estos modelos intentan reconciliar el ``triángulo imposible'' del modelado de secuencias: lograr entrenamiento paralelizable, inferencia de tiempo constante y rendimiento predictivo incompromisible simultáneamente. Esta sección proporciona un análisis comparativo profundo de seis arquitecturas pivotales de modelado de secuencias: el mecanismo de Atención Estándar, Atención Sigmoide, la Red Retentiva (RetNet), el Modelo Selectivo de Espacio de Estado (Mamba), el Transformador de Ecuación Diferencial Ordinaria (ODE), y la arquitectura de Memoria Neural Titans. Deconstruyendo sus formulaciones matemáticas, analizando sus complejidades computacionales, y evaluando sus implicaciones de segundo y tercer orden en utilización de hardware y aprendizaje de representaciones, esta sección establece un marco comprehensivo para entender el futuro del modelado de secuencias.
+
+\subsection{Atención Estándar: La Fundamentación de la Contextualización Global}
+\label{subsec:standard_attention}
+
+El mecanismo de autoatención multi-cabeza estándar estableció un cambio de paradigma dispensando completamente con la recurrencia secuencial y convoluciones localizadas que caracterizaban las redes de Memoria Corta a Largo Plazo (LSTM) anteriores. Al permitir que cada token en una secuencia atienda directamente a cualquier otro token, el transformador estándar logró un éxito sin precedentes en capturar dependencias de largo alcance y ejecutar tareas de razonamiento complejo basado en contenido.
+
+\subsubsection{Formulación Matemática y Mecanismo de Enrutamiento de Tokens}
+
+En el núcleo del bloque transformador estándar se encuentra el mecanismo de atención de producto punto escalado. Los tokens de entrada se mapean a incrustaciones de alta dimensionalidad y subsecuentemente se proyectan en matrices de Consulta ($\mathbf{Q}$), Clave ($\mathbf{K}$), y Valor ($\mathbf{V}$) a través de transformaciones lineales aprendidas. La operación de atención se formula matemáticamente para computar una suma ponderada de los vectores de valor.
+
+$$
+\text{Atención}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{softmax}\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_{in}}}\right)\mathbf{V}
+$$
+
+Para un token específico $i$ en una secuencia autorregresiva, la salida $\mathbf{y}_i$ se computa como una combinación convexa de todos los vectores de valor precedentes. Los pesos se determinan por las similitudes normalizadas entre la consulta actual y todas las claves históricas:
+
+$$
+\mathbf{y}_i = \sum_{j=1}^i \frac{\exp(\mathbf{Q}_i^\top \mathbf{K}_j / d_{in}) \mathbf{V}_j}{\sum_{\ell=1}^i \exp(\mathbf{Q}_i^\top \mathbf{K}_\ell / d_{in})}
+$$
+
+La utilización de la función softmax es una decisión arquitectónica crítica que impone una distribución de probabilidad sobre la secuencia. Esto crea un mecanismo de enrutamiento competitivo donde los tokens deben competir por una cantidad finita de ``masa de atención''. Aunque este mecanismo excele al permitir que la red se enfoque agudamente en tokens altamente relevantes---formando la base de ``cabezas de inducción'' que impulsan el aprendizaje en contexto---introduce una dependencia estructural global que prohíbe el procesamiento de tokens independiente a nivel de elemento durante el pase hacia adelante.
+
+\subsubsection{Complejidad Computacional y el Cuello de Botella del Caché KV}
+
+La dependencia matemática de interacciones pairwise densas produce una complejidad computacional y de memoria que escala cuadráticamente con la longitud de secuencia $n$. Específicamente, la complejidad de tiempo está acotada por $\mathcal{O}(n^2 \cdot d)$ y la complejidad de espacio por $\mathcal{O}(n^2)$ durante la fase de entrenamiento. Aunque esta operación es altamente paralelizable a través de la dimensión de secuencia en GPUs modernas, la expansión cuadrática permanece como la barrera primaria de entrenar modelos en secuencias que exceden cientos de miles de tokens.
+
+Durante la inferencia autorregresiva, el mecanismo de atención procesa un token a la vez. Para evadir la recomputación redundante $\mathcal{O}(n^2)$ de estados pasados para cada nuevo token, los transformadores en producción emplean un caché de Claves-Valores (KV). La fase de prefill procesa el prompt inicial y puebla el caché, mientras que la fase de generación aprovecha este caché para lograr complejidad $\mathcal{O}(n)$ por paso de decodificación. Sin embargo, esta eficiencia teórica en tiempo viene al costo de una huella de memoria linealmente creciente, requiriendo espacio $\mathcal{O}(n \cdot d)$.
+
+El caché KV induce ineficiencias sistémicas masivas en despliegues a gran escala. Para un modelo con docenas de cabezas de atención y capas, el caché puede consumir fácilmente cientos de gigabytes de Memoria de Ancho de Banda Alto (HBM), severamente restringiendo el tamaño máximo de lote concurrente. Literatura reciente identifica esto como el problema de la ``escritura indiscriminada''. Porque el modelo debe comprometer cada token generado con su clave y valor al caché independientemente de su utilidad futura, los sistemas rápidamente agotan recursos de memoria. Para mitigar esto, investigadores han explorado Selección KV (lectura selectiva del caché en tiempo de ejecución), Evicción KV (poda retrospectiva de tokens innecesarios), y Admisión KV (predicción de utilidad futura previa al almacenamiento), aunque estos permanecen como aproximaciones heurísticas del mecanismo exacto de atención.
+
+\subsubsection{Perfil Arquitectónico: Atención Estándar}
+
+\begin{center}
+\begin{tabular}{|l|p{11cm}|}
+\hline
+\textbf{Atributo} & \textbf{Especificación} \\
+\hline
+Nomenclatura & Atención Estándar (Transformador) \\
+\hline
+Autores / Año & Vaswani et al. / 2017 \\
+\hline
+Papel / DOI & \href{https://arxiv.org/abs/1706.03762}{Attention Is All You Need} / 10.48550/arXiv.1706.03762 \\
+\hline
+Complejidad de Entrenamiento & Tiempo: $\mathcal{O}(n^2 \cdot d)$, Espacio: $\mathcal{O}(n^2)$ \\
+\hline
+Complejidad de Inferencia & Tiempo por paso: $\mathcal{O}(n)$, Espacio: $\mathcal{O}(n)$ (con Caché KV explícito) \\
+\hline
+Ventajas & Expresividad incomparable; recuerdo histórico perfecto a través de la ventana de contexto; fase de entrenamiento altamente paralelizable. \\
+\hline
+Desventajas & Los cuellos de botella cuadráticos de entrenamiento severamente limitan escalado de longitud de contexto; la huella masiva del caché KV durante decodificación autorregresiva degrada el throughput. \\
+\hline
+Características & Enrutamiento de tokens competitivo basado en softmax; interacciones contextuales globales densas; codificaciones de posición absolutas o relativas. \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Atención Sigmoide: Localidad Algorítmica Consciente del Hardware}
+
+\subsubsection{Fundamentación Matemática y Perspectiva de Mezcla de Expertos}
+
+La Atención Sigmoide computa los logits de afinidad pre-atención $\mathbf{L} = \mathbf{Q}\mathbf{K}^\top$ idénticamente a la atención estándar. Sin embargo, aplica una función sigmoide no normalizada independientemente a cada logit en lugar de normalizar a través del eje de secuencia. La formulación se define como:
+
+$$
+\text{AtenciónSigmoide}(\mathbf{L}) = \sigma(\mathbf{L} + \mathbf{b}) \mathbf{V}
+$$
+
+donde $\mathbf{b}$ representa un término de sesgo aprendido o fijo. A diferencia de softmax, que requiere una operación de reducción por fila---específicamente una resta de máximo para estabilidad numérica seguida de una sumatoria a través de toda la longitud de secuencia para asegurar que las salidas sumen a uno---la función sigmoide evalúa independientemente en cada elemento de la matriz de logit.
+
+Análisis teóricos que aprovechan una perspectiva de Mezcla de Expertos (MoE) revelan ventajas críticas en complejidad muestral para autoatención sigmoide. Modelando las cabezas de atención como expertos gobernados por un mecanismo de compuerta, investigadores evaluaron tasas de convergencia empírica de la pérdida de Voronoi. Para modelos MoE utilizando expertos ReLU, el mecanismo de compuerta softmax cuadrático convergió a una tasa de $\mathcal{O}(n^{-0.24})$. Inversamente, la versión sigmoide logró una tasa de convergencia significativamente más rápida de $\mathcal{O}(n^{-0.51})$. Con expertos lineales, sigmoide obtuvo $\mathcal{O}(n^{-0.46})$ comparado contra $\mathcal{O}(n^{-0.07})$ de softmax.
+
+La naturaleza elemento a elemento de la activación sigmoide mitiga la ``competencia de tokens'' inherente a softmax. Porque softmax estrictamente acota la masa de probabilidad total a 1.0, una cabeza de atención no puede simultáneamente asignar una puntuación de importancia absoluta alta a múltiples tokens distintos sin diluir las puntuaciones de otros. La atención sigmoide permite a un token afirmar una magnitud alta de relevancia a múltiples tokens de contexto independientemente, habilitando una medida más absoluta de importancia semántica.
+
+\subsubsection{Estabilización y el Requisito de Norma Híbrida}
+
+A pesar de su superioridad teórica en convergencia, el escalado empírico de atención sigmoide reveló inestabilidades sustanciales de entrenamiento. Durante las etapas tempranas de entrenamiento de modelos de lenguaje grandes (e.g., 1B parámetros con longitud de contexto de 4096), la atención sigmoide sufre de normas de atención masivas iniciales, induciendo picos de gradiente severos que pueden descarrilar la trayectoria de optimización.
+
+Para establecer exitosamente la atención sigmoide como reemplazo drop-in para softmax, investigadores introdujeron la modificación arquitectónica de ``norma híbrida''. Norma híbrida es una Normalización de Capa adicional aplicada directamente a la salida de la operación de atención antes de la conexión residual:
+
+$$
+\mathbf{x}_{out} = \mathbf{x} + \text{norm}\left(\sigma\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_{qk}}}\right)\mathbf{V}\right)
+$$
+
+Esta capa de normalización adicional efectivamente amortigua la magnitud sin restricciones de las activaciones sigmoide, estabilizando el flujo de gradientes a escala y permitiendo al modelo igualar o ligeramente superar líneas base de softmax en evaluaciones downstream.
+
+\subsubsection{Complejidad Computacional y Optimización de Hardware}
+
+Desde una perspectiva puramente matemática, el número de operaciones de punto flotante (FLOPs) requeridas para atención sigmoide es esencialmente idéntico a la atención softmax. Softmax requiere resta de máximo, exponenciación, sumatoria y división; sigmoide requiere suma de sesgo, inversión de signo, exponenciación, adición y división. Ambas mantienen complejidad teórica de tiempo $\mathcal{O}(n^2 \cdot d)$.
+
+Sin embargo, el diseño de algoritmos no puede divorciarse de la topología de hardware. Porque sigmoide es un mapeo elemento a elemento, completamente circunvala la sobrecarga de sincronización entre hilos requerida por las operaciones de reducción de softmax. Esta localidad algorítmica habilita implementaciones altamente optimizadas conscientes del hardware. La introducción de FlashSigmoide capitaliza en esta independencia, permitiendo a la GPU procesar bloques de memoria completamente dentro de la SRAM ultra-rápida sin vaciar estados intermedios a HBM. Esto genera una aceleración notable del kernel de inferencia del 17\% sobre el marco altamente optimizado de FlashAttention-2 en GPUs NVIDIA H100.
+
+\subsubsection{Perfil Arquitectónico: Atención Sigmoide}
+
+\begin{center}
+\begin{tabular}{|l|p{11cm}|}
+\hline
+\textbf{Atributo} & \textbf{Especificación} \\
+\hline
+Nomenclatura & Autoatención Sigmoide \\
+\hline
+Autores / Año & Ramapuram et al. (Apple) / 2024--2025 \\
+\hline
+Papel / DOI & \href{https://arxiv.org/abs/2409.04431}{Theory, Analysis, and Best Practices for Sigmoid Self-Attention} / 10.48550/arXiv.2409.04431 \\
+\hline
+Complejidad de Entrenamiento & Tiempo: $\mathcal{O}(n^2 \cdot d)$, Espacio: $\mathcal{O}(n^2)$ (idéntico a Softmax teóricamente) \\
+\hline
+Complejidad de Inferencia & Tiempo por paso: $\mathcal{O}(n)$, Espacio: $\mathcal{O}(n)$ \\
+\hline
+Ventajas & Elimina la competencia de tokens con suma cero; regularidad Lipschitz superior; aceleración masiva del kernel de hardware del 17\% vía FlashSigmoide. \\
+\hline
+Desventajas & Susceptible a picos de gradiente en entrenamiento temprano; requiere modificaciones arquitectónicas como ``norma híbrida'' para estabilidad a longitudes de contexto grandes. \\
+\hline
+Características & Activación continua elemento a elemento; ventajas de complejidad muestral respaldadas por MoE; circunvalación completa de sincronización entre filas. \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{RetNet: La Dualidad de Recurrencia y Atención}
+\label{subsec:retnet}
+
+La Red Retentiva (RetNet) fue explícitamente engineered para resolver lo que investigadores términaron el ``triángulo imposible'' del modelado de secuencias. Históricamente, arquitecturas podían seleccionar dos de tres rasgos ideales: entrenamiento paralelo, inferencia de bajo costo $\mathcal{O}(1)$, y alto rendimiento. Los transformadores logran paralelismo y rendimiento pero fallan en inferencia de bajo costo; RNNs lineales logran inferencia eficiente pero luchan con entrenamiento paralelo y rendimiento. RetNet introduce una arquitectura capaz de soportar los tres simultáneamente.
+
+\subsubsection{Fundamentación Matemática y el Mecanismo de Retención Multi-Escala}
+
+RetNet completamente reemplaza el mecanismo de autoatención softmax multi-cabeza con un nuevo módulo de retención multi-escala. La innovación arquitectónica está predicada en establecer una dualidad matemática rigurosa entre recurrencia de secuencias y autoatención.
+
+Para incrustar dinámicamente información de posición relativa en las representaciones, RetNet mapea los vectores de consulta y clave al plano complejo utilizando la fórmula de Euler. La transformación incorpora una rotación de vector que hace las incrustaciones intrínsecamente conscientes de posición, denotada como $\Theta$.
+
+El mecanismo de retención introduce una matriz de decadencia exponencial causal fija $\mathbf{D} \in \mathbb{R}^{n \times n}$. En su representación paralela, la salida se computa vía un producto de Hadamard elemento a elemento ($\odot$) aplicado después de la multiplicación de matrices:
+
+$$
+\text{Retención}(\mathbf{X}) = (\mathbf{Q}\mathbf{K}^\top \odot \mathbf{D})\mathbf{V}
+$$
+
+donde la matriz de decadencia se define tal que $\mathbf{D}_{nm} = \gamma^{n-m}$ para $n \ge m$, y $0$ en otro caso. El escalar de decadencia $\gamma \in (0, 1)$ actúa como un factor de descuento temporal, progresivamente atenuando la influencia de tokens históricos distantes a favor de tokens locales y recientes. RetNet utiliza un enfoque multi-escala, asignando diferentes tasas de decadencia (e.g., $\gamma = 1 - 2^{-5}, \dots$) a diferentes cabezas de retención para capturar tanto dependencias a corto plazo como arcos semánticos de largo alcance.
+
+Crucialmente, porque la matriz de decadencia $\mathbf{D}$ se construye desde un término exponencial simple, la ecuación paralela puede ser algebraicamente transformada en una representación recurrente exacta:
+
+$$
+\mathbf{S}_n = \gamma \mathbf{S}_{n-1} + \mathbf{K}_n^\top \mathbf{V}_n
+$$
+
+$$
+\text{Retención}(\mathbf{X}_n) = \mathbf{Q}_n \mathbf{S}_n
+$$
+
+En esta formulación, $\mathbf{S}_n$ opera como un estado oculto de tamaño fijo y valuado en matrices que recursivamente acumula el contexto histórico. El modelo computa la interacción consulta-clave implícitamente dentro del vector de estado, completamente eliminando la necesidad de materializar la matriz de atención $n \times n$ o almacenar un caché KV linealmente creciente.
+
+Para optimizar el procesamiento de secuencias excepcionalmente largas, RetNet introduce una representación recurrente híbrida por fragmentos. La secuencia de entrada se divide en segmentos o fragmentos localizados. Dentro de cada fragmento, el modelo computa la retención en paralelo para aprovechar los núcleos de multiplicación de matrices de la GPU. Simultáneamente, un vector de estado recurrente se pasa entre los fragmentos para propagar información de largo alcance.
+
+\subsubsection{Complejidad Computacional y Escalado de Rendimiento}
+
+El diseño multi-paradigma de RetNet resulta en complejidad computacional dinámica basada en el modo operacional. Durante la fase de entrenamiento, la representación paralela requiere tiempo $\mathcal{O}(n^2 \cdot d)$, idéntico a transformadores estándar. Sin embargo, al desplegar el modo recurrente por fragmentos durante el entrenamiento, esta complejidad se reduce a $\mathcal{O}(n \cdot c \cdot d)$, donde $c$ es el tamaño de fragmento definido, logrando escalado lineal con respecto a la longitud total de secuencia $n$.
+
+La ventaja más dramática ocurre durante la inferencia autorregresiva. Mediante cambio seamless a la representación recurrente, RetNet opera con complejidad de tiempo $\mathcal{O}(1)$ por paso de decodificación. La complejidad de memoria está estrictamente acotada por $\mathcal{O}(d^2)$ para almacenar la matriz de estado constante $\mathbf{S}_n$. Benchmarks empíricos revelan que una RetNet de parámetros de 6.7B drásticamente supera un Transformador estándar en throughput de decodificación (aumento de 8.4x) y latencia (reducción de 15.6x) mientras utiliza 3.4x menos memoria de GPU a una longitud de contexto de 8k.
+
+\subsubsection{Perfil Arquitectónico: RetNet}
+
+\begin{center}
+\begin{tabular}{|l|p{11cm}|}
+\hline
+\textbf{Atributo} & \textbf{Especificación} \\
+\hline
+Nomenclatura & RetNet (Red Retentiva) \\
+\hline
+Autores / Año & Sun et al. (Microsoft Research) / 2023 \\
+\hline
+Papel / DOI & \href{https://arxiv.org/abs/2307.08621}{Retentive Network: A Successor to Transformer for Large Language Models} / 10.48550/arXiv.2307.08621 \\
+\hline
+Complejidad de Entrenamiento & Tiempo: $\mathcal{O}(n \cdot c)$ (por fragmentos) o $\mathcal{O}(n^2)$ (paralela) \\
+\hline
+Complejidad de Inferencia & Tiempo por paso: $\mathcal{O}(1)$, Espacio: $\mathcal{O}(1)$ (matriz de estado constante) \\
+\hline
+Ventajas & Elimina completamente el caché KV; inferencia altamente eficiente de $\mathcal{O}(1)$; capacidad de entrenamiento paralelo; resuelve el triángulo imposible. \\
+\hline
+Desventajas & La decadencia exponencial impone un sesgo estructural inductive rígido que puede artificialmente truncar dependencias semánticas de largo alcance comparado con atención softmax. \\
+\hline
+Características & Tri-paradigma de computación (Paralela, Recurrente, Por Fragmentos); codificación de posición en plano complejo; factores de decadencia multi-escala; transición de estado sin sobrecarga. \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Mamba: Modelado Selectivo de Espacio de Estado}
+\label{subsec:mamba}
+
+Los Modelos de Espacio de Estado (SSMs), fuertemente inspirados por teoría de control, originalmente emergieron como alternativas de tiempo continuo a redes neurales discretas. SSMs estructurados tempranos, tales como S4, utilizaban polinomios ortogonales (e.g., matrices HiPPO) para asegurar matemáticamente la memorización de trayectorias históricas largas. Sin embargo, estas arquitecturas tempranas severamente conflictuaron con razonamiento basado en contenido---específicamente tareas requiriendo al modelo ignorar selectivamente ruido o recordar exactamente tokens específicos (e.g., la tarea de inducción head copying). La razón fue fundamental: sus dinámicas de transición eran Invariantes en el Tiempo Lineales (LTI). Mamba directamente resuelve esto introduciendo selectividad a los parámetros fundamentales.
+
+\subsubsection{Fundamentación Matemática y el Mecanismo de Selección}
+
+Mamba mapea una secuencia de entrada 1D continua $x(t)$ a una secuencia de salida $y(t)$ a través de estados ocultos intermedios $h(t)$. Este sistema está gobernado por un conjunto de ecuaciones diferenciales ordinarias lineales continuas:
+
+$$
+\begin{aligned}
+h'(t) &= \mathbf{A}h(t) + \mathbf{B}x(t) \\
+y(t) &= \mathbf{C}h(t)
+\end{aligned}
+$$
+
+Para operar en tokens discretos de texto o secuencias, estos parámetros continuos deben ser discretizados usando un tamaño de paso $\Delta$. El método de muestreo por orden cero típicamente se emplea para producir matrices discretas $\bar{\mathbf{A}}$ y $\bar{\mathbf{B}}$. En SSMs clásicos, $\mathbf{A}, \mathbf{B}, \mathbf{C},$ y $\Delta$ están rígidamente fijados. El avance conceptual central de Mamba es parametrizar $\mathbf{B}, \mathbf{C},$ y $\Delta$ como proyecciones lineales de la entrada $x_t$ sí misma:
+
+$$
+\begin{aligned}
+s_\Delta &= \text{Lineal}(x_t) \\
+\Delta_t &= \text{softplus}(s_\Delta) \\
+\mathbf{B}_t &= \text{Lineal}(x_t), \quad \mathbf{C}_t = \text{Lineal}(x_t)
+\end{aligned}
+$$
+
+Esta dependencia de entrada transforma el modelo de un sistema invariante en tiempo a un sistema variante en tiempo. Las nuevas reglas de actualización discretizadas se vuelven explícitamente dependientes del token específico en el tiempo $t$:
+
+$$
+\begin{aligned}
+\bar{\mathbf{A}}_t &= \exp(\Delta_t \mathbf{A}) \\
+\bar{\mathbf{B}}_t &= (\Delta_t \mathbf{A})^{-1}(\exp(\Delta_t \mathbf{A}) - \mathbf{I})\Delta_t \mathbf{B}_t \\
+h_t &= \bar{\mathbf{A}}_t h_{t-1} + \bar{\mathbf{B}}_t x_t
+\end{aligned}
+$$
+
+La similitud matemática a un filtro de Kalman es altamente intencional. Al establecer $\Delta_t$ como una función de la entrada, el modelo efectivamente aprende un mecanismo de compuerta. Si un token de entrada es relleno irrelevante, la red puede predecir un $\Delta_t$ diminuto (acercándose a cero), causando que $\bar{\mathbf{A}}_t \approx \mathbf{I}$ y $\bar{\mathbf{B}}_t \approx \mathbf{0}$. Esto perfectamente preserva el estado histórico $h_{t-1}$ sin contaminación. Conversamente, encontrando información crítica resulta en un $\Delta_t$ grande, completamente refrescando el estado.
+
+\subsubsection{Complejidad Computacional y el Escaneo Consciente del Hardware}
+
+La introducción de matrices dependientes de entrada rompió la simetría matemática requerida para usar convoluciones FFT (Transformada Rápida de Fourier), las cuales previamente daban a los SSMs su eficiencia de entrenamiento. Para circunvalar esto, los autores engineered un brillante algoritmo de escaneo paralelo consciente del hardware.
+
+Al aprovechar la jerarquía de memoria de la GPU, el algoritmo de escaneo paralelo realiza las actualizaciones secuenciales recurrentes completamente dentro de la SRAM ultra-rápida en-chip. Este proceso circunvala la sobrecarga prohibitiva de ancho de banda de memoria de leer y escribir los estados ocultos de alta dimensión a la HBM más lenta. Consecuentemente, Mamba mantiene complejidad de tiempo de entrenamiento $\mathcal{O}(n \cdot d)$, escalando linealmente con longitud de secuencia mientras retiene beneficios de paralelización de convoluciones.
+
+Durante la inferencia, Mamba opera puramente como una red neuronal recurrente. Logra complejidad de tiempo $\mathcal{O}(1)$ por paso y requiere solo memoria constante $\mathcal{O}(1)$ para almacenar el estado latente $h_t$. Benchmarks empíricos confirman una mejora de 5x en throughput de inferencia comparado a transformadores de tamaño equivalente, escalando gracefully para manejar secuencias que abarcan hasta un millón de tokens.
+
+A pesar de esto, empujar el modelo a escalas de parámetro de 8B reveló que Mamba puro ligeramente conflictúa comparado a transformadores en tareas requiriendo razonamiento intenso en contexto (e.g., 5-shot MMLU) porque comprimir millones de tokens en un vector fijo fundamentalmente garantiza alguna pérdida de información. Esto ha motivado la creación de arquitecturas híbridas (e.g., Mamba-2-Hybrid) que fusionan 43\% capas Mamba para compresión de largo alcance con 7\% capas de atención para enrutamiento preciso local.
+
+\subsubsection{Perfil Arquitectónico: Mamba}
+
+\begin{center}
+\begin{tabular}{|l|p{11cm}|}
+\hline
+\textbf{Atributo} & \textbf{Especificación} \\
+\hline
+Nomenclatura & Mamba (Modelo Selectivo de Espacio de Estado) \\
+\hline
+Autores / Año & Gu y Dao (CMU/Princeton) / 2023 \\
+\hline
+Papel / DOI & \href{https://arxiv.org/abs/2312.00752}{Mamba: Linear-Time Sequence Modeling with Selective State Spaces} / 10.48550/arXiv.2312.00752 \\
+\hline
+Complejidad de Entrenamiento & Tiempo: $\mathcal{O}(n \cdot d)$, Espacio: $\mathcal{O}(n \cdot d)$ (vía escaneo paralelo consciente del hardware) \\
+\hline
+Complejidad de Inferencia & Tiempo por paso: $\mathcal{O}(1)$, Espacio: $\mathcal{O}(1)$ (vector de estado fijo) \\
+\hline
+Ventajas & Escalado lineal permite longitudes de secuencia extremas; carga computacional sub-cuadrática; generación autorregresiva drásticamente más rápida. \\
+\hline
+Desventajas & La compresión de estado intrínsecamente causa degradación menor en recuerdo asociativo denso y tareas de copia exacta comparado a atención. \\
+\hline
+Características & Matrices discretas dependientes de entrada ($\Delta, \mathbf{B}, \mathbf{C}$); algoritmo de escaneo paralelo fusionado con SRAM; completamente dispensa con autoatención multi-cabeza. \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Transformador ODE: Generación de Secuencias vía Sistemas Dinámicos}
+\label{subsec:ode_transformer}
+
+Mientras en arquitecturas como RetNet y Mamba enfatizan optimizar interacciones espaciales o recurrencia temporal para maximizar longitud de secuencia, el Transformador ODE aproxima el diseño de redes neurales desde la perspectiva rigurosa de sistemas dinámicos numéricos. Establece una equivalencia matemática profunda entre las capas discretas de un transformador y los métodos de discretización usados para resolver Ecuaciones Diferenciales Ordinarias (EDOs).
+
+\subsubsection{Fundamentación Matemática y Refinamiento Runge-Kutta}
+
+En una arquitectura de transformador estándar empleando convenciones Pre-Norm, un bloque residual computa la representación de la siguiente capa como $y_{t+1} = y_t + F(y_t, \theta_t)$, donde $F$ encapsula las complejas operaciones de autoatención multi-cabeza y feed-forward, y $\theta_t$ representa los parámetros de capa. Desde la perspectiva de sistemas dinámicos, esta formulación es funcionalmente idéntica al método de Euler de primer orden utilizado para aproximar la EDO continua:
+
+$$
+\frac{dy(t)}{dt} = F(y(t), \theta(t))
+$$
+
+La discretización de Euler es computacionalmente ineficiente pero notoriamente propensa a acumular errores de truncamiento numérico a través de redes profundas. El Transformador ODE rectifica esta inestabilidad reemplazando la conexión residual simple con solucionadores de Runge-Kutta (RK) de mayor orden, efectivamente permitiendo a la red continuamente refinar sus representaciones dentro de un bloque estructural único.
+
+Por ejemplo, un bloque de Runge-Kutta de segundo orden (RK2) matemáticamente espeja el método de Euler Mejorado:
+
+$$
+\begin{aligned}
+y_{t+1} &= y_t + \frac{1}{2}(F_1 + F_2) \\
+F_1 &= F(y_t, \theta_t), \quad F_2 = F(y_t + F_1, \theta_t)
+\end{aligned}
+$$
+
+La arquitectura escala esto a un bloque Runge-Kutta de cuarto orden (RK4), computando cuatro aproximaciones intermedias precisas para suavizar la trayectoria a través del espacio latente:
+
+$$
+\begin{aligned}
+y_{t+1} &= y_t + \frac{1}{6}(F_1 + 2F_2 + 2F_3 + F_4) \\
+F_1 &= F(y_t, \theta_t) \\
+F_2 &= F(y_t + \frac{1}{2}F_1, \theta_t) \\
+F_3 &= F(y_t + \frac{1}{2}F_2, \theta_t) \\
+F_4 &= F(y_t + F_3, \theta_t)
+\end{aligned}
+$$
+
+Una propiedad vital de esta arquitectura es el compartimiento de parámetros: el tensor de peso $\theta_t$ se reutiliza idénticamente a través de todas las evaluaciones intermedias ($F_1$ a través de $F_4$) dentro del bloque. Sin embargo, adherirse estrictamente a los coeficientes numéricos constantes de ecuaciones Runge-Kutta clásicas (e.g., $1/2$ o $1/6$) dispara desvanecimiento severo de gradientes en modelos profundos. Para preservar estabilidad, el Transformador ODE introduce un mecanismo de compuerta de coeficiente aprendido:
+
+$$
+\begin{aligned}
+y_{t+1} &= y_t + g \cdot F_1 + (1 - g) \cdot F_2 \\
+g &= \text{sigmoid}([\mathbf{F}_1, \mathbf{F}_2]\mathbf{W} + \mathbf{b})
+\end{aligned}
+$$
+
+\subsubsection{Complejidad Computacional y el Compromiso de Precisión}
+
+La precisión matemática del Transformador ODE introduce sobrecarga computacional severa. Un bloque RK4 requiere cuatro pases consecutivos hacia adelante de la sub-red $F$ meramente para computar la progresión de una única capa. Mientras el recuento de parámetro actual permanece asombrosamente bajo debido al compartimiento intra-bloque (un bloque RK2 de 6 capas se desempeña equivalentemente a una línea base de 18 capas), la complejidad de tiempo aumenta por un factor constante equivalente al orden RK.
+
+El consumo de memoria también escala agresivamente durante el entrenamiento, como todas las aproximaciones intermedias ($F_1, \dots, F_n$) deben ser almacenadas para computar gradientes de paso hacia atrás. Benchmarks empíricos revelan una penalidad notable en velocidad de inferencia---decreciendo de 147.1 oraciones por segundo para una red residual línea base a 124.8 oraciones para configuración RK4-block. Sin embargo, este impuesto computacional cede mejoras substanciales en precisión cruda, estableciendo puntuaciones BLEU estado-del-arte (30.77 y 44.11) en tareas de traducción automática a gran escala como WMT'14 English-German y English-French.
+
+\subsubsection{Perfil Arquitectónico: Transformador ODE}
+
+\begin{center}
+\begin{tabular}{|l|p{11cm}|}
+\hline
+\textbf{Atributo} & \textbf{Especificación} \\
+\hline
+Nomenclatura & Transformador ODE \\
+\hline
+Autores / Año & Li et al. (Northeastern Univ) / 2022 \\
+\hline
+Papel / DOI & \href{https://aclanthology.org/2022.acl-long.571/}{ODE Transformer: An Ordinary Differential Equation-Inspired Model for Sequence Generation} / 10.18653/v1/2022.acl-long.571 \\
+\hline
+Complejidad de Entrenamiento & Tiempo: $\mathcal{O}(k \cdot n^2)$, Espacio: $\mathcal{O}(k \cdot n^2)$ (donde $k$ es el orden RK) \\
+\hline
+Complejidad de Inferencia & Tiempo por paso: $\mathcal{O}(k \cdot n)$, Espacio: $\mathcal{O}(n)$ \\
+\hline
+Ventajas & Precisión generativa significativamente más alta vía errores de truncamiento reducidos; altamente eficiente en parámetros debido al compartimiento de peso intra-bloque. \\
+\hline
+Desventajas & Velocidades de inferencia notablemente más lentas y utilización de memoria más alta; requiere compuerta compleja para evitar desvanecimiento de gradientes. \\
+\hline
+Características & Solucionadores numéricos de integración Runge-Kutta de orden superior; compuerta de coeficiente dinámico; refinamiento de representación en tiempo continuo. \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Titans: Memorización Neural en Tiempo de Prueba}
+\label{subsec:titans}
+
+Como se detalla arriba, modelos recurrentes lineales (RetNet) y modelos de espacio de estado (Mamba) logran eficiencia de inferencia comprimiendo contexto de secuencia en una matriz de estado fijo o vector. Sin embargo, teoría de la información mandata que comprimir una vasta secuencia en una dimensión estática inevitablemente resulta en degradación de datos. La atención estándar evita esto nunca comprimiendo, pero paga el precio en escalado cuadrático. La arquitectura Titans, conceptualizada bajo el marco MIRAS, propone un tercer paradigma radical: ``memorización en tiempo de prueba''. Bifurca el sistema, utilizando atención para enrutamiento a corto plazo y una red neuronal actualizable por gradiente para actuar como memoria persistente y de largo plazo.
+
+\subsubsection{Fundamentación Matemática y la Métrica de Sorpresa}
+
+A diferencia de modelos que actualizan un estado latente vía ecuación de recurrencia lineal, Titans mantiene contexto de largo plazo literalmente entrenando los parámetros de un módulo de memoria secundario ($\mathcal{M}$) durante el pase de inferencia hacia adelante. Este enfoque visualiza la adquisición de memoria asociativa como una tarea de meta-aprendizaje en línea.
+
+La memoria neural se basa en una sofisticada regla de actualización de momentum gobernada por una métrica de ``sorpresa'' $S_t$. Cuando el modelo encuentra nuevos tokens que contradicen o expanden su memoria asociativa interna, genera un paso de gradiente para permanentemente actualizar los pesos de memoria:
+
+$$
+\begin{aligned}
+\mathcal{M}_t &= (1 - \alpha_t)\mathcal{M}_{t-1} + S_t \\
+S_t &= \eta_t S_{t-1} - \theta_t \nabla_\ell(M_{t-1}; x_t)
+\end{aligned}
+$$
+
+En este sistema, $\nabla_\ell(M_{t-1}; x_t)$ representa la sorpresa momentánea---calculada como el gradiente de una función de pérdida asociativa $\ell$ evaluada en la entrada actual $x_t$. Esta formulación cercanamente asemeja descenso de gradiente con momentum, donde $S_t$ rastrea la sorpresa acumulada a través del tiempo.
+
+Los coeficientes $\eta_t$ y $\theta_t$ son parámetros críticos de decadencia dependiente de datos y tasa de aprendizaje. Porque son funciones de la entrada, el modelo dinámicamente dicta la asimilación de memoria. Si la secuencia transiciona a un contexto semántico completamente nuevo, el modelo puede establecer $\eta_t \to 0$, forzando a la memoria a ignorar momentum acumulado y rápidamente adaptarse al nuevo paradigma. Alternativamente, establecer $\eta_t \to 1$ completamente incorpora la sorpresa histórica en la actualización de peso.
+
+La salida del módulo de memoria neuronal profunda se recupera consultando el módulo actualizado con el token actual, creando un mecanismo de compuerta elemento a elemento con el estado oculto estándar:
+
+$$
+o_t = y_t \otimes \mathcal{M}_t^*(y_t)
+$$
+
+\subsubsection{Complejidad Computacional e Contexto Infinito}
+
+Ejecutar actualizaciones de peso basadas en gradiente durante un pase de inferencia autorregresiva inicialmente aparece computacionalmente prohibitivo. Sin embargo, Titans están engineered para ser altamente optimizados. Porque el módulo de memoria neural está limpianamente separado de la ventana de atención a corto plazo, la operación de atención estándar local mantiene una complejidad altamente manejable $\mathcal{O}(c^2)$ en fragmentos de contexto localizados.
+
+Simultáneamente, la actualización de memoria neuronal de largo plazo logra complejidad lineal $\mathcal{O}(n)$ relativa a la longitud total de secuencia. La ventaja arquitectónica más profunda es que la memoria está estructuralmente incrustada dentro de los parámetros físicos del módulo en lugar de externalizada como un caché KV expandible. Consecuentemente, requiere una huella de memoria fija $\mathcal{O}(1)$ en tiempo de prueba, completamente circunvalando los requisitos exhaustivos de HBM asociados con decodificación de secuencias masivas.
+
+\subsubsection{Perfil Arquitectónico: Titans}
+
+\begin{center}
+\begin{tabular}{|l|p{11cm}|}
+\hline
+\textbf{Atributo} & \textbf{Especificación} \\
+\hline
+Nomenclatura & Titans (Arquitectura de Memoria Neural) \\
+\hline
+Autores / Año & Behrouz et al. / 2025 \\
+\hline
+Papel / DOI & \href{https://arxiv.org/abs/2501.00663}{Titans: Testing-Time Training with Augmented Attention} / 10.48550/arXiv.2501.00663 \\
+\hline
+Complejidad de Entrenamiento & Tiempo: $\mathcal{O}(n^2)$ (atención local) + $\mathcal{O}(n)$ (memoria), Espacio: $\mathcal{O}(1)$ (sin caché KV) \\
+\hline
+Complejidad de Inferencia & Tiempo por paso: $\mathcal{O}(c^2 + d \cdot k)$ (donde $c$ es el tamaño de ventana local, $d$ es dimensión, $k$ es rango de memoria) \\
+\hline
+Ventajas & Contexto efectivamente infinito sin expansión de caché KV; memoria asociativa persistente; comportamiento adaptativo dinámico a cambios de distribución. \\
+\hline
+Desventajas & Mayor complejidad de implementación; requiere cómputo diferenciable durante inferencia; tuning de parámetros de control de sorpresa es crítico. \\
+\hline
+Características & Actualización de parámetros en tiempo de ensayo; métrica de sorpresa dependiente de datos; fusión de atención local con memoria persistente; framwork de meta-aprendizaje en línea. \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Síntesis Comparativa: Posicionamiento Arquitectónico}
+
+La siguiente tabla sintetiza los atributos clave a través de las seis arquitecturas, ayudando a entender sus perfil de compromiso:
+
+\begin{center}
+\begin{tabular}{|l|c|c|c|c|c|c|}
+\hline
+\textbf{Arquitectura} & \textbf{Comp. Entrenar} & \textbf{Comp. Inferir} & \textbf{KV Cache} & \textbf{Contexto} & \textbf{Desempeño} & \textbf{Estabilidad} \\
+\hline
+Atención Estándar & $\mathcal{O}(n^2)$ & $\mathcal{O}(n)$ & Requerido & Limitado & Excelente & Excelente \\
+\hline
+Atención Sigmoide & $\mathcal{O}(n^2)$ & $\mathcal{O}(n)$ & Requerido & Limitado & Muy Bueno & Requiere Norma Híbrida \\
+\hline
+RetNet & $\mathcal{O}(n)$--$\mathcal{O}(n^2)$ & $\mathcal{O}(1)$ & No & Muy Largo & Bueno & Muy Bueno \\
+\hline
+Mamba & $\mathcal{O}(n)$ & $\mathcal{O}(1)$ & No & Muy Largo & Muy Bueno & Excelente \\
+\hline
+Transformador ODE & $\mathcal{O}(k \cdot n^2)$ & $\mathcal{O}(k \cdot n)$ & Requerido & Limitado & Excelente & Bueno \\
+\hline
+Titans & $\mathcal{O}(n^2)$ & $\mathcal{O}(c^2)$ & No & Infinito & Excelente & Muy Bueno \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{Guía de Selección}
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Para Desempeño Máximo}: Atención Estándar o Transformador ODE. La atención estándar mantiene la máxima expresividad; Transformador ODE proporciona refinamiento intra-bloque a mayor costo computacional.
+
+\item \textbf{Para Inferencia Eficiente en Hardware}: RetNet o Mamba. RetNet ofrece cambio paradigma limpio entre entrenamiento y inferencia; Mamba proporciona mejor escalado lineal en entrenamiento sin compromiso de expresividad.
+
+\item \textbf{Para Contexto Extremadamente Largo}: Mamba, Titans, o RetNet. Mamba sin caché KV, Titans con memoria persistente, RetNet con estado comprimido permiten el mayor contexto sin agotamiento de memoria.
+
+\item \textbf{Para Despliegue en Dispositivos Limitados}: Mamba (bajo consumo de memoria, $\mathcal{O}(1)$ inferencia) o Transformador ODE si desempeño es crítico.
+
+\item \textbf{Para Tareas Que Requieren Comportamiento Adaptativo}: Titans. Su capacidad de actualizar memoria en tiempo de prueba responde a distribuciones de entrada dinámicas.
+\end{itemize}
+
+\appendix
+
+\section{Tipos de Atención Dispersa en Transformadores: Revisión Exhaustiva}
+\label{appendix:sparse_attention}
+
+\subsection{Resumen Ejecutivo}
+
+La autoatención estándar en Transformadores calcula interacciones por pares para todos los tokens, resultando en complejidad computacional y de memoria $\mathcal{O}(n^2)$. Esto se vuelve prohibitivo para secuencias largas. Los mecanismos de atención dispersa abordan esto restringiendo el conjunto de interacciones de tokens, explotando la observación empírica de que la mayoría de los pesos de atención aprendidos están cerca de cero. Este apéndice revisa siete tipos prominentes de bloques de atención dispersa—desde métodos fundamentales como Sparse Transformer hasta los enfoques más recientes como FASA y NSA—proporcionando para cada uno una descripción, formulación matemática, ventajas/desventajas e implementación en PyTorch.
+
+\subsection{Sparse Transformer (Child et al., 2019)}
+
+\subsubsection{Descripción}
+
+El Sparse Transformer fue uno de los primeros trabajos en introducir \textbf{atención dispersa factorizada}, reduciendo la complejidad de $\mathcal{O}(n^2)$ a $\mathcal{O}(n\sqrt{n})$. En lugar de calcular una matriz de atención completa, factoriza el patrón de atención en dos patrones dispersos complementarios—\textbf{atención con zancada} y \textbf{atención fija}—cada uno atendiendo a $\mathcal{O}(\sqrt{n})$ posiciones. Al componer estos sobre dos cabezas de atención, cada posición puede atender a cada otra posición a través de un camino de longitud como máximo $p+1$, donde $p$ es el número de cabezas factorizado.
+
+El método fue aplicado a imágenes, audio y texto, estableciendo resultados de vanguardia en puntos de referencia de modelado de densidad Enwik8, CIFAR-10 e ImageNet-64.
+
+\subsubsection{Formulación Matemática}
+
+Sea $n$ la longitud de secuencia y $l = \lfloor\sqrt{n}\rfloor$ la zancada. Dos cabezas de atención factorizado se definen:
+
+\textbf{Cabeza de zancada} — cada posición $i$ atiende a posiciones en $\{j : (i - j) \bmod l = 0\}$, es decir, cada posición previa de $l$-ésima:
+
+$$
+A_i^{(\text{zancada})} = \{j : j \leq i,\; (i - j) \bmod l = 0\}
+$$
+
+\textbf{Cabeza fija} — cada posición $i$ atiende a una ventana local más posiciones de columna fija:
+
+$$
+A_i^{(\text{fija})} = \{j : \lfloor j/l \rfloor = \lfloor i/l \rfloor\} \cup \{j : j \bmod l \in \{l{-}c, \ldots, l{-}1\}\}
+$$
+
+donde $c$ es un hiperparámetro para el número de columnas de resumen. La salida de atención general por cabeza sigue atención de producto punto escalado restringida a cada conjunto $A_i$:
+
+$$
+\text{Atención}(Q, K, V)_i = \text{softmax}\!\left(\frac{q_i \cdot K_{A_i}^\top}{\sqrt{d_k}}\right) V_{A_i}
+$$
+
+\subsubsection{Ventajas y Desventajas}
+
+\begin{tabular}{|p{4cm}|p{4cm}|}
+\hline
+\textbf{Ventajas} & \textbf{Desventajas} \\
+\hline
+Reduce complejidad de $\mathcal{O}(n^2)$ a $\mathcal{O}(n\sqrt{n})$ & Los patrones fijos pueden perder dependencias largo-rango importantes \\
+Probado en imágenes, audio, texto & Requiere kernels CUDA personalizados para eficiencia \\
+Habilita secuencias de 10K+ tokens con cientos de capas & El patrón de zancada es agnóstico de datos \\
+\hline
+\end{tabular}
+
+\subsection{Longformer (Beltagy et al., 2020)}
+
+\subsubsection{Descripción}
+
+Longformer introduce un mecanismo de atención que \textbf{escala linealmente} con la longitud de secuencia combinando tres patrones: (1) \textbf{atención de ventana deslizante}, donde cada token atiende a una ventana fija de $w$ vecinos; (2) \textbf{atención de ventana deslizante dilatada}, que introduce espacios de tamaño $d$ para expandir el campo receptivo; y (3) \textbf{atención global} en tokens específicos de la tarea (por ejemplo, \texttt{[CLS]}) que atienden y son atendidos por todos los tokens. Con $L$ capas y tamaño de ventana $w$, el campo receptivo de capa superior es $L \times w$, cubriendo la secuencia completa eficientemente.
+
+\subsubsection{Formulación Matemática}
+
+Para un token en posición $i$ con una ventana deslizante de tamaño $w$:
+
+$$
+A_i^{(\text{desliza})} = \{j : |i - j| \leq w/2\}
+$$
+
+La variante dilatada con dilatación $d$:
+
+$$
+A_i^{(\text{dilatada})} = \{j : |i - j| \leq w/2 \cdot (d + 1),\; (i - j) \bmod (d+1) = 0 \}
+$$
+
+Para tokens globales en conjunto $\mathcal{G}$:
+
+$$
+A_i^{(\text{global})} = \{1, \ldots, n\} \quad \text{si } i \in \mathcal{G}, \qquad A_i^{(\text{desliza})} \cup \mathcal{G} \quad \text{si no}
+$$
+
+La complejidad general es $\mathcal{O}(n \cdot w)$, que es lineal en $n$ para $w$ fijo.
+
+\subsubsection{Ventajas y Desventajas}
+
+\begin{tabular}{|p{4cm}|p{4cm}|}
+\hline
+\textbf{Ventajas} & \textbf{Desventajas} \\
+\hline
+Complejidad lineal $\mathcal{O}(n \cdot w)$ & El tamaño de ventana limita contexto local por capa \\
+Maneja secuencias de 4096+ tokens & Los tokens globales deben ser elegidos específicamente por tarea \\
+Reemplazo intercambiable para atención estándar & Los patrones dilatados pueden perder detalle local fino \\
+Flexible: diferente $w$ por capa & Requiere kernels CUDA dispersos personalizados para eficiencia \\
+\hline
+\end{tabular}
+
+\subsection{BigBird (Zaheer et al., 2020)}
+
+\subsubsection{Descripción}
+
+BigBird combina tres patrones de atención dispersa—\textbf{aleatorio}, \textbf{ventana deslizante (local)} y \textbf{tokens globales}—para lograr \textbf{complejidad lineal} $\mathcal{O}(n)$ mientras preserva las propiedades de completitud de Turing y aproximación universal de atención completa. La contribución teórica prueba que $\mathcal{O}(1)$ tokens globales son suficientes para mantener estas propiedades. BigBird maneja secuencias 8× más largas que BERT en el mismo hardware y logra vanguardia en tareas de preguntas-respuestas, resumen y genómica.
+
+\subsubsection{Formulación Matemática}
+
+Para cada token $i$, el conjunto atendido es:
+
+$$
+A_i = A_i^{(\text{aleatorio})} \cup A_i^{(\text{ventana})} \cup A_i^{(\text{global})}
+$$
+
+donde:
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Aleatorio}: $r$ posiciones elegidas aleatoriamente por token
+\item \textbf{Ventana}: $A_i^{(\text{ventana})} = \{j : |i - j| \leq w/2\}$ para tamaño de ventana $w$
+\item \textbf{Global}: un conjunto de $g$ tokens que atienden a/desde todas las posiciones
+\end{itemize}
+
+La máscara general $M$ es:
+
+$$
+M_{ij} = \mathbf{1}\!\left[j \in A_i^{(\text{aleatorio})} \cup A_i^{(\text{ventana})} \cup A_i^{(\text{global})}\right]
+$$
+
+La atención se calcula como:
+
+$$
+\text{Atención}(Q, K, V)_i = \text{softmax}\!\left(\frac{q_i K_{A_i}^\top}{\sqrt{d_k}}\right) V_{A_i}
+$$
+
+\subsubsection{Ventajas y Desventajas}
+
+\begin{tabular}{|p{4cm}|p{4cm}|}
+\hline
+\textbf{Ventajas} & \textbf{Desventajas} \\
+\hline
+Aproximador universal comprobado y Turing completo & Los patrones aleatorios introducen no-determinismo \\
+Complejidad lineal $\mathcal{O}(n)$ & La granularidad de bloque puede desperdiciar cómputo \\
+Maneja 8× secuencias más largas que BERT & Requiere sintonización cuidadosa de $r, w, g$ \\
+Fuerte en P+R, resumen, genómica & Menos efectivo en tareas que necesitan atención global densa \\
+\hline
+\end{tabular}
+
+\subsection{SparseK Attention (Lou et al., 2024)}
+
+\subsubsection{Descripción}
+
+SparseK Attention introduce un \textbf{operador top-k diferenciable} para atención dispersa que habilita optimización basada en gradientes. Una red de puntuación aprendida evalúa la importancia de cada par clave-valor, y el operador SparseK selecciona un número constante $k$ de pares KV por consulta. Esto produce \textbf{complejidad temporal lineal} durante entrenamiento y \textbf{huella de memoria constante} durante generación autorregresiva. Se integra sin inconvenientes en LLMs entrenados con sintonización mínima.
+
+\subsubsection{Formulación Matemática}
+
+Para cada consulta $q$, una red de puntuación produce puntuaciones de importancia $u \in \mathbb{R}^n$ para todos los pares KV. El \textbf{operador SparseK} calcula un umbral $\tau(u)$ tal que la suma de puntuaciones normalizadas sea igual a $k$:
+
+$$
+\text{SparseK}(u, k)_j = \max(u_j - \tau(u), 0)
+$$
+
+donde $\tau$ se elige tal que $\sum_j \max(u_j - \tau, 0) = k$. Esta es una relajación diferenciable de top-k. La atención es entonces:
+
+$$
+m_j = \text{SparseK}(u, k)_j, \quad \text{Atención}(q, K, V) = \text{softmax}\!\left(\frac{qK_{\text{sel}}^\top}{\sqrt{d_k}}\right) V_{\text{sel}}
+$$
+
+donde $K_{\text{sel}}, V_{\text{sel}}$ contienen solo las entradas top-$k$.
+
+\subsubsection{Ventajas y Desventajas}
+
+\begin{tabular}{|p{4cm}|p{4cm}|}
+\hline
+\textbf{Ventajas} & \textbf{Desventajas} \\
+\hline
+Diferenciable, soporta entrenamiento de extremo a extremo & La red de puntuación añade sobrecarga \\
+Tiempo lineal, memoria constante en generación & Requiere sintonización fina cuando se aplica a modelos pre-entrenados \\
+Integración sin inconvenientes en LLMs existentes & Los $k$ fijo pueden no ser óptimos para todas las capas/cabezas \\
+Supera métodos de atención dispersa previos & La selección top-k no está aligned con hardware \\
+\hline
+\end{tabular}
+
+\subsection{NSA — Native Sparse Attention (Yuan et al., 2025)}
+
+\subsubsection{Descripción}
+
+NSA, desarrollado por DeepSeek, es un mecanismo de atención dispersa \textbf{entrenable nativamente} que integra optimizaciones alineadas con hardware con una \textbf{estrategia dispersa jerárquica dinámica}. A diferencia de métodos solo para inferencia, NSA soporta entrenamiento de extremo a extremo, reduciendo cómputo de preentrenamiento sin sacrificar desempeño. Procesa claves y valores a través de tres ramas de atención paralelas:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Atención comprimida}: tokens de grano grueso mediante un MLP aprendible que agrega bloques
+\item \textbf{Atención seleccionada}: selección de bloque top-$n$ de grano fino basada en puntuaciones comprimidas
+\item \textbf{Ventana deslizante}: contexto local de los $w$ tokens más recientes
+\end{enumerate}
+
+Las salidas se combinan a través de un mecanismo de compuerta aprendido. NSA logra aceleración de descodificación de hasta 11.6× y aceleración forward de 9× en secuencias de longitud 64k.
+
+\subsubsection{Formulación Matemática}
+
+La atención general reemplaza $(\mathbf{k}_{1:t}, \mathbf{v}_{1:t})$ completa con representaciones compactas mediante tres estrategias:
+
+$$
+o_t^* = \sum_{c \in \{\text{cmp}, \text{slc}, \text{win}\}} g_t^c \cdot \text{Atención}(q_t, \tilde{K}_t^c, \tilde{V}_t^c)
+$$
+
+donde $g_t^c \in [0,1]$ son puntuaciones de compuerta aprendidas de un MLP + sigmoid.
+
+\textbf{Compresión} — Un MLP aprendible $\varphi$ mapea bloques de $l$ claves con zancada $d$:
+
+$$
+\tilde{K}_t^{\text{cmp}} = \left(\varphi(k_{id+1:id+l})\right)_{1 \leq i \leq \lfloor(t-l)/d\rfloor}
+$$
+
+\textbf{Selección} — Importancia de bloque desde puntuaciones de atención comprimida:
+
+$$
+p_t^{\text{cmp}} = \text{softmax}(q_t^\top \tilde{K}_t^{\text{cmp}}), \quad I_t = \{i : \text{rango}(p_t^{\text{slc}'}[i]) \leq n\}
+$$
+
+\textbf{Ventana deslizante}: $\tilde{K}_t^{\text{win}} = k_{t-w:t}$.
+
+\textbf{Tokens totales atendidos por consulta}: $N_t = \lfloor t/d \rfloor + n \cdot l' + w \ll t$.
+
+\subsubsection{Ventajas y Desventajas}
+
+\begin{tabular}{|p{4cm}|p{4cm}|}
+\hline
+\textbf{Ventajas} & \textbf{Desventajas} \\
+\hline
+Entrenable de extremo a extremo nativamente & Requiere kernels Triton personalizados \\
+Diseño alineado con hardware (utilización Tensor Core) & Arquitectura compleja multi-rama \\
+11.6× aceleración descodificación, 9× forward a 64k & Necesita backbone GQA/MQA para mejores resultados \\
+Supera atención completa en muchos benchmarks & El MLP de compresión añade parámetros \\
+Diseño jerárquico captura patrones locales y globales & Mayor complejidad de implementación vs. métodos más simples \\
+\hline
+\end{tabular}
+
+\subsection{SpargeAttn (Zhang et al., 2025)}
+
+\subsubsection{Descripción}
+
+SpargeAttn es un método de atención dispersa \textbf{universal sin entrenamiento} que acelera modelos diversos—generación de lenguaje, imagen y video—usando un \textbf{filtro en línea de dos etapas} construido sobre FlashAttention. La primera etapa predice rápidamente qué bloques de la matriz de atención contendrán valores cercanos a cero y salta las multiplicaciones $Q_iK_j^\top$ correspondientes. La segunda etapa aplica un \textbf{filtro consciente de softmax en línea} sin sobrecarga adicional para eliminar más cómputos $\tilde{P}_{ij}V_j$ innecesarios. SpargeAttn logra aceleración de 2.5–5× mientras preserva métricas de extremo a extremo.
+
+\subsubsection{Formulación Matemática}
+
+SpargeAttn opera en nivel de bloque. Para bloque de consulta $Q_i$ y bloque de clave $K_j$:
+
+\textbf{Etapa 1 — Predicción Dispersa}: Estimar si $\text{Atención}(Q_i, K_j)$ será negligible. Esto se hace computando un proxy de bajo costo (por ejemplo, usando representaciones comprimidas o auto-similitud de token):
+
+$$
+\hat{s}_{ij} = f_{\text{pred}}(Q_i, K_j) \quad \Rightarrow \quad \text{saltar si } \hat{s}_{ij} < \epsilon_1
+$$
+
+\textbf{Etapa 2 — Filtro Consciente de Softmax}: Después de computar $\tilde{P}_{ij} = \text{softmax}(Q_i K_j^\top / \sqrt{d_k})$, verificar si la contribución del bloque es negligible relativa al máximo de softmax en línea corrida:
+
+$$
+\text{saltar } \tilde{P}_{ij} V_j \quad \text{si } \max(\tilde{P}_{ij}) \ll e^{m_{\text{old}} - m_{\text{new}}}
+$$
+
+donde $m_{\text{old}}, m_{\text{new}}$ son máximos de softmax en línea corrida.
+
+\subsubsection{Ventajas y Desventajas}
+
+\begin{tabular}{|p{4cm}|p{4cm}|}
+\hline
+\textbf{Ventajas} & \textbf{Desventajas} \\
+\hline
+Universal: funciona en LLMs, diffusion de imagen y video & La aceleración depende de sparsidad inherente \\
+Sin entrenamiento, plug-and-play & La granularidad de bloque puede perder patrones finos \\
+2.5–5× más rápido que atención densa/dispersa existente & El filtro de dos etapas añade algo de sobrecarga constante \\
+Mejora desempeño de LLM con contexto largo & Requiere integración kernel Triton/CUDA \\
+Compatible con cuantificación & Sintonización de umbral $\epsilon$ necesaria por familia de modelo \\
+\hline
+\end{tabular}
+
+\subsection{FASA — Frequency-Aware Sparse Attention (Wang et al., 2026)}
+
+\subsubsection{Descripción}
+
+FASA es un marco de atención dispersa \textbf{sin entrenamiento} que aprovecha una insight novedosa sobre RoPE (Rotary Position Embeddings): solo un pequeño subconjunto de \textbf{fragmentos de frecuencia} (FCs) en cada cabeza de atención contribuye a conciencia contextual, mientras que la mayoría codifica patrones posicionales. Estos ``FCs dominantes'' son \textbf{dispersos} (menos del 1\% de todos los FCs), \textbf{universales} a través de escalas de modelo, y \textbf{agnósticos de tarea}. FASA opera en dos etapas: (1) \textbf{Predicción de Importancia de Token (TIP)} usa FCs dominantes para estimar barato qué tokens importan, y (2) \textbf{Cómputo de Atención Enfocada (FAC)} realiza atención de precisión completa solo en el subconjunto seleccionado.
+
+FASA logra prácticamente 100\% del desempeño de KV completo en LongBench mientras mantiene solo 256 tokens, y entrega aceleración de 2.56× con uso de caché de 18.9\%.
+
+\subsubsection{Formulación Matemática}
+
+\textbf{Descomposición de Fragmento de Frecuencia bajo RoPE.} Cada vector de dimensión $d$ se divide en $d/2$ fragmentos 2D $\mathbf{v}^{[i]} = (v_{2i}, v_{2i+1})^\top$. La rotación RoPE es diagonal por bloques:
+
+$$
+\mathbf{R}_{\Delta t} = \bigoplus_{i=1}^{d/2} \mathbf{R}_{\Delta t, \theta_i}, \quad \theta_i = B^{-2(i-1)/d}
+$$
+
+\textbf{Acuerdo Contextual (CA)} mide la dominancia de FC $i$ en cabeza $(l,h)$:
+
+$$
+\text{CA}_{\mathcal{K}}^{l,h,i}(\mathbf{q}_t, \mathbf{K}_{1:t}) = \frac{|\text{TopK-I}(\boldsymbol{\alpha}_{l,h}, \mathcal{K}) \cap \text{TopK-I}(\boldsymbol{\alpha}_{l,h}^{(i)}, \mathcal{K})|}{\mathcal{K}}
+$$
+
+\textbf{Etapa TIP} — Puntuación de importancia en línea usando solo FCs dominantes $\mathcal{I}_{\text{dom}}$:
+
+$$
+\mathbf{S}_t^{l,h} = \sum_{i \in \mathcal{I}_{\text{dom}}^{l,h}} \boldsymbol{\alpha}^{l,h,i}(\mathbf{q}_t, \mathbf{K}_{1:t}), \quad \mathcal{T}_t = \text{TopK-I}(\mathbf{S}_t^{l,h}, N_{\text{fac}})
+$$
+
+\textbf{Etapa FAC} — Atención de precisión completa en tokens seleccionados:
+
+$$
+\hat{\boldsymbol{\alpha}}_{\text{FAC}}^{l,h} = \text{softmax}\!\left(\frac{\mathbf{q}_t \mathbf{K}_{\mathcal{T}_t}^\top}{\sqrt{d}}\right), \quad \mathbf{O}_t^{l,h} = \hat{\boldsymbol{\alpha}}_{\text{FAC}}^{l,h} \, \mathbf{V}_{\mathcal{T}_t}
+$$
+
+\textbf{Complejidad general}: $\mathcal{O}(2t \cdot N_{\text{tip}} + 2 N_{\text{fac}} \cdot d)$ vs. $\mathcal{O}(2td)$ para atención completa. Aceleración $\approx d / N_{\text{tip}}$ cuando $N_{\text{fac}} \ll t$.
+
+\subsubsection{Ventajas y Desventajas}
+
+\begin{center}
+{\small
+\begin{tabular}{p{3.5cm}p{3.5cm}}
+\toprule
+\textbf{Ventajas} & \textbf{Desventajas} \\
+\midrule
+Sin entrenamiento, plug-and-play & Requiere modelos basados en RoPE (extendible a ALiBi/MLA) \\
+Precisión casi-oracle con $\leq 256$ tokens & Paso de calibración offline necesario (aunque una sola vez) \\
+Dos variantes: FASA-M (memoria), FASA-C (cómputo) & El análisis de dominancia de FC añade complejidad de implementación \\
+Hasta 8× compresión caché KV y aceleración 2.56× & Desempeño depende de calidad de identificación de FC dominante \\
+Ortogonal a otros métodos de compresión KV & Limitado a optimización de fase de descodificación \\
+\bottomrule
+\end{tabular}
+}
+\end{center}
+
+\subsection{Tabla Comparativa Resumen}
+
+\begin{center}
+{\tiny
+\begin{tabularx}{\linewidth}{p{1.6cm}p{0.5cm}p{1.5cm}p{1.4cm}p{0.65cm}p{0.65cm}p{1.8cm}}
+\toprule
+\textbf{Método} & \textbf{Año} & \textbf{Complejidad} & \textbf{Huella Mem.} & \textbf{Entr.} & \textbf{S.Entr.} & \textbf{Innovación Clave} \\
+\midrule
+Sparse Transformer & 2019 & $\mathcal{O}(n\sqrt{n})$ & $\mathcal{O}(n\sqrt{n})$ & Sí & No & Patrones zancada+fijo factorizado \\
+Longformer & 2020 & $\mathcal{O}(n \cdot w)$ & $\mathcal{O}(n \cdot w)$ & Sí & No & Ventana + dilatada + global \\
+BigBird & 2020 & $\mathcal{O}(n)$ & $\mathcal{O}(n)$ & Sí & No & Aleatorio + ventana + global \\
+SparseK Attn. & 2024 & $\mathcal{O}(n)$ / $\mathcal{O}(k)$ & $\mathcal{O}(k)$ & Sí & No & Op. top-k diferenciable \\
+NSA & 2025 & $\mathcal{O}(t/d+nl'+w)$ & $\mathcal{O}(t/d+nl'+w)$ & Sí & No & Comprime+selecciona+ventana \\
+SpargeAttn & 2025 & $\mathcal{O}(n^2 \cdot s)$ & $\mathcal{O}(n)$ & No & Sí & Filtro dos etapas \\
+FASA & 2026 & $\mathcal{O}(t \cdot N_{t}+N_{f} \cdot d)$ & $\mathcal{O}(N_{f} \cdot d)$ & No & Sí & Sparsidad freq. en RoPE \\
+\bottomrule
+\end{tabularx}
+}
+\end{center}
+\end{center}
+
+\noindent
+Notas: $n$ = longitud de secuencia; $w$ = tamaño de ventana; $k$ = pares KV seleccionados; $t$ = longitud de contexto; $d$ = dimensión de cabeza; $N_{\text{tip}}$ = número de FCs dominantes; $N_{\text{fac}}$ = número de tokens seleccionados para atención enfocada; $l'$ = tamaño de bloque de selección; $s$ = fracción de bloques no dispersos.
+
+\subsection{Guía de Selección y Recomendaciones}
+
+\subsubsection{Para Máximo Desempeño}
+
+Los métodos \textbf{Sparse Transformer}, \textbf{BigBird} y \textbf{NSA} ofrecen compensaciones equilibradas entre complejidad y exactitud. El Sparse Transformer estándar es el más probado empíricamente; NSA es el más moderno y eficiente en hardware.
+
+\subsubsection{Para Inferencia Eficiente}
+
+Los métodos sin entrenamiento \textbf{FASA} y \textbf{SpargeAttn} son plug-and-play ideales, requiriendo zero modificación de modelos pre-entrenados. FASA sobresale con restricciones de caché KV severas; SpargeAttn es universal a través de arquitecturas.
+
+\subsubsection{Para Contextos Extremadamente Largos}
+
+SparseK, NSA y BigBird soportan contextos de decenas de miles de tokens. NSA es el más eficiente computacionalmente; BigBird es el más probado teóricamente.
+
+\subsubsection{Para Dispositivos Limitados en Memoria}
+
+SparseK (memoria constante durante inferencia) y FASA (compresión de 8× caché) son óptimos. Longformer es también práctico para memoria limitada con ventana de tamaño controlable.
+
+\subsubsection{Para Modelos Existentes Sin Reentrenamiento}
+
+FASA y SpargeAttn son el único camino: ambos operan sin entrenamiento. FASA requiere calibración offline; SpargeAttn es completamente dinámico.
+
+\appendix
+
+\section{Bloques de Atención con Compuerta en Transformadores: Una Revisión Completa} \label{sec:gated_attention_blocks}
+
+\subsection{Introducción y Motivación}
+
+El mecanismo de atención softmax estándar en Transformadores, aunque poderoso, sufre de complejidad cuadrática en la longitud de la secuencia y carece de mecanismos explícitos para gestión de memoria. Entre 2023 y 2025, ha surgido una familia de arquitecturas de \textbf{atención con compuerta} para abordar estas limitaciones mediante la incorporación de compuertas dependientes de datos en el cálculo de atención. Estos mecanismos se inspiran en las compuertas de olvido en redes neuronales recurrentes (LSTM, GRU) y las aplican a atención lineal, modelos de espacio de estado o incluso atención softmax misma.
+
+Esta sección cubre siete arquitecturas clave, proporcionando para cada una: descripción, formulación matemática, ventajas y limitaciones, y un pseudocódigo de algoritmo estilo paper.
+
+\subsection{1. Atención Lineal con Compuerta (GLA)}
+
+\subsubsection{Descripción}
+
+Atención Lineal con Compuerta (GLA, Yang et al., 2023) aumenta la atención lineal vanilla con un mecanismo de compuerta dependiente de datos. La atención lineal reformula la atención estándar como una recurrencia con estado oculto valuado en matrices $\mathbf{S}_t = \mathbf{S}_{t-1} + \mathbf{v}_t \mathbf{k}_t^\top$, permitiendo inferencia con memoria constante. Sin embargo, esta acumulación puramente aditiva conduce a ``sobrecarga de memoria''---asociaciones antiguas nunca pueden ser borradas. GLA introduce una matriz de compuerta diagonal $\mathbf{G}_t$ para desintegrar selectivamente información histórica, reduciendo significativamente la brecha de rendimiento con atención softmax.
+
+El algoritmo \textit{FLASHLINEARATTENTION} logra complejidad de entrenamiento sub-cuadrática mediante una estrategia de bloques paralela que maximiza la utilización de núcleos tensoriales.
+
+\subsubsection{Formulación Matemática}
+
+La forma recurrente de GLA es:
+\begin{equation}
+\mathbf{S}_t = \mathbf{G}_t \odot \mathbf{S}_{t-1} + \mathbf{v}_t \mathbf{k}_t^\top, \quad \mathbf{o}_t = \mathbf{S}_t \mathbf{q}_t
+\end{equation}
+
+donde $\mathbf{G}_t \in \mathbb{R}^{d \times d}$ es parametrizado con estructura de producto exterior $\mathbf{G}_t = \mathbf{1} \boldsymbol{\alpha}_t^\top$, y $\boldsymbol{\alpha}_t$ se calcula vía proyección de bajo rango seguida de activación logsigmoide y normalización:
+
+\begin{equation}
+\boldsymbol{\alpha}_t = \frac{\log \sigma(\mathbf{W}_{gk} \mathbf{x}_t)}{c}
+\end{equation}
+
+donde $c$ es un normalizador (típicamente 16). En forma paralela por bloques:
+
+\begin{equation}
+\mathbf{O}_{[t]} = \overleftarrow{\mathbf{Q}}_{[t]} \mathbf{S}_{[t]}^\top + \left(\mathbf{Q}_{[t]} \mathbf{K}_{[t]}^\top \odot \mathbf{\Gamma}_{[t]}\right) \mathbf{V}_{[t]}
+\end{equation}
+
+donde $\mathbf{\Gamma}$ es la máscara causal consciente de descomposición.
+
+\subsubsection{Pseudocódigo}
+
+\begin{algorithm}
+\caption{Atención Lineal con Compuerta (GLA) - Forma Recurrente}
+\begin{algorithmic}[1]
+\Require Entrada secuencial $x_{1:L}$, proyecciones aprend. $W_q, W_k, W_v, W_{gk}$
+\Ensure Salida atendida $\mathbf{O}$
+\State $\mathbf{S} \gets \mathbf{0}_{d \times d}$, $\mathbf{O} \gets []$
+\For{$t = 1$ to $L$}
+    \State $\mathbf{q}_t \gets W_q(x_t)$, $\mathbf{k}_t \gets W_k(x_t)$, $\mathbf{v}_t \gets W_v(x_t)$
+    \State $\boldsymbol{\alpha}_t \gets \log \sigma(W_{gk}(x_t)) / 16$
+    \State $\boldsymbol{\alpha}_t \gets \exp(\boldsymbol{\alpha}_t)$ \quad $\triangleright$ descomposición por elemento
+    \State $\mathbf{S} \gets \mathbf{S} \cdot \boldsymbol{\alpha}_t + \mathbf{v}_t \mathbf{k}_t^\top$ \quad $\triangleright$ actualización de estado
+    \State $\mathbf{o}_t \gets \mathbf{S} \mathbf{q}_t$ \quad $\triangleright$ lectura de estado
+    \State Agregar $\mathbf{o}_t$ a $\mathbf{O}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Ventajas y Limitaciones}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{0.45\linewidth}|p{0.45\linewidth}|}
+\hline
+\textbf{Ventajas} & \textbf{Limitaciones} \\
+\hline
+Entrenamiento sub-cuadrático vía paralelismo por bloques & Desempeño inferior a atención softmax en tareas de recuperación \\
+\hline
+Memoria constante $\mathcal{O}(d^2)$ en inferencia & Estructura de compuerta limita selectividad por valor-clave individual \\
+\hline
+Buena generalización de longitud (2K $\rightarrow$ 20K+) & Aún existe una brecha vs. Transformadores en tareas de contexto largo \\
+\hline
+Mayor rendimiento que Mamba a escala similar & Requiere kernels CUDA personalizados para velocidad óptima \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{2. DeltaNet}
+
+\subsubsection{Descripción}
+
+DeltaNet aplica la regla de aprendizaje clásica \textbf{delta}---un principio de corrección de errores---a atención lineal. En lugar de meramente acumular productos externos clave-valor, DeltaNet actualiza su estado computando la diferencia entre el valor predicho (recuperado de memoria vía la clave actual) y el valor objetivo, luego corrigiendo en consecuencia. Esto es matemáticamente equivalente a ejecutar un paso de descenso de gradiente estocástico en una pérdida MSE \textit{online} en cada paso temporal, conectando DeltaNet al paradigma de entrenamiento en tiempo de prueba (TTT).
+
+DeltaNet demuestra desempeño perfecto en recuperación asociativa multi-consulta (MQAR), un benchmark sintético crítico, y supera modelos lineales con compuerta en tareas de recuperación en contexto.
+
+\subsubsection{Formulación Matemática}
+
+La actualización de estado DeltaNet (regla delta) es:
+
+\begin{equation}
+\mathbf{S}_t = \mathbf{S}_{t-1}(\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top) + \beta_t \mathbf{v}_t \mathbf{k}_t^\top
+\end{equation}
+
+donde $\beta_t \in (0,1)$ es la ``fortaleza de escritura'' dependiente de datos (sigmoide de proyección lineal), y las claves están normalizadas L2. Esto puede descomponerse como operación borrar-escribir:
+
+\begin{equation}
+\mathbf{v}_t^{\text{nueva}} = (1 - \beta_t)\mathbf{v}_t^{\text{vieja}} + \beta_t \mathbf{v}_t, \quad \mathbf{S}_t = \mathbf{S}_{t-1} - \mathbf{v}_t^{\text{vieja}} \mathbf{k}_t^\top + \mathbf{v}_t^{\text{nueva}} \mathbf{k}_t^\top
+\end{equation}
+
+Conexión con aprendizaje online: DeltaNet minimiza $\mathcal{L}_t(\mathbf{S}) = \frac{1}{2}\|\mathbf{S}\mathbf{k}_t - \mathbf{v}_t\|^2$ vía descenso de gradiente con tasa de aprendizaje $\beta_t$.
+
+\subsubsection{Pseudocódigo}
+
+\begin{algorithm}
+\caption{DeltaNet - Regla Delta para Atención Lineal}
+\begin{algorithmic}[1]
+\Require Entrada $x_{1:L}$, normalizador L2
+\Ensure Salida $\mathbf{O}$
+\State $\mathbf{S} \gets \mathbf{0}_{d \times d}$, $\mathbf{O} \gets []$
+\For{$t = 1$ to $L$}
+    \State $\mathbf{q}_t \gets \text{NORM}(W_q(x_t))$, $\mathbf{k}_t \gets \text{NORM}(W_k(x_t))$
+    \State $\mathbf{v}_t \gets W_v(x_t)$
+    \State $\beta_t \gets \sigma(W_\beta(x_t))$ \quad $\triangleright$ fortaleza de escritura
+    \State $\mathbf{S} \gets \mathbf{S}(I - \beta_t \mathbf{k}_t \mathbf{k}_t^\top) + \beta_t \mathbf{v}_t \mathbf{k}_t^\top$
+    \State $\mathbf{o}_t \gets \mathbf{S} \mathbf{q}_t$
+    \State Agregar $\mathbf{o}_t$ a $\mathbf{O}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Ventajas y Limitaciones}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{0.45\linewidth}|p{0.45\linewidth}|}
+\hline
+\textbf{Ventajas} & \textbf{Limitaciones} \\
+\hline
+Recuperación asociativa superior en contexto (MQAR perfecto) & Sin olvido global $\rightarrow$ abarrotamiento de memoria en secuencias largas reales \\
+\hline
+Teóricamente principiado (optimización MSE online) & Ligeramente más lento que Mamba2 por transiciones más ricas \\
+\hline
+Capacidades fuertes de seguimiento de estado & Desempeño modesto en recuperación en contexto de mundo real \\
+\hline
+Entrenamiento paralelo eficiente vía representación WY & Requiere claves normalizadas L2 para estabilidad \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{3. Gated DeltaNet}
+
+\subsubsection{Descripción}
+
+Gated DeltaNet (Yang et al., 2024) es una síntesis natural del mecanismo de compuerta de Mamba2/GLA y la regla delta de DeltaNet. La perspectiva clave es que estos dos mecanismos son \textbf{complementarios}: la compuerta permite borrado rápido de memoria (estableciendo $\alpha_t \to 0$ limpia el estado), mientras que la regla delta permite actualizaciones dirigidas por clave-valor (estableciendo $\alpha_t \to 1$ recupera regla delta pura).
+
+Publicado en ICLR 2025, Gated DeltaNet supera consistentemente tanto a Mamba2 como a DeltaNet en modelado de lenguaje, razonamiento de sentido común, recuperación en contexto, extrapolación de longitud y comprensión de contexto largo. Ha sido integrado en modelos Qwen3-Next y Qwen3.5 de Alibaba.
+
+\subsubsection{Formulación Matemática}
+
+La actualización de estado de \textbf{regla delta con compuerta} es:
+
+\begin{equation}
+\mathbf{S}_t = \mathbf{S}_{t-1} \left(\alpha_t (\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top)\right) + \beta_t \mathbf{v}_t \mathbf{k}_t^\top
+\end{equation}
+
+donde $\alpha_t \in (0,1)$ es la compuerta de descomposición y $\beta_t \in (0,1)$ es la fortaleza de escritura. Desde la perspectiva de aprendizaje online, esto corresponde a:
+
+\begin{equation}
+\|\mathbf{S}_t - \alpha_t \mathbf{S}_{t-1}\|_F^2 - 2\langle \mathbf{S}_t \mathbf{k}_t, \beta_t(\mathbf{v}_t - \alpha_t \mathbf{S}_{t-1} \mathbf{k}_t)\rangle
+\end{equation}
+
+Esto introduce decaimiento de peso adaptativo $\alpha_t$ en la actualización estilo SGD, análogo a decoupled weight decay en optimización de aprendizaje profundo.
+
+\subsubsection{Pseudocódigo}
+
+\begin{algorithm}
+\caption{Gated DeltaNet - Regla Delta Compuertada}
+\begin{algorithmic}[1]
+\Require Entrada $x_{1:L}$, normalizador L2
+\Ensure Salida $\mathbf{O}$
+\State $\mathbf{S} \gets \mathbf{0}_{d \times d}$, $\mathbf{O} \gets []$
+\For{$t = 1$ to $L$}
+    \State $\mathbf{q}_t \gets \text{NORM}(W_q(x_t))$, $\mathbf{k}_t \gets \text{NORM}(W_k(x_t))$
+    \State $\mathbf{v}_t \gets W_v(x_t)$
+    \State $\alpha_t \gets \sigma(W_\alpha(x_t))$ \quad $\triangleright$ compuerta de descomposición
+    \State $\beta_t \gets \sigma(W_\beta(x_t))$ \quad $\triangleright$ fortaleza de escritura
+    \State $\mathbf{S} \gets \mathbf{S} \cdot \alpha_t \cdot (\mathbf{I} - \beta_t \mathbf{k}_t \mathbf{k}_t^\top) + \beta_t \mathbf{v}_t \mathbf{k}_t^\top$
+    \State $\mathbf{o}_t \gets \mathbf{S} \mathbf{q}_t$
+    \State Agregar $\mathbf{o}_t$ a $\mathbf{O}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Ventajas y Limitaciones}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{0.45\linewidth}|p{0.45\linewidth}|}
+\hline
+\textbf{Ventajas} & \textbf{Limitaciones} \\
+\hline
+Mejor entre modelos recurrentes lineales puros & Rendimiento ligeramente menor que Mamba2 (matrices de transición más ricas) \\
+\hline
+Complementariedad compuerta + regla delta para gestión de memoria & Requiere kernels triton/CUDA personalizados para producción \\
+\hline
+Entrenamiento paralelo eficiente & Dos compuertas ($\alpha$, $\beta$) aumentan sensibilidad a hiperparámetros \\
+\hline
+Variantes híbridas (con atención de ventana) superan Transformadores & Acotado por tamaño fijo de estado para recuperación exacta \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{4. RetNet (Red Retentiva)}
+
+\subsubsection{Descripción}
+
+RetNet, propuesto por Sun et al. (2023) en Microsoft Research, introduce un \textbf{mecanismo de retención} que unifica los beneficios de recurrencia (inferencia eficiente) con atención (entrenamiento paralelo). La innovación clave es reemplazar atención softmax con descomposición exponencial dependiente de posición, permitiendo tres paradigmas de computación: paralelo, recurrente y recurrente por bloques.
+
+RetNet utiliza \textbf{retención multi-escala} donde cada cabeza tiene una tasa de descomposición diferente $\gamma_h$, permitiendo que diferentes cabezas capturen dependencias en diferentes escalas temporales. Logra memoria de inferencia $\mathcal{O}(1)$ y latencia, rendimiento comparable a Transformadores en modelado de lenguaje, y es compatible con entrenamiento completamente paralelizable.
+
+\subsubsection{Formulación Matemática}
+
+El mecanismo de retención en \textbf{forma paralela} es:
+
+\begin{equation}
+\mathbf{O} = (\mathbf{Q}\mathbf{K}^\top \odot \mathbf{D}) \mathbf{V}
+\end{equation}
+
+donde la matriz de descomposición $D_{nm} = \gamma^{n-m}$ para $n \geq m$, y 0 en otro caso. En \textbf{forma recurrente}:
+
+\begin{equation}
+\mathbf{S}_t = \gamma \mathbf{S}_{t-1} + \mathbf{v}_t \mathbf{k}_t^\top, \quad \mathbf{o}_t = \mathbf{S}_t \mathbf{q}_t
+\end{equation}
+
+Para retención multi-escala, cada cabeza $h$ usa un $\gamma_h$ diferente, e información posicional se codifica vía incrustaciones complejas exponenciales estilo xPos. La \textbf{forma recurrente por bloques} procesa bloques en paralelo mientras propaga estados recurrentemente entre bloques.
+
+\subsubsection{Pseudocódigo}
+
+\begin{algorithm}
+\caption{RetNet - Retención Multi-Escala}
+\begin{algorithmic}[1]
+\Require Entrada $x_{1:L}$, tasas de descomposición $\gamma_{1:H}$ (por cabeza)
+\Ensure Salida $\mathbf{O}$
+\State $\mathbf{S} \gets \mathbf{0}_{H \times d \times d}$, $\mathbf{O} \gets []$
+\For{$t = 1$ to $L$}
+    \State $\mathbf{q}_t \gets W_q(x_t)$, $\mathbf{k}_t \gets W_k(x_t)$, $\mathbf{v}_t \gets W_v(x_t)$
+    \State \quad $\triangleright$ Re-parametriza con incrustaciones complejas xPos
+    \For{$h = 1$ to $H$}
+        \State $\mathbf{S}_h \gets \gamma_h \mathbf{S}_h + \mathbf{v}_{t,h} \mathbf{k}_{t,h}^\top$
+        \State $\mathbf{o}_{t,h} \gets \mathbf{S}_h \mathbf{q}_{t,h}$
+    \EndFor
+    \State Agregar $[\mathbf{o}_{t,1}; \ldots; \mathbf{o}_{t,H}]$ a $\mathbf{O}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Ventajas y Limitaciones}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{0.45\linewidth}|p{0.45\linewidth}|}
+\hline
+\textbf{Ventajas} & \textbf{Limitaciones} \\
+\hline
+Tres paradigmas de computación (paralelo/recurrente/por bloques) & Tasa de descomposición fija (no dependiente de datos) limita adaptatividad \\
+\hline
+$\mathcal{O}(1)$ memoria de inferencia; sin caché KV necesario & Desempeño inferior a modelos con compuerta dependiente de datos \\
+\hline
+Sin softmax $\rightarrow$ computación más simple & Expresividad limitada para tareas de recuperación \\
+\hline
+Compatible con entrenamiento paralelo & Esquema de incrustación posicional complejo \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{5. HGRN2 (Red Recurrente con Compuertas Jerárquicas 2)}
+
+\subsubsection{Descripción}
+
+HGRN2, por Qin et al. (2024), extiende HGRN introduciendo un mecanismo de \textbf{expansión de estado basado en producto exterior} que engranda significativamente el tamaño del estado recurrente sin agregar parámetros. Mientras HGRN usa un estado oculto valuado en vectores con compuertas de olvido jerárquicas (tramos inferiores aumentan para capas superiores), HGRN2 adopta un estado valuado en matrices vía productos exteriores clave-valor, proporcionando una \textbf{interpretación de atención lineal} que permite entrenamiento eficiente en hardware.
+
+HGRN2 en escala 3B ligeramente supera Mamba y Transformadores arquitectura-LLaMA en modelado de lenguaje.
+
+\subsubsection{Formulación Matemática}
+
+La actualización de estado HGRN2 es:
+
+\begin{equation}
+\mathbf{S}_t = \text{diag}(\mathbf{g}_t) \cdot \mathbf{S}_{t-1} + \mathbf{v}_t \mathbf{k}_t^\top, \quad \mathbf{o}_t = \mathbf{S}_t \mathbf{q}_t
+\end{equation}
+
+donde $\mathbf{g}_t \in \mathbb{R}^d$ es una compuerta de olvido diagonal con \textbf{valores con tramo inferior jerárquico}: el tramo inferior aumenta monótonamente en capas superiores, asegurando que capas superiores capturen dependencias de largo alcance mientras que capas inferiores modelan patrones locales. La compuerta de olvido se calcula como:
+
+\begin{equation}
+\mathbf{g}_t = b + (1 - b) \cdot \sigma(\mathbf{W}_g \mathbf{x}_t)
+\end{equation}
+
+donde $b$ es el tramo inferior dependiente de la capa.
+
+\subsubsection{Pseudocódigo}
+
+\begin{algorithm}
+\caption{HGRN2 - Retención de Red Recurrente Jerárquicamente Compuertada}
+\begin{algorithmic}[1]
+\Require Entrada $x_{1:L}$, tramo inferior por capa $b$
+\Ensure Salida $\mathbf{O}$
+\State $\mathbf{S} \gets \mathbf{0}_{d \times d}$, $\mathbf{O} \gets []$
+\For{$t = 1$ to $L$}
+    \State $\mathbf{q}_t, \mathbf{k}_t, \mathbf{v}_t \gets$ proyecta $x_t$
+    \State $\mathbf{g}_t \gets b + (1 - b) \cdot \sigma(W_g(x_t))$ \quad $\triangleright$ compuerta con tramo inferior
+    \State $\mathbf{S} \gets \text{diag}(\mathbf{g}_t) \cdot \mathbf{S} + \mathbf{v}_t \mathbf{k}_t^\top$
+    \State $\mathbf{o}_t \gets \mathbf{S} \mathbf{q}_t$
+    \State Agregar $\mathbf{o}_t$ a $\mathbf{O}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Ventajas y Limitaciones}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{0.45\linewidth}|p{0.45\linewidth}|}
+\hline
+\textbf{Ventajas} & \textbf{Limitaciones} \\
+\hline
+Expansión de estado eficiente vía productos exteriores (sin params extra) & Compuerta valuada en vectores menos flexible que regla delta \\
+\hline
+Tramos jerárquicos imponen modelado temporal multi-escala & Menos efectivo en tareas de recuperación que variantes DeltaNet \\
+\hline
+Interpretación atención lineal $\rightarrow$ entrenamiento por bloques eficiente & Brecha de desempeño vs. Transformadores persiste en contexto largo \\
+\hline
+Competitivo con Mamba en escala 3B & Requiere ajuste cuidadoso de tramos dependientes de capas \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{6. Transformador de Olvido (FoX)}
+
+\subsubsection{Descripción}
+
+El Transformador de Olvido (FoX, Lin et al., 2025), toma un enfoque diferente de los modelos recurrentes lineales arriba: incrusta una \textbf{compuerta de olvido directamente en atención softmax} agregando un sesgo de logit dependiente de datos a las puntuaciones de atención. Esto preserva la expresividad completa y computación de tiempo cuadrático de atención softmax mientras gana beneficios de control de recencia.
+
+FoX supera Transformadores en modelado de lenguaje de contexto largo, extrapolación de longitud y tareas de corto contexto, mientras mantiene recuperación de aguja-en-pajar cercana-perfecta. Es compatible con FlashAttention y no requiere incrustaciones posicionales.
+
+\subsubsection{Formulación Matemática}
+
+En cada paso temporal, se calcula una compuerta de olvido escalar:
+
+\begin{equation}
+f_t = \sigma(\mathbf{w}_f^\top \mathbf{x}_t + b_f)
+\end{equation}
+
+La salida de \textbf{Atención de Olvido} es:
+
+\begin{equation}
+\mathbf{o}_i = \frac{\sum_{j=1}^{i} \exp(\mathbf{q}_i^\top \mathbf{k}_j + d_{ij}) \mathbf{v}_j}{\sum_{j=1}^{i} \exp(\mathbf{q}_i^\top \mathbf{k}_j + d_{ij})}
+\end{equation}
+
+donde $d_{ij} = \sum_{l=j+1}^{i} \log f_l$. En forma matricial:
+
+\begin{equation}
+\mathbf{O} = \text{softmax}(\mathbf{Q}\mathbf{K}^\top + \mathbf{D}) \mathbf{V}, \quad \text{donde } \mathbf{D} = \log \mathbf{F}
+\end{equation}
+
+Esto es equivalente a una \textbf{versión aprendible y dependiente de datos} de ALiBi. La implementación agrega sumas logarítmicas acumulativas de compuertas de olvido a la computación de logit de atención de FlashAttention, con sobrecarga negligible.
+
+\subsubsection{Pseudocódigo}
+
+\begin{algorithm}
+\caption{FoX - Transformador de Olvido con Sesgo de Logit}
+\begin{algorithmic}[1]
+\Require Consulta $Q$, Clave $K$, Valor $V$, parámetros compuerta $w_f$, $b_f$
+\Ensure Atención con olvido $\mathbf{O}$
+\State $n \gets$ longitud de secuencia
+\State Inicializa matriz sesgo $D$ de tamaño $n \times n$ a cero
+\For{$i = 1$ to $n$}
+    \For{$j = 1$ to $i-1$}  \quad $\triangleright$ causal: solo mirar hacia atrás
+        \State $f_j \gets \sigma(w_f^\top x_j + b_f)$
+        \State $D_{ij} \gets D_{ij} + \log f_j$ \quad $\triangleright$ suma acumulativa de log-compuertas
+    \EndFor
+\EndFor
+\State $\text{logits} \gets \mathbf{Q} \mathbf{K}^\top / \sqrt{d_k} + D$ \quad $\triangleright$ agrega sesgo de olvido
+\State $\text{pesos} \gets \text{softmax}(\text{logits})$
+\State $\mathbf{O} \gets \text{pesos} \cdot \mathbf{V}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Ventajas y Limitaciones}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{0.45\linewidth}|p{0.45\linewidth}|}
+\hline
+\textbf{Ventajas} & \textbf{Limitaciones} \\
+\hline
+Expresividad completa de softmax retenida & Aún $\mathcal{O}(L^2)$ tiempo y memoria (cuadrático) \\
+\hline
+Compatible con FlashAttention (sobrecarga minimal) & Compuerta de olvido agrega sesgo de recencia que puede perjudicar recuperación global \\
+\hline
+Sin incrustaciones posicionales necesarias & Ablaciones de tamaño de modelo solo hasta 760M parámetros \\
+\hline
+Extrapolación de longitud superior vs. Transformador & No tan eficiente en memoria en inferencia como modelos lineales \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{7. Atención con Compuerta (Sigmoide después de SDPA)}
+
+\subsubsection{Descripción}
+
+El Mejor Paper NeurIPS 2025 del equipo Alibaba Qwen investiga sistemáticamente atención softmax aumentada con compuertas a través de más de 30 variantes de modelos MoE 15B y densos 1.7B entrenados en 3.5T tokens. Su hallazgo central es que aplicar una \textbf{compuerta sigmoide específica de cabeza después de SDPA} mejora consistentemente rendimiento, estabilidad de entrenamiento y propiedades de escalado.
+
+Esta modificación simple introduce \textbf{no-linealidad} (rompiendo cuello de botella de rango bajo entre $W_V$ y $W_O$) y \textbf{sparsidad dependiente de consulta} que elimina el fenómeno de sumidero de atención. Ya integrado en Qwen3-Next.
+
+\subsubsection{Formulación Matemática}
+
+El mecanismo de compuerta se formaliza como:
+
+\begin{equation}
+\mathbf{Y}' = \mathbf{Y} \odot \sigma(\mathbf{X}\mathbf{W}_\theta)
+\end{equation}
+
+donde $\mathbf{Y}$ es la salida de SDPA y $\sigma$ es la función sigmoide. Con la canalización de atención completa:
+
+\begin{equation}
+\mathbf{O} = \left[\text{softmax}\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}}\right) \mathbf{V}\right] \odot \sigma(\mathbf{X}\mathbf{W}_g)
+\end{equation}
+
+La forma de puntuación de compuerta es $\mathbb{R}^{n \times q \times d_k}$ para compuerta elemento por elemento (donde $q$ es número de cabezas de consulta), o $\mathbb{R}^{n \times q}$ para compuerta específica de cabeza (solo 1.6M parámetros extra para modelo MoE 15B).
+
+Perspectiva clave: compuertas efectivas son \textbf{sparsas} (puntuación media $\approx 0.116$), actuando como filtros dependientes de consulta.
+
+\subsubsection{Pseudocódigo}
+
+\begin{algorithm}
+\caption{Atención con Compuerta - Compuerta Sigmoide post-SDPA}
+\begin{algorithmic}[1]
+\Require Consulta $Q$, Clave $K$, Valor $V$, entrada $X$, parámetros compuerta $W_g$
+\Ensure Atención compuertada $\mathbf{O}$
+\State $n \gets$ longitud de secuencia, $h \gets$ número de cabezas
+\State $\text{scores} \gets (QK^\top) / \sqrt{d_k}$ \quad $\triangleright$ puntuaciones de compatibilidad
+\State $\text{pesos} \gets \text{softmax}(\text{scores})$ \quad $\triangleright$ normalización estándar
+\State $Y \gets \text{pesos} \cdot V$ \quad $\triangleright$ salida de atención producto-escala
+\State $g \gets \sigma(X W_g)$ \quad $\triangleright$ compuerta sigmoide (por cabeza o elemento)
+\State $\mathbf{O} \gets Y \odot g$ \quad $\triangleright$ modulación por compuerta
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Ventajas y Limitaciones}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{0.45\linewidth}|p{0.45\linewidth}|}
+\hline
+\textbf{Ventajas} & \textbf{Limitaciones} \\
+\hline
+Modificación extremadamente simple ($<$ 2\% sobrecarga de latencia) & Aún $\mathcal{O}(L^2)$ complejidad cuadrática \\
+\hline
+Elimina fenómeno de sumidero de atención & Requiere atención softmax (no aplica a variantes lineales) \\
+\hline
+Mejora estabilidad de entrenamiento; permite tasas aprendizaje mayores & Beneficio marginal para tareas de contexto corto \\
+\hline
+Variante específica de cabeza solo agrega $\sim 1.6$M params para modelo 15B & Efecto parcialmente se superpone con trucos de normalización existentes \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Tabla Comparativa Resumen}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{|l|c|c|c|c|c|c|}
+\hline
+\textbf{Arquitectura} & \textbf{Año} & \textbf{Complejidad} & \textbf{Memoria Inf.} & \textbf{Estado Matriz} & \textbf{Compuerta Datos} \\
+\hline
+GLA & 2023 & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d^2)$ & Sí & Diagonal \\
+\hline
+DeltaNet & 2024 & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d^2)$ & Sí & Escalar $\beta$ \\
+\hline
+Gated DeltaNet & 2024 & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d^2)$ & Sí & Escalar $\alpha + \beta$ \\
+\hline
+RetNet & 2023 & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d^2)$ & Sí & Fija (no datos) \\
+\hline
+HGRN2 & 2024 & $\mathcal{O}(Ld^2)$ & $\mathcal{O}(d^2)$ & Sí & Diagonal jer. \\
+\hline
+FoX & 2025 & $\mathcal{O}(L^2d)$ & $\mathcal{O}(Ld)$ & No & Escalar/logit \\
+\hline
+Gated Attn & 2025 & $\mathcal{O}(L^2d)$ & $\mathcal{O}(Ld)$ & No & Elem./cabeza \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Taxonomía y Evolución de Arquitecturas de Compuerta}
+
+La progresión de bloques de atención con compuerta puede entenderse a través de tres ``generaciones'' de reglas de actualización de estado:
+
+\subsubsection{Generación 1 --- Compuertas Fijas/Simples}
+
+RetNet (tasa de descomposición fija por cabeza), RWKV (no dependiente de datos). Adaptatividad limitada pero simple de implementar.
+
+\subsubsection{Generación 2 --- Compuertas Dependientes de Datos}
+
+GLA, Mamba2, HGRN2 (compuertas diagonales dependientes de datos). Mejor gestión de memoria pero actualización meramente aditiva.
+
+\subsubsection{Generación 3 --- Regla Delta + Compuertas}
+
+DeltaNet, Gated DeltaNet (borrar-escribir dirigido con compuertas opcionales). Mejor recuperación y gestión de memoria pero transiciones más complejas.
+
+Ortogonalmente, \textbf{FoX} y \textbf{Gated Attention} representan dirección paralela: en lugar de reemplazar softmax con recurrencia lineal, mejoran atención softmax con mecanismos de compuerta, preservando su expresividad cuadrática mientras ganan beneficios de olvido/sparsidad.
+
+El campo converge hacia \textbf{arquitecturas híbridas} que intercalan capas recurrentes lineales (ej., Gated DeltaNet) con capas de atención softmax dispersa, logrando lo mejor de ambos mundos. Arquitecturas como Gated DeltaNet-H1 (Gated DeltaNet + atención de ventana deslizante) superen consistentemente tanto modelos recurrentes puros como modelos de atención pura.
+
+\appendix
+
+\section{Algoritmos Avanzados de Optimización en Arquitecturas Transformadores}
+\label{apx:optimizers}
+
+\subsection{Introducción: Evolución de la Optimización en Redes Neuronales}
+
+La optimización de redes neuronales profundas, particularmente arquitecturas Transformadores altamente parametrizadas, representa uno de los desafíos matemáticos más complejos en la teoría del aprendizaje computacional moderno. Los paisajes de pérdida de modelos grandes de lenguaje se caracterizan por una no-convexidad severa, puntos de silla y heterogeneidad de bloques. La heterogeneidad de bloques implica que el espectro del Hessiano varía dramáticamente entre bloques de parámetros distintos, creando caminos de optimización donde ciertas dimensiones son exponencialmente más agudas o más planas que otras.
+
+La transición de Redes Neuronales Convolucionales (CNNs) a Transformadores requirió un cambio fundamental en los paradigmas de optimización. Mientras que el Descenso de Gradiente Estocástico con Momentum dominaba tareas de visión, falló consistentemente en navegar la curvatura heterogénea de mecanismos de atención de manera eficiente. Algoritmos adaptativos, primariamente Adam y su variante desacoplada AdamW, emergieron como el estándar dominante adaptando dinámicamente la tasa de aprendizaje elemento a elemento basada en los primeros y segundos momentos de los gradientes. A medida que el conteo de parámetros de modelos escaló, la sobrecarga de memoria de mantener tensores densos de momentum y varianza impulsó el campo hacia nuevos paradigmas de optimización.
+
+Los avances recientes han fraccionado el paisaje de optimización en varias trayectorias teóricas distintas: aproximaciones de bajo rango eficientes en memoria (Adafactor, GaLore), aproximaciones de segundo orden y matriz (Sophia, Shampoo, SOAP), estimadores de distancia libres de tasa de aprendizaje (Prodigy, Schedule-Free), técnicas de reducción de varianza (MARS, Adan), y ortogonalizadores geométricos orientados a matriz (Muon, Turbo-Muon).
+
+\subsection{Optimizadores de Línea Base y Adaptativos}
+
+\subsubsection{SGD con Momentum}
+
+\textbf{Descripción:} El algoritmo original de referencia. Actualiza parámetros usando el gradiente escalado por una tasa de aprendizaje fija, más un término de momentum (media móvil exponencial de gradientes pasados) para acelerar convergencia y amortiguar oscilaciones.
+
+\textbf{Ventajas:} Memoria mínima (solo 1 buffer para momentum), excelente generalización en muchos contextos, teoría bien entendida.
+
+\textbf{Desventajas:} Requiere ajuste muy cuidadoso de cronograma de LR, convergencia lenta en tareas NLP/transformador, no adaptivo — misma LR para todos los parámetros.
+
+\textbf{Formulación Matemática:} Dado la función objetivo $f_t(\theta)$ y gradiente $g_t = \nabla_\theta f_t(\theta_t)$:
+\begin{align}
+m_t &= \beta m_{t-1} + g_t \\
+\theta_{t+1} &= \theta_t - \eta_t m_t
+\end{align}
+
+\textbf{Pseudocódigo:}
+\begin{algorithm}
+\caption{SGD con Momentum}
+\begin{algorithmic}[1]
+\Require Parámetros iniciales $\theta_0$, tasa aprendizaje $\eta$, momentum $\beta$, peso decay $\lambda$
+\State $m_0 \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+\State Computar gradiente: $g_t \gets \nabla_\theta f_t(\theta_{t-1})$
+\State Aplicar decaimiento: $g_t \gets g_t + \lambda \theta_{t-1}$
+\State Actualizar momentum: $m_t \gets \beta m_{t-1} + g_t$
+\State Actualizar parámetros: $\theta_t \gets \theta_{t-1} - \eta m_t$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Adam y AdamW}
+
+\textbf{Descripción:} Combina momentos de primer orden (media) y segundo orden (varianza no centrada) de medias móviles exponenciales de gradientes. Usa corrección de sesgo para compensar la inicialización en cero de estas estimaciones. AdamW desacopla fundamentalmente el decaimiento de pesos del mecanismo de actualización de gradientes, asegurando que la regularización penalice los pesos directamente.
+
+\textbf{Ventajas:} Convergencia rápida, robusto a hiperparámetros, tasa de aprendizaje adaptiva por parámetro, estándar de facto para ajuste fino.
+
+\textbf{Desventajas:} Problemas de no-convergencia teórica con ciertos $\beta_2$, puede converger a mínimos agudos con peor generalización, requiere memoria 2× de optimizer states.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+m_t &= \beta_1 m_{t-1} + (1 - \beta_1) g_t \\
+v_t &= \beta_2 v_{t-1} + (1 - \beta_2) g_t^2 \\
+\hat{m}_t &= \frac{m_t}{1 - \beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1 - \beta_2^t} \\
+\theta_{t+1} &= \theta_t - \eta_t \left( \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon} + \lambda \theta_t \right)
+\end{align}
+
+\textbf{Pseudocódigo (AdamW):}
+\begin{algorithm}
+\caption{AdamW --- Adam Desacoplado}
+\begin{algorithmic}[1]
+\Require Parámetros $\theta_0$, tasa aprendizaje $\eta$, betas $(\beta_1, \beta_2)$, epsilon $\epsilon$, peso decay $\lambda$
+\State $m_0, v_0 \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+\State Computar gradiente: $g_t \gets \nabla_\theta f_t(\theta_{t-1})$
+\State Decaimiento de pesos desacoplado: $\theta_{t-1} \gets (1 - \lambda \eta) \theta_{t-1}$
+\State Actualizar momentos: $m_t \gets \beta_1 m_{t-1} + (1 - \beta_1) g_t$
+\State Actualizar segundos momentos: $v_t \gets \beta_2 v_{t-1} + (1 - \beta_2) g_t^2$
+\State Corregir sesgo: $\hat{m}_t \gets \frac{m_t}{1 - \beta_1^t}$, $\hat{v}_t \gets \frac{v_t}{1 - \beta_2^t}$
+\State Actualizar parámetros: $\theta_t \gets \theta_{t-1} - \eta \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{RAdam (Rectificado Adam)}
+
+\textbf{Descripción:} Identifica que la tasa de aprendizaje adaptiva de Adam tiene una varianza problemáticamente grande en etapas tempranas de entrenamiento (explicando por qué se necesita calentamiento). RAdam introduce un término de rectificación de varianza automático, cambiando dinámicamente entre comportamiento SGD y Adam dependiendo de la varianza estimada.
+
+\textbf{Ventajas:} Elimina la necesidad de ajuste manual de calentamiento, más robusto sin ajuste cuidadoso, reemplazo directo para Adam.
+
+\textbf{Desventajas:} Ganancias marginales sobre Adam bien ajustado + calentamiento, no ampliamente adoptado en preentrenamiento a gran escala.
+
+\textbf{Formulación Matemática:} Calcular la longitud máxima de la SMA aproximada: $\rho_{\infty} = \frac{2}{1-\beta_2} - 1$. En paso $t$, calcular grados de libertad: $\rho_t = \rho_{\infty} - \frac{2t\beta_2^t}{1-\beta_2^t}$.
+Si $\rho_t > 4$, computar término de rectificación de varianza $r_t$ y actualizar adaptativamente:
+\begin{align}
+r_t &= \sqrt{\frac{(\rho_t - 4)(\rho_t - 2)\rho_{\infty}}{(\rho_{\infty} - 4)(\rho_{\infty} - 2)\rho_t}} \\
+\theta_{t+1} &= \theta_t - \eta_t r_t \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}
+\end{align}
+Si $\rho_t \leq 4$, comportarse como SGD: $\theta_{t+1} = \theta_t - \eta_t \hat{m}_t$.
+
+\subsection{Momentum Avanzado y Reducción de Varianza (2024-2025)}
+
+\subsubsection{Adan (Momentum Nesterov Adaptivo)}
+
+\textbf{Descripción:} Reformula la aceleración de Nesterov para evitar el cálculo extra de gradientes en el punto de extrapolación. Usa Estimación de Momentum Nesterov (NME) para ambas estimaciones de momentos primer y segundo orden. Funciona bien en arquitecturas diversas (CNNs, Transformadores, GANs).
+
+\textbf{Ventajas:} Convergencia consistentemente más rápida en arquitecturas, evita paso forward/backward extra de Nesterov, fuerte en tareas visión y lenguaje.
+
+\textbf{Desventajas:} 3 buffers de momentum → mayor memoria que Adam, relativamente nuevo, puede ser inestable cerca de convergencia.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+m_k &= (1 - \beta_1) m_{k-1} + \beta_1 g_k \\
+v_k &= (1 - \beta_2) v_{k-1} + \beta_2 (g_k - g_{k-1}) \\
+n_k &= (1 - \beta_3) n_{k-1} + \beta_3 [g_k + (1 - \beta_1)(g_k - g_{k-1})]^2 \\
+\theta_{k+1} &= \theta_k - \eta \frac{m_k + (1 - \beta_1) v_k}{\sqrt{n_k} + \epsilon}
+\end{align}
+
+\textbf{Pseudocódigo:}
+\begin{algorithm}
+\caption{Adan --- Momentum Nesterov Adaptivo}
+\begin{algorithmic}[1]
+\Require Parámetros $\theta_0$, tasa aprendizaje $\eta$, betas $(\beta_1, \beta_2, \beta_3)$
+\State $m_0, v_0, n_0, g_{-1} \gets 0$
+\For{$k = 1, 2, \ldots, T$}
+\State Computar gradiente: $g_k \gets \nabla_\theta f(\theta_{k-1})$
+\State Diferencia de gradientes: $\Delta g_k \gets g_k - g_{k-1}$
+\State Actualizar primer momento: $m_k \gets (1-\beta_1) m_{k-1} + \beta_1 g_k$
+\State Actualizar segundo momento: $v_k \gets (1-\beta_2) v_{k-1} + \beta_2 \Delta g_k$
+\State Nesterov proyectado: $g_{nesterov} \gets g_k + (1-\beta_1) \Delta g_k$
+\State Actualizar momento cuadrado: $n_k \gets (1-\beta_3) n_{k-1} + \beta_3 g_{nesterov}^2$
+\State Actualizar parámetros: $\theta_k \gets \theta_{k-1} - \eta \frac{m_k + (1-\beta_1)v_k}{\sqrt{n_k}+\epsilon}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{ADOPT (Adam Modificado con Convergencia Óptima)}
+
+\textbf{Descripción:} Corrige la no-convergencia teórica de Adam por: (1) removiendo el gradiente actual de la estimación de segundo momento, y (2) reordenando la actualización de momentum y normalización. Alcanza la tasa óptima $\mathcal{O}(1/\sqrt{T})$ con cualquier elección de $\beta_2$, sin suposiciones de ruido acotado.
+
+\textbf{Ventajas:} Probadamente converge con cualquier $\beta_2$, reemplazo directo para Adam, superior en visión, NLP, RL, tareas generativas.
+
+\textbf{Desventajas:} Ganancias prácticas marginales en algunas tareas, muy reciente (NeurIPS 2024).
+
+\textbf{Formulación Matemática:}
+\begin{align}
+v_t &= \beta_2 v_{t-1} + (1 - \beta_2) g_t^2 \\
+m_t &= \beta_1 m_{t-1} + (1 - \beta_1) \frac{g_t}{\sqrt{v_{t-1}} + \epsilon} \\
+\theta_{t+1} &= \theta_t - \eta_t m_t
+\end{align}
+
+\subsubsection{AdEMAMix (Mezcla de Dos EMAs)}
+
+\textbf{Descripción:} Reemplaza la EMA única de gradientes de Adam con una mezcla de dos EMAs — una de descomposición rápida (gradientes recientes) y una de descomposición lenta (memoria larga). Demuestra que los gradientes permanecen relevantes por decenas de miles de pasos.
+
+\textbf{Ventajas:} Modelo 1.3B en 101B tokens ≈ AdamW en 197B tokens (+95%), ralentiza significativamente olvido de modelo durante entrenamiento, modificación simple de Adam.
+
+\textbf{Desventajas:} Introduce hiperparámetros extra (dos tasas descomposición + mezcla), necesita cronograma para peso EMA lento, relativamente nuevo.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+m_{1,t} &= \beta_1 m_{1,t-1} + (1 - \beta_1) g_t \\
+m_{2,t} &= \beta_3 m_{2,t-1} + (1 - \beta_3) g_t \\
+v_t &= \beta_2 v_{t-1} + (1 - \beta_2) g_t^2 \\
+m_t &= m_{1,t} + \alpha m_{2,t} \\
+\theta_{t+1} &= \theta_t - \eta_t \frac{m_t}{\sqrt{v_t} + \epsilon}
+\end{align}
+
+\textbf{Pseudocódigo:}
+\begin{algorithm}
+\caption{AdEMAMix --- Mezcla de Medias Móviles Exponenciales}
+\begin{algorithmic}[1]
+\Require Parámetros $\theta_0$, betas $(\beta_1, \beta_2, \beta_3)$, coeficiente mezcla $\alpha$
+\State $m_{1,0}, m_{2,0}, v_0 \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+\State Computar gradiente: $g_t \gets \nabla_\theta f(\theta_{t-1})$
+\State EMA rápida: $m_{1,t} \gets \beta_1 m_{1,t-1} + (1-\beta_1) g_t$
+\State EMA lenta: $m_{2,t} \gets \beta_3 m_{2,t-1} + (1-\beta_3) g_t$
+\State Segundo momento: $v_t \gets \beta_2 v_{t-1} + (1-\beta_2) g_t^2$
+\State Mezcla momento: $m_t \gets m_{1,t} + \alpha m_{2,t}$
+\State Actualizar: $\theta_t \gets \theta_{t-1} - \eta \frac{m_t}{\sqrt{v_t}+\epsilon}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{MARS (Make Variance Reduction Shine)}
+
+\textbf{Descripción:} Marco unificado que reconcilia métodos de gradiente precondicionados con reducción de varianza vía momentum recursivo estocástico escalado. Ofrece instancias basadas en AdamW, Lion, y Shampoo.
+
+\textbf{Ventajas:} Trae reducción de varianza a entrenamiento de modelos grandes (una primicia), supera consistentemente AdamW por margen considerable.
+
+\textbf{Desventajas:} Memoria extra para estimaciones de gradientes con varianza reducida, implementación más compleja.
+
+\textbf{Formulación Matemática (variante MARS-AdamW):}
+\begin{align}
+c_t &= g_t + \gamma_t (c_{t-1} - g_{t-1}) \\
+m_t &= \beta_1 m_{t-1} + (1 - \beta_1) c_t \\
+v_t &= \beta_2 v_{t-1} + (1 - \beta_2) c_t^2 \\
+\theta_{t+1} &= \theta_t - \eta_t \frac{m_t}{\sqrt{v_t} + \epsilon}
+\end{align}
+
+\textbf{Pseudocódigo:}
+\begin{algorithm}
+\caption{MARS — Marco de Reducción de Varianza}
+\begin{algorithmic}[1]
+\Require Parámetros $\theta_0$, coeficiente reducción varianza $\gamma$
+\State $m_0, v_0, c_0, g_{-1} \gets 0$
+\For{$t = 1, 2, \ldots, T$}
+\State Computar gradiente: $g_t \gets \nabla_\theta f(\theta_{t-1})$
+\State Momentum recursivo: $c_t \gets g_t + \gamma_t(c_{t-1} - g_{t-1})$
+\State Actualizar momentos con $c_t$ (no $g_t$):
+\State \quad $m_t \gets \beta_1 m_{t-1} + (1-\beta_1) c_t$
+\State \quad $v_t \gets \beta_2 v_{t-1} + (1-\beta_2) c_t^2$
+\State Actualizar parámetros: $\theta_t \gets \theta_{t-1} - \eta \frac{m_t}{\sqrt{v_t}+\epsilon}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Optimizadores Cautelosos (C-AdamW, C-Lion)}
+
+\textbf{Descripción:} Modificación de una sola línea a cualquier optimizador basado en momentum: la actualización se enmascara de forma que solo componentes donde el momentum y gradiente acuerdan en signo se aplican. Preserva garantías de convergencia mientras acelera significativamente el entrenamiento.
+
+\textbf{Ventajas:} Hasta 1.47× aceleración en preentrenamiento Llama/MAE, trivial de implementar (una línea), funciona sobre AdamW, Lion, o cualquier método momentum.
+
+\textbf{Desventajas:} Efecto marginal en algunas tareas, enmascaramiento puede ralentizar entrenamiento temprano, muy reciente.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+\text{máscara}_t &= \mathbb{I}(m_t \odot g_t > 0) \\
+\theta_{t+1} &= \theta_t - \eta_t (\text{ActualizaciónBase}_t \odot \text{máscara}_t)
+\end{align}
+
+\subsection{Optimizadores Eficientes en Memoria y a Gran Escala}
+
+\subsubsection{LAMB (Aprendizaje Adaptativo Basado en Capas)}
+
+\textbf{Descripción:} La necesidad de entrenar LLMs en datasets masivos ha impulsado la adopción de tamaños de lote extremos. LAMB resuelve degradación de generalización combinando un tracker de momentum estilo Adam con una relación de confianza por capa derivada de Escalado de Tasa Adaptativa por Capa (LARS).
+
+\textbf{Ventajas:} Entrena eficientemente con lotes extremadamente grandes, convergencia rápida en modelos BERT.
+
+\textbf{Desventajas:} Implementación más compleja que Adam, comportamiento menos predecible con ciertos cronogramas.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+\phi(\|x^{(i)}_t\|) &= \frac{\|x^{(i)}_t\|}{\|r^{(i)}_t\|} \\
+x^{(i)}_{t+1} &= x^{(i)}_t - \eta_t \phi(\|x^{(i)}_t\|) \frac{r^{(i)}_t}{\|r^{(i)}_t\|}
+\end{align}
+
+\subsubsection{Schedule-Free (AdamW sin Cronograma)}
+
+\textbf{Descripción:} Remueve completamente la necesidad de cronograma de tasa de aprendizaje unificando cronograma e iteración promediada en un marco teórico único. No introduce hiperparámetros extra.
+
+\textbf{Ventajas:} No necesita especificar pasos totales de entrenamiento $T$, estado del arte en convexo a aprendizaje profundo a gran escala, sin hiperparámetros extra.
+
+\textbf{Desventajas:} Requiere cambiar entre vistas de parámetros \textit{entrenamiento} y \textit{evaluación}, API ligeramente diferente que optimizadores estándar.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+z_{t+1} &= z_t - \eta \nabla f(y_t) \\
+x_{t+1} &= \left(1 - \frac{1}{t+1}\right) x_t + \frac{1}{t+1} z_{t+1} \\
+y_{t+1} &= (1 - \beta) z_{t+1} + \beta x_{t+1}
+\end{align}
+
+\subsubsection{Adafactor (Factorización Inteligente de Varianza)}
+
+\textbf{Descripción:} Reduce memoria de optimizer factorizando estadísticas de segundo momento para tensores tipo matriz, almacenando acumuladores por fila/columna en lugar de estados de varianza densos.
+
+\textbf{Ventajas:} Memoria sublineal en dimensión parámetro, excelente para transformadores grandes, learning-rate-free.
+
+\textbf{Desventajas:} Menos pulido que Adam, aún bajo investigación para casos edge.
+
+\textbf{Formulación Matemática:} Dado gradiente $G_t \in \mathbb{R}^{n \times m}$:
+\begin{align}
+R_t &= \beta_2 R_{t-1} + (1 - \beta_2)(G_t^2) \mathbf{1}_m \\
+C_t &= \beta_2 C_{t-1} + (1 - \beta_2) \mathbf{1}_n^\top (G_t^2) \\
+\hat{V}_t &= \frac{R_t C_t / (\mathbf{1}_n^\top R_t)}{1 - \beta_2^t}
+\end{align}
+
+\subsubsection{GaLore (Proyección de Gradientes de Bajo Rango)}
+
+\textbf{Descripción:} Proyecta gradientes 2D en subespacio de bajo rango, optimiza en ese espacio compacto, y reconstruye actualizaciones en espacio original. Reduce memoria de optimizer a $\mathcal{O}(Nr)$ donde $r$ es rango objetivo.
+
+\textbf{Ventajas:} Entrenamiento significativamente más eficiente en memoria, funciona con arquitecturas existentes, compatible con cuantización.
+
+\textbf{Desventajas:} Overhead computacional de SVD periódico, requiere selección cuidadosa de rango.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+U, S, V &= \text{SVD}(G_t), \quad P = U_{[:, :r]} \text{ o } V_{[:, :r]} \\
+G_{\text{low}} &= P^\top G_t \text{ (o } G_t P^\top\text{)} \\
+\Delta = P \Delta_{\text{low}} &\text{ (o } \Delta_{\text{low}} P\text{)}
+\end{align}
+
+\subsection{Métodos Libres de Parámetros y Adaptativos a Distancia}
+
+\subsubsection{Prodigy (Adaptación de Distancia Dinámica)}
+
+\textbf{Descripción:} Prodigy adapta escala de paso efectiva mediante estadístico tipo distancia, reduciendo sensibilidad a ajuste manual de LR.
+
+\textbf{Ventajas:} Eliminación de sintonización LR, comportamiento robusto sobre tamaños de lote variable.
+
+\textbf{Desventajas:} Overhead computacional adicional para estadístico distancia, menos prueba exhaustiva que Adam.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+s_k &= \sum_t \langle u_t, p_t - p_0 \rangle \\
+d_t &= \max(d_{t-1}, d_0 + d_{\text{coef}} \cdot s_k) \\
+\theta_{t+1} &= \theta_t - \eta \cdot d_t \cdot u_t
+\end{align}
+
+\subsection{Optimizadores de Segundo Orden y Geométricos}
+
+\subsubsection{Shampoo (Precondicionadores Factorizados Kronecker)}
+
+\textbf{Descripción:} Optimizador de segundo orden estructurado que mantiene matrices precondicionadoras factorizadas Kronecker (una por dimensión de cada tensor parámetro). Aproxima AdaGrad de matriz completa con costo manejable.
+
+\textbf{Ventajas:} Garantías de convergencia teórica fuerte, captura correlaciones entre parámetros, probado a escala de Google.
+
+\textbf{Desventajas:} Memoria alta para matrices precondicionadoras, requiere eigendecomposición periódica costosa, implementación distribuida compleja.
+
+\textbf{Formulación Matemática:} Para gradiente de matriz $G_t \in \mathbb{R}^{n \times m}$:
+\begin{align}
+L_t &= L_{t-1} + G_t G_t^\top, \quad R_t = R_{t-1} + G_t^\top G_t \\
+W_{t+1} &= W_t - \eta L_t^{-1/4} G_t R_t^{-1/4}
+\end{align}
+
+\textbf{Pseudocódigo:}
+\begin{algorithm}
+\caption{Shampoo --- Preacondicionamiento Kronecker Factorizado}
+\begin{algorithmic}[1]
+\Require Parámetros matriz $W_0 \in \mathbb{R}^{n \times m}$, frecuencia actualización $f$
+\State Inicializar: $L_0 = \epsilon I_n$, $R_0 = \epsilon I_m$
+\For{$t = 1, 2, \ldots, T$}
+\State Computar gradiente: $G_t \gets \nabla_W f(W_{t-1})$
+\State Acumular Kronecker: $L_t \gets L_{t-1} + G_t G_t^\top$, $R_t \gets R_{t-1} + G_t^\top G_t$
+\If{$t \mod f = 0$}
+\State Computar raíces inversas: 
+\State \quad $L_t^{-1/4} \gets Q_L \Lambda_L^{-1/4} Q_L^\top$ (eigendecomposición)
+\State \quad $R_t^{-1/4} \gets Q_R \Lambda_R^{-1/4} Q_R^\top$
+\EndIf
+\State Actualizar parámetros: $W_t \gets W_{t-1} - \eta L_t^{-1/4} G_t R_t^{-1/4}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{SOAP (Shampoo con Adam en Base Propia)}
+
+\textbf{Descripción:} Versión simplificada y mejorada de Shampoo. Idea clave: ejecutar Adam/Adafactor en la base propia de precondicionadores de Shampoo produce algoritmo más simple y rápido.
+
+\textbf{Ventajas:} Computacionalmente más simple que Shampoo, combina beneficios de Adam y Shampoo, resultados sólidos entrenamiento LLM.
+
+\textbf{Desventajas:} Aún requiere eigendecomposición (menos frecuentemente), memoria alta que métodos primer orden.
+
+\textbf{Formulación Matemática:} Eigen-descomponer precondicionadores: $L = Q_L \Lambda_L Q_L^\top$, $R = Q_R \Lambda_R Q_R^\top$. Proyectar gradiente: $G_{\text{rot}} = Q_L^\top G Q_R$. Ejecutar Adam estándar en $G_{\text{rot}}$ para obtener $M_{\text{rot}}, V_{\text{rot}}$. Proyectar actualización de vuelta: $\Delta = Q_L \left(\frac{M_{\text{rot}}}{\sqrt{V_{\text{rot}}}}\right) Q_R^\top$.
+
+\subsubsection{Sophia (Hessiana Diagonal y Clipping)}
+
+\textbf{Descripción:} Usa estimaciones periódicas de Hessiana diagonal con clipping de actualizaciones escaladas por segundo orden para optimización estable a gran escala.
+
+\textbf{Ventajas:} Convergencia acelerada incorporando curvatura, overhead bajo comparado a segundo orden completo.
+
+\textbf{Desventajas:} Estimación Hessiana diagonal puede ser ruidosa, requiere tuning de parámetro clipping.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+h_t &= \beta_2 h_{t-k} + (1 - \beta_2) \hat{h}_t \\
+\theta_{t+1} &= \theta_t - \eta_t \cdot \text{clip} \left( \frac{m_t}{\max(\gamma h_t, \epsilon)}, 1 \right)
+\end{align}
+
+\subsection{Optimizadores Basados en Ortogonalidad}
+
+\subsubsection{Lion (EvoLved Sign Momentum)}
+
+\textbf{Descripción:} Lion usa actualizaciones basadas en signo con rastreo de momentum, reduciendo huella de memoria comparado a métodos tipo Adam de segundo momento.
+
+\textbf{Ventajas:} 50\% menos memoria que Adam, convergencia rápida, simple de implementar.
+
+\textbf{Desventajas:} Menos explorado que Adam, puede necesitar ajuste de hiperparámetros cuidadoso.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+c_t &= \beta_1 m_t + (1 - \beta_1) g_t \\
+\theta_{t+1} &= \theta_t - \eta_t (\text{sign}(c_t) + \lambda \theta_t) \\
+m_{t+1} &= \beta_2 m_t + (1 - \beta_2) g_t
+\end{align}
+
+\subsubsection{Muon (Ortonormalización Newton-Schulz)}
+
+\textbf{Descripción:} Muon ortonormaliza actualizaciones momentum para tensores 2D usando iteraciones de Newton-Schulz. Combina eficiencia de memoria de Lion con mejor convergencia.
+
+\textbf{Ventajas:} Convergencia consistentemente rápida, bajo costo computacional, excelente para transformadores grandes.
+
+\textbf{Desventajas:} Solo se aplica a tensores 2D (matrices), requiere tuning de iteraciones Newton-Schulz.
+
+\textbf{Formulación Matemática:}
+\begin{align}
+X_0 &= \frac{G}{\|G\|_F + \epsilon} \\
+A_k &= X_k X_k^\top, \quad B_k = bA_k + cA_k^2 \\
+X_{k+1} &= a X_k + B_k X_k
+\end{align}
+
+\textbf{Pseudocódigo:}
+\begin{algorithm}
+\caption{Muon --- Momentum con Ortonormalización}
+\begin{algorithmic}[1]
+\Require Matriz parámetros $M \in \mathbb{R}^{n \times m}$, iteraciones NS $k_{\max}$
+\For{$t = 1, 2, \ldots, T$}
+\State Computar gradiente: $G_t \gets \nabla_M f(M_{t-1})$
+\State Normalizar: $X_0 \gets \frac{G_t}{\|G_t\|_F + \epsilon}$
+\State Iterar Newton-Schulz (5 pasos típicamente):
+\For{$k = 1, \ldots, k_{\max}$}
+\State $A \gets X_{k-1} X_{k-1}^\top$
+\State $X_k \gets X_{k-1} - \frac{1}{2}(A - 3I) X_{k-1}$
+\EndFor
+\State Actualizar parámetros: $M_t \gets M_{t-1} - \eta X_{k_{\max}}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Turbo-Muon (Muon Acelerado con Preacondicionamiento Casi-Ortogonal)}
+
+\textbf{Descripción:} Turbo-Muon añade preacondicionamiento casi-ortogonal antes de actualizaciones Newton-Schulz, reduciendo número de iteraciones ortonormalización requeridas.
+
+\textbf{Ventajas:} Versión acelerada de Muon, iteraciones óptimas reducidas, mantiene mismas garantías.
+
+\textbf{Desventajas:} Overhead preacondicionamiento AOL, aún muy reciente (2025).
+
+\textbf{Formulación Matemática:}
+\begin{align}
+A_0 &= X_0^\top X_0, \quad s_i = (\|A_{0i}\|_1)^{-1/2} \\
+X_1 &= X_0 \cdot \text{diag}(s), \quad A_1 = \text{diag}(s) A_0 \text{diag}(s)
+\end{align}
+
+\subsection{Tabla Comparativa: Síntesis de Optimizadores}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Optimizador} & \textbf{Orden Matemático} & \textbf{Complejidad} & \textbf{Memoria} & \textbf{Caso Uso} \\
+\hline
+SGD + Momentum & Primer orden & $\mathcal{O}(N)$ & $1 \times$ & Referencia clásica \\
+\hline
+AdamW & Primer orden & $\mathcal{O}(N)$ & $2 \times$ & Estándar de facto \\
+\hline
+RAdam & Primer orden & $\mathcal{O}(N)$ & $2 \times$ & Sin calentamiento \\
+\hline
+Adan & Primer orden & $\mathcal{O}(N)$ & $3 \times$ & Visión + NLP \\
+\hline
+ADOPT & Primer orden & $\mathcal{O}(N)$ & $2 \times$ & Convergencia teórica \\
+\hline
+AdEMAMix & Primer orden & $\mathcal{O}(N)$ & $3 \times$ & Pre-entrenamiento gran escala \\
+\hline
+MARS & Primer orden & $\mathcal{O}(N)$ & $3 \times$ & Reducción varianza \\
+\hline
+Schedule-Free & Primer orden & $\mathcal{O}(N)$ & $2 \times$ & Sin cronograma LR \\
+\hline
+Lion & Primer orden & $\mathcal{O}(N)$ & $1 \times$ & Eficiencia memoria \\
+\hline
+Adafactor & Primer orden & $\mathcal{O}(N)$ & Sublineal & Transformadores grandes \\
+\hline
+GaLore & Primer orden & $\mathcal{O}(Nr)$ & $\mathcal{O}(Nr)$ & Bajo rango proyección \\
+\hline
+Prodigy & Primer orden & $\mathcal{O}(N)$ & $2 \times$ & Libre hiperparámetros \\
+\hline
+Shampoo & Segundo orden & $\mathcal{O}(N+d^3)$ & Alto & Ortogonalizadores precisos \\
+\hline
+SOAP & Segundo orden & $\mathcal{O}(N+d^3)$ & Alto & Simplificación Shampoo \\
+\hline
+Sophia & Segundo orden & $\mathcal{O}(N)$ & $2 \times$ & Hessiana diagonal \\
+\hline
+Muon & Ortogonal & $\mathcal{O}(N)$ & $1 \times$ & Transformadores LLM \\
+\hline
+Turbo-Muon & Ortogonal & $\mathcal{O}(N)$ & $1 \times$ & Muon acelerado \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Conclusión del Apéndice de Optimización}
+
+El paisaje matemático de optimización de Transformadores se fractura entre: (i) escalado independiente de dimensiones de parámetros (AdamW, Schedule-Free, ADOPT), (ii) extracción explícita de representaciones de curvatura (Shampoo, SOAP, Sophia), (iii) explotación de bonos de trayectoria de gradientes (MARS, Cautious, AdEMAMix), y (iv) tratamiento de proyecciones de pesos como variedades geométricas restringidas (Muon, Turbo-Muon). Navegar esta jerarquía compleja permite a ingenieros de aprendizaje profundo localizar la intersección exacta de overhead de memoria, throughput FLOP, y límites de convergencia personalizados a sus restricciones específicas de hardware.
 
 \bibliographystyle{plainnat}
 \bibliography{bibliography/other,bibliography/optimizers,bibliography/attention_types}
