@@ -1,19 +1,20 @@
-# Transformer Encoder Frankenstein
+# Frnakestein Transformer
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Config-driven training library and CLI for end-to-end NLP workflows:
+Config-driven training library and CLI for end-to-end NLP workflows with encoder and decoder architectures:
 
-- Training with strict YAML schema validation
+- Encoder and decoder training with strict YAML schema validation
+- Fine-tuning workflows for both architectures
 - Deployment artifact generation and quantization
 - Batch/interactive inference
 - SBERT training and inference workflows
 
 ## What This Project Is
 
-This repository is an installable Python package centered on a single CLI:
+Frnakestein Transformer is an installable Python package centered on a single CLI:
 
 ```bash
 frankestein-transformer
@@ -25,14 +26,15 @@ The project is organized around:
 - `src/cli.py`: CLI entrypoint and subcommands
 - `src/deploy/*`: deployment, quantization, inference runtime
 - `src/sbert/*`: sentence-embedding fine-tuning and inference tools
+- Unified support for encoder and decoder architectures with shared infrastructure
 
 ## Installation
 
 ### With `uv` (recommended)
 
 ```bash
-git clone https://github.com/your-username/transformer-encoder-frankestein.git
-cd transformer-encoder-frankestein
+git clone https://github.com/erickfmm/frankestein-transformer.git
+cd frankestein-transformer
 
 uv venv
 source .venv/bin/activate
