@@ -812,6 +812,55 @@ properties:
             title: "Resample Standard Deviation"
             description: "Target standard deviation when standardize_scores=true. Controls score distribution width after standardization. Lower values create tighter distribution around 0. Typical values: 0.2-0.5. Formula: standardized_score = (score - mean) / resample_std. Original std doesn't matter; output will have this std. Smaller values reduce score range, may help learning but compresses information. Larger values preserve more dynamic range but may not normalize well. Tune based on original score range and learning behavior."
             examples: [0.3]
+          optimizer:
+            type: object
+            title: "SBERT Optimizer Configuration"
+            description: "Custom optimizer configuration for SBERT training. When specified, overrides the default sentence-transformers optimizer with a custom optimizer from the registry. Uses the same optimizer classes available for MLM training (turbo_muon, adamw, lion, etc.). The optimizer is passed directly to the sentence-transformers fit() method. If not specified, the default AdamW optimizer is used. Optimizer-specific parameters (e.g., momentum for muon/turbo_muon, cautious_clip for cautious_adamw) are set via the parameters object."
+            additionalProperties: false
+            required:
+              - optimizer_class
+            properties:
+              optimizer_class:
+                type: string
+                title: "Optimizer Class"
+                description: "Optimizer algorithm from the project's optimizer registry. All optimizers subclass torch.optim.Optimizer. When specified, this optimizer replaces the default sentence-transformers AdamW. The optimizer class is passed to fit() as optimizer_cls. Supported values: turbo_muon (accelerated muon with Nesterov-spectral normalization), adamw (Adam with decoupled weight decay), lion (sign-based, memory efficient), muon (layer-wise momentum), radam (rectified Adam), adan (Nesterov-accelerated adaptive), adopt (momentum-based adaptive), ademamix (AdaMix momentum), mars_adamw (MARS regularized), cautious_adamw (gradient masking), lamb (LARS-style large batch), schedulefree_adamw (no LR schedule), shampoo (second-order), soap (sparse), sgd_momentum (classic SGD), adafactor (memory-efficient), prodigy (adaptive, minimal tuning), sophia (Hessian-aware), galore_adamw (GaLore gradient compression)."
+                enum:
+                  - sgd_momentum
+                  - adamw
+                  - adafactor
+                  - galore_adamw
+                  - prodigy
+                  - lion
+                  - sophia
+                  - muon
+                  - turbo_muon
+                  - radam
+                  - adan
+                  - adopt
+                  - ademamix
+                  - mars_adamw
+                  - cautious_adamw
+                  - lamb
+                  - schedulefree_adamw
+                  - shampoo
+                  - soap
+                examples: [turbo_muon, adamw, lion]
+              parameters:
+                type: object
+                title: "Optimizer Parameters"
+                description: "Optimizer-specific hyperparameters passed to the optimizer constructor. Each optimizer supports different parameters. Common parameters: lr (learning rate, overridden by learning_rate field), momentum (for SGD/muon/turbo_muon), nesterov (for muon/turbo_muon), ns_steps (Nesterov-spectral steps for muon/turbo_muon), ns_eps (Nesterov-spectral epsilon for muon/turbo_muon), cautious_clip (for cautious_adamw), rho/update_k (for sophia), d_coef (for prodigy), rank/update_proj_gap (for galore_adamw), beta2_decay/clip_threshold/eps1/eps2 (for adafactor). Parameters are passed as key-value pairs."
+                additionalProperties: true
+                minProperties: 0
+                examples:
+                  - momentum: 0.95
+                    nesterov: true
+                    ns_steps: 4
+                    ns_eps: 1.0e-7
+          wandb_project:
+            type: string
+            title: "Weights & Biases Project Name"
+            description: "Custom project name for Weights & Biases telemetry tracking. When specified, training metrics and artifacts are logged to this W&B project. Useful for organizing experiments, comparing runs, and sharing results. If not specified, W&B logging may use a default project name or be disabled depending on environment configuration. Example: 'sbert-spanish-finetuning' for Spanish SBERT experiments."
+            examples: ["sbert-spanish-finetuning", "mrbert-es-sbert-continual"]
     allOf:
       - if:
           properties:

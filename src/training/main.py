@@ -491,6 +491,22 @@ def _run_sbert_task(
     else:
         argv.append("--no-enable-block-grad-norms")
 
+    # Pass custom optimizer if specified in sbert config
+    sbert_optimizer = sbert_cfg.get("optimizer")
+    if isinstance(sbert_optimizer, dict):
+        optimizer_class = sbert_optimizer.get("optimizer_class")
+        if isinstance(optimizer_class, str) and optimizer_class.strip():
+            argv.extend(["--optimizer_class", str(optimizer_class).strip()])
+        optimizer_params = sbert_optimizer.get("parameters", {})
+        if isinstance(optimizer_params, dict):
+            for key, value in optimizer_params.items():
+                import json as _json
+                argv.extend(["--optimizer_param", f"{key}={_json.dumps(value)}"])
+
+    wandb_project = sbert_cfg.get("wandb_project")
+    if wandb_project is not None:
+        argv.extend(["--wandb_project", str(wandb_project)])
+
     logging.info("Dispatching SBERT finetuning with base_model=%s", loaded.base_model)
     result = sbert_train_main(argv)
     return int(result) if isinstance(result, int) else 0

@@ -39,10 +39,12 @@ import numpy as np
 
 try:
     from ..model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from ..model.optimizer.factory import OPTIMIZER_REGISTRY
     from ..utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from ..utils.gpu_temp_guard import GPUTemperatureGuard
 except ImportError:
     from model.tormented_bert_frankestein import TormentedBertFrankenstein, UltraConfig
+    from model.optimizer.factory import OPTIMIZER_REGISTRY
     from utils.device import SUPPORTED_DEVICE_CHOICES, resolve_torch_device
     from utils.gpu_temp_guard import GPUTemperatureGuard
 
@@ -310,6 +312,9 @@ class SBERTTrainer:
         gpu_metrics_backend: str = "nvml",
         enable_block_grad_norms: bool = True,
         telemetry_log_interval: int = 1,
+        optimizer_class: Optional[str] = None,
+        optimizer_parameters: Optional[Dict[str, Any]] = None,
+        wandb_project: Optional[str] = None,
     ):
         """
         Initialize SBERT Trainer.
@@ -383,6 +388,11 @@ class SBERTTrainer:
         os.makedirs(output_dir, exist_ok=True)
         self._init_csv_logger()
         
+        # Optimizer configuration
+        self.optimizer_class = str(optimizer_class).strip().lower() if optimizer_class else None
+        self.optimizer_parameters = dict(optimizer_parameters) if optimizer_parameters else {}
+        self.wandb_project = wandb_project
+
         # Training metadata
         self.training_metadata = {
             'start_time': datetime.now().isoformat(),
@@ -398,6 +408,8 @@ class SBERTTrainer:
             'switch_on_thermal': self._switch_on_thermal,
             'csv_log_path': self.csv_log_path,
             'telemetry_log_interval': self.telemetry_log_interval,
+            'optimizer_class': self.optimizer_class or 'default',
+            'wandb_project': self.wandb_project,
         }
         self.thermal_emergency_dir = os.path.join(self.output_dir, "thermal_emergency")
         os.makedirs(self.thermal_emergency_dir, exist_ok=True)
@@ -1399,6 +1411,27 @@ class SBERTTrainer:
             effective_remaining_steps,
         )
         
+        # Build optimizer configuration
+        custom_optimizer_cls = None
+        custom_optimizer_kwargs = {}
+        if self.optimizer_class and self.optimizer_class in OPTIMIZER_REGISTRY:
+            custom_optimizer_cls = OPTIMIZER_REGISTRY[self.optimizer_class]
+            custom_optimizer_kwargs = {"lr": self.learning_rate}
+            # Extract optimizer-specific params from optimizer_parameters
+            params = self.optimizer_parameters or {}
+            # Collect global (non-prefixed) optimizer parameters
+            skip_prefixes = ("lr_", "wd_", "betas_", "eps_")
+            for key, value in params.items():
+                # Skip per-group parameters (lr_*, wd_*, betas_*, eps_*)
+                if any(key.startswith(p) for p in skip_prefixes):
+                    continue
+                custom_optimizer_kwargs[key] = value
+            logger.info(
+                "Using custom optimizer: %s with params: %s",
+                self.optimizer_class,
+                custom_optimizer_kwargs,
+            )
+
         # Train
         fit_kwargs = dict(
             train_objectives=[(train_dataloader, train_loss)],
@@ -1411,6 +1444,11 @@ class SBERTTrainer:
             use_amp=self.use_amp,
             show_progress_bar=True
         )
+        # Override optimizer if custom optimizer is specified
+        if custom_optimizer_cls is not None:
+            fit_kwargs["optimizer_params"] = custom_optimizer_kwargs
+            # sentence-transformers v3+ supports optimizer_cls parameter
+            fit_kwargs["optimizer_cls"] = custom_optimizer_cls
         if self.checkpoint_save_steps > 0 or self.resume_from_checkpoint:
             fit_kwargs["checkpoint_path"] = os.path.join(self.output_dir, "checkpoints")
         if self.checkpoint_save_steps > 0:
@@ -1720,6 +1758,27 @@ def main(argv=None):
         action="store_false",
     )
     parser.set_defaults(enable_block_grad_norms=True)
+    parser.add_argument(
+        "--optimizer_class",
+        type=str,
+        default=None,
+        help="Optimizer class name from the registry (e.g., turbo_muon, adamw, lion). "
+             "When not set, sentence-transformers default optimizer is used.",
+    )
+    parser.add_argument(
+        "--optimizer_param",
+        type=str,
+        action="append",
+        default=None,
+        help="Optimizer parameter in key=value format (repeatable). "
+             "Example: --optimizer_param momentum=0.95 --optimizer_param ns_steps=4",
+    )
+    parser.add_argument(
+        "--wandb_project",
+        type=str,
+        default=None,
+        help="Weights & Biases project name for telemetry tracking.",
+    )
     
     args = parser.parse_args(argv)
     resolved_device = resolve_torch_device(args.device)
@@ -1790,6 +1849,25 @@ def main(argv=None):
     model = model_wrapper.get_model()
     logger.info(f"Model initialized with pooling mode: {args.pooling_mode}")
     
+    # Parse optimizer parameters from key=value format
+    optimizer_parameters = None
+    if args.optimizer_param:
+        import json as _json
+        optimizer_parameters = {}
+        for param_str in args.optimizer_param:
+            if "=" not in param_str:
+                logger.warning("Skipping malformed optimizer parameter: %s (expected key=value)", param_str)
+                continue
+            key, value_str = param_str.split("=", 1)
+            key = key.strip()
+            value_str = value_str.strip()
+            # Try to parse as JSON (handles numbers, booleans, lists)
+            try:
+                optimizer_parameters[key] = _json.loads(value_str)
+            except (_json.JSONDecodeError, ValueError):
+                # Fallback: keep as string
+                optimizer_parameters[key] = value_str
+
     # Create trainer
     trainer = SBERTTrainer(
         model=model,
@@ -1817,6 +1895,9 @@ def main(argv=None):
         telemetry_log_interval=int(args.telemetry_log_interval),
         gpu_metrics_backend=args.gpu_metrics_backend,
         enable_block_grad_norms=bool(args.enable_block_grad_norms),
+        optimizer_class=args.optimizer_class,
+        optimizer_parameters=optimizer_parameters,
+        wandb_project=args.wandb_project,
     )
     
     # Load dataset
