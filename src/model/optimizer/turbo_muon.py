@@ -57,8 +57,12 @@ class TurboMuon(Optimizer):
                     x = x.T
                     transposed = True
 
+                # Turbo-Muon pre-conditioning: row-wise absolute-sum scaling
+                # x is [R, C] where R <= C (after optional transpose)
+                # a_mat = x @ x.T is [R, R]
+                # s must be [R, 1] to broadcast against x [R, C]
                 a_mat = x @ x.T
-                s = torch.sum(torch.abs(a_mat), dim=0, keepdim=True).clamp(min=group["ns_eps"]).pow(-0.5)
+                s = torch.sum(torch.abs(a_mat), dim=1, keepdim=True).clamp(min=group["ns_eps"]).pow(-0.5)
                 x = x * s
                 a_mat = a_mat * s * s.T
 
