@@ -9,6 +9,8 @@ from .adafactor import Adafactor
 from .adan import Adan
 from .ademamix import AdEMAMix
 from .adopt import ADOPT
+from .apollo import Apollo
+from .apollo_mini import ApolloMini
 from .base import (
     GROUP_NAMES,
     ensure_no_unknown_parameters,
@@ -16,6 +18,7 @@ from .base import (
     parse_group_value,
     to_betas,
     to_float,
+    to_int,
     with_named_groups,
 )
 from .cautious_adamw import CautiousAdamW
@@ -25,6 +28,7 @@ from .lion import Lion
 from .mars_adamw import MARSAdamW
 from .muon import Muon
 from .prodigy import Prodigy
+from .q_apollo import QApollo
 from .radam import RAdamOptimizer
 from .schedulefree_adamw import ScheduleFreeAdamW
 from .sgd_momentum import SGDMomentum
@@ -53,6 +57,9 @@ OPTIMIZER_REGISTRY = {
     "schedulefree_adamw": ScheduleFreeAdamW,
     "shampoo": Shampoo,
     "soap": SOAP,
+    "apollo": Apollo,
+    "apollo_mini": ApolloMini,
+    "q_apollo": QApollo,
 }
 
 _COMMON_PER_GROUP_KEYS = {
@@ -85,6 +92,9 @@ OPTIMIZER_ALLOWED_KEYS = {
     "schedulefree_adamw": _COMMON_PER_GROUP_KEYS,
     "shampoo": _COMMON_PER_GROUP_KEYS,
     "soap": _COMMON_PER_GROUP_KEYS,
+    "apollo": _COMMON_PER_GROUP_KEYS | {"rank", "update_proj_gap", "scale", "scale_type", "proj_type", "scale_front", "disable_nl"},
+    "apollo_mini": _COMMON_PER_GROUP_KEYS | {"update_proj_gap", "scale", "proj_type", "scale_front", "disable_nl"},
+    "q_apollo": _COMMON_PER_GROUP_KEYS | {"rank", "update_proj_gap", "scale", "scale_type", "proj_type", "scale_front", "disable_nl", "quant_bits"},
 }
 
 
@@ -177,6 +187,53 @@ def build_optimizer(
             nesterov=nesterov,
             ns_steps=ns_steps,
             ns_eps=ns_eps,
+        )
+
+    if optimizer_name in {"apollo", "q_apollo"}:
+        rank = to_int(scoped.get("rank"), 128)
+        update_proj_gap = to_int(scoped.get("update_proj_gap"), 200)
+        scale = to_float(scoped.get("scale"), 1.0)
+        scale_type = str(scoped.get("scale_type", "channel")).strip().lower()
+        proj_type = str(scoped.get("proj_type", "std")).strip().lower()
+        scale_front = bool(scoped.get("scale_front", False))
+        disable_nl = bool(scoped.get("disable_nl", False))
+        if optimizer_name == "q_apollo":
+            quant_bits = to_int(scoped.get("quant_bits"), 8)
+            return optimizer_cls(
+                converted_groups,
+                rank=rank,
+                update_proj_gap=update_proj_gap,
+                scale=scale,
+                scale_type=scale_type,
+                proj_type=proj_type,
+                scale_front=scale_front,
+                disable_nl=disable_nl,
+                quant_bits=quant_bits,
+            )
+        return optimizer_cls(
+            converted_groups,
+            rank=rank,
+            update_proj_gap=update_proj_gap,
+            scale=scale,
+            scale_type=scale_type,
+            proj_type=proj_type,
+            scale_front=scale_front,
+            disable_nl=disable_nl,
+        )
+
+    if optimizer_name == "apollo_mini":
+        update_proj_gap = to_int(scoped.get("update_proj_gap"), 200)
+        scale = to_float(scoped.get("scale"), 128.0)
+        proj_type = str(scoped.get("proj_type", "std")).strip().lower()
+        scale_front = bool(scoped.get("scale_front", False))
+        disable_nl = bool(scoped.get("disable_nl", False))
+        return optimizer_cls(
+            converted_groups,
+            update_proj_gap=update_proj_gap,
+            scale=scale,
+            proj_type=proj_type,
+            scale_front=scale_front,
+            disable_nl=disable_nl,
         )
 
     return optimizer_cls(converted_groups)

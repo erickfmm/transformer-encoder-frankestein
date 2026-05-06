@@ -115,6 +115,18 @@ class YamlExamplesContentTests(unittest.TestCase):
         cfg = self._load("es_arch_nsa_retnet_radam.yaml")
         self.assertEqual(cfg.training_config.optimizer_class, "radam")
 
+    def test_apollo_example_uses_apollo_optimizer(self):
+        cfg = self._load("es_mlm_bertin_apollo.yaml")
+        self.assertEqual(cfg.training_config.optimizer_class, "apollo")
+
+    def test_apollo_mini_example_uses_apollo_mini_optimizer(self):
+        cfg = self._load("es_mlm_mbert_apollo_mini.yaml")
+        self.assertEqual(cfg.training_config.optimizer_class, "apollo_mini")
+
+    def test_q_apollo_example_uses_q_apollo_optimizer(self):
+        cfg = self._load("es_mlm_modernbert_q_apollo.yaml")
+        self.assertEqual(cfg.training_config.optimizer_class, "q_apollo")
+
     def test_sparse_longformer_layer_pattern(self):
         cfg = self._load("es_arch_sparse_longformer_adamw.yaml")
         for lt in cfg.model_config.layer_pattern:

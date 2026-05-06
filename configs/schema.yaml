@@ -400,7 +400,7 @@ properties:
           optimizer_class:
             type: string
             title: "Optimizer Class"
-            description: "Optimizer algorithm to use. Options: 'sgd_momentum' (classic SGD with momentum, simple but less adaptive), 'adamw' (Adam with decoupled weight decay, most common and recommended), 'adafactor' (memory-efficient, good for large models), 'galore_adamw' (GaLore + AdamW for gradient-low-rank training), 'prodigy' (adaptive, minimal LR tuning), 'lion' (sign-based, memory efficient), 'sophia' (Hessian-aware, robust), 'muon' (layer-wise momentum, stable), 'turbo_muon' (accelerated muon), 'radam' (rectified Adam, adaptive warmup), 'adan' (Nesterov-accelerated adaptive), 'adopt' (momentum-based adaptive), 'ademamix' (AdaMix, combines momentum), 'mars_adamw' (MARS regularized), 'cautious_adamw' (gradient masking), 'lamb' (LARS-style, large batch), 'schedulefree_adamw' (no learning rate schedule), 'shampoo' (second-order), 'soap' (sparse optimizer). AdamW is recommended for most cases. GaLore for memory-constrained large models. Prodigy for minimal tuning."
+            description: "Optimizer algorithm to use. Options: 'sgd_momentum' (classic SGD with momentum, simple but less adaptive), 'adamw' (Adam with decoupled weight decay, most common and recommended), 'adafactor' (memory-efficient, good for large models), 'galore_adamw' (GaLore + AdamW for gradient-low-rank training), 'prodigy' (adaptive, minimal LR tuning), 'lion' (sign-based, memory efficient), 'sophia' (Hessian-aware, robust), 'muon' (layer-wise momentum, stable), 'turbo_muon' (accelerated muon), 'radam' (rectified Adam, adaptive warmup), 'adan' (Nesterov-accelerated adaptive), 'adopt' (momentum-based adaptive), 'ademamix' (AdaMix, combines momentum), 'mars_adamw' (MARS regularized), 'cautious_adamw' (gradient masking), 'lamb' (LARS-style, large batch), 'schedulefree_adamw' (no learning rate schedule), 'shampoo' (second-order), 'soap' (sparse optimizer), 'apollo' (low-rank projected gradient scaling), 'apollo_mini' (rank-1 APOLLO tensor scaling), and 'q_apollo' (quantized APOLLO states). AdamW is recommended for most cases. GaLore/APOLLO for memory-constrained large models. Prodigy for minimal tuning."
             enum:
               - sgd_momentum
               - adamw
@@ -421,6 +421,9 @@ properties:
               - schedulefree_adamw
               - shampoo
               - soap
+              - apollo
+              - apollo_mini
+              - q_apollo
             examples: [adamw]
           parameters:
             type: object
@@ -535,6 +538,18 @@ properties:
                   prefix: "soap-"
                   supports_shared_per_group_suffixes: true
                   specific_global_suffixes: []
+                apollo:
+                  prefix: "apollo-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [rank, update_proj_gap, scale, scale_type, proj_type, scale_front, disable_nl]
+                apollo_mini:
+                  prefix: "apollo_mini-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [update_proj_gap, scale, proj_type, scale_front, disable_nl]
+                q_apollo:
+                  prefix: "q_apollo-"
+                  supports_shared_per_group_suffixes: true
+                  specific_global_suffixes: [rank, update_proj_gap, scale, scale_type, proj_type, scale_front, disable_nl, quant_bits]
       scheduler_total_steps:
         type: integer
         title: "Scheduler Total Steps"
@@ -867,7 +882,7 @@ properties:
               optimizer_class:
                 type: string
                 title: "Optimizer Class"
-                description: "Optimizer algorithm from the project's optimizer registry. All optimizers subclass torch.optim.Optimizer. When specified, this optimizer replaces the default sentence-transformers AdamW. The optimizer class is passed to fit() as optimizer_cls. Supported values: turbo_muon (accelerated muon with Nesterov-spectral normalization), adamw (Adam with decoupled weight decay), lion (sign-based, memory efficient), muon (layer-wise momentum), radam (rectified Adam), adan (Nesterov-accelerated adaptive), adopt (momentum-based adaptive), ademamix (AdaMix momentum), mars_adamw (MARS regularized), cautious_adamw (gradient masking), lamb (LARS-style large batch), schedulefree_adamw (no LR schedule), shampoo (second-order), soap (sparse), sgd_momentum (classic SGD), adafactor (memory-efficient), prodigy (adaptive, minimal tuning), sophia (Hessian-aware), galore_adamw (GaLore gradient compression)."
+                description: "Optimizer algorithm from the project's optimizer registry. All optimizers subclass torch.optim.Optimizer. When specified, this optimizer replaces the default sentence-transformers AdamW. The optimizer class is passed to fit() as optimizer_cls. Supported values: turbo_muon (accelerated muon with Nesterov-spectral normalization), adamw (Adam with decoupled weight decay), lion (sign-based, memory efficient), muon (layer-wise momentum), radam (rectified Adam), adan (Nesterov-accelerated adaptive), adopt (momentum-based adaptive), ademamix (AdaMix momentum), mars_adamw (MARS regularized), cautious_adamw (gradient masking), lamb (LARS-style large batch), schedulefree_adamw (no LR schedule), shampoo (second-order), soap (sparse), apollo (low-rank projected gradient scaling), apollo_mini (rank-1 APOLLO tensor scaling), q_apollo (quantized APOLLO states), sgd_momentum (classic SGD), adafactor (memory-efficient), prodigy (adaptive, minimal tuning), sophia (Hessian-aware), galore_adamw (GaLore gradient compression)."
                 enum:
                   - sgd_momentum
                   - adamw
@@ -888,6 +903,9 @@ properties:
                   - schedulefree_adamw
                   - shampoo
                   - soap
+                  - apollo
+                  - apollo_mini
+                  - q_apollo
                 examples: [turbo_muon, adamw, lion]
               parameters:
                 type: object
@@ -1172,6 +1190,48 @@ properties:
                   additionalProperties: false
                   patternProperties:
                     "^soap-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: apollo
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^apollo-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: apollo_mini
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^apollo_mini-": {}
+      - if:
+          properties:
+            optimizer:
+              properties:
+                optimizer_class:
+                  const: q_apollo
+        then:
+          properties:
+            optimizer:
+              properties:
+                parameters:
+                  additionalProperties: false
+                  patternProperties:
+                    "^q_apollo-": {}
 
 allOf:
   - anyOf:

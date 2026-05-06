@@ -25,7 +25,7 @@ class OptimizerRegistryTests(unittest.TestCase):
         self.assertIn("adamw", OPTIMIZER_REGISTRY)
 
     def test_registry_contains_all_required(self):
-        required = {"adamw", "sgd_momentum", "lion", "muon", "lamb"}
+        required = {"adamw", "sgd_momentum", "lion", "muon", "lamb", "apollo", "apollo_mini", "q_apollo"}
         for name in required:
             self.assertIn(name, OPTIMIZER_REGISTRY, f"Missing optimizer: {name}")
 
@@ -129,6 +129,51 @@ class BuildOptimizerAdafactorTests(unittest.TestCase):
     def test_builds_without_error(self):
         opt = build_optimizer("adafactor", _param_groups(), {})
         self.assertIsNotNone(opt)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerApolloTests(unittest.TestCase):
+    def test_builds_without_error(self):
+        opt = build_optimizer("apollo", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("apollo", groups, {})
+        loss = p.square().mean()
+        loss.backward()
+        opt.step()
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerApolloMiniTests(unittest.TestCase):
+    def test_builds_without_error(self):
+        opt = build_optimizer("apollo_mini", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("apollo_mini", groups, {})
+        loss = p.square().mean()
+        loss.backward()
+        opt.step()
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+class BuildOptimizerQApolloTests(unittest.TestCase):
+    def test_builds_without_error(self):
+        opt = build_optimizer("q_apollo", _param_groups(), {})
+        self.assertIsNotNone(opt)
+
+    def test_step_runs(self):
+        p = nn.Parameter(torch.randn(4, 4))
+        groups = [{"params": [p], "lr": 1e-3, "name": "other"}]
+        opt = build_optimizer("q_apollo", groups, {"q_apollo-quant_bits": 8})
+        loss = p.square().mean()
+        loss.backward()
+        opt.step()
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
