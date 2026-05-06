@@ -1150,6 +1150,7 @@ class TitanTrainer:
         """Compute MLM loss with proper masking and shape safety checks"""
         # Forward pass
         logits = self._forward_mlm_logits(input_ids, attention_mask)
+        auxiliary_losses = getattr(self.model, "last_auxiliary_losses", None)
 
         # Safety: avoid propagating non-finite logits into CE (would yield NaN loss)
         if not torch.isfinite(logits).all():
@@ -1197,6 +1198,15 @@ class TitanTrainer:
         else:
             # Defensive fallback (should almost never happen after forced target above)
             loss = logits.new_zeros((), requires_grad=True)
+
+        if isinstance(auxiliary_losses, dict):
+            for aux_name, aux_loss in auxiliary_losses.items():
+                if torch.is_tensor(aux_loss) and aux_loss.requires_grad:
+                    if not torch.isfinite(aux_loss):
+                        raise RuntimeError(
+                            f"Non-finite auxiliary loss detected for {aux_name} during forward pass"
+                        )
+                    loss = loss + aux_loss
         
         # Compute accuracy on masked tokens
         with torch.no_grad():

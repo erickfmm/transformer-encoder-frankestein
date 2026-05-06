@@ -233,6 +233,24 @@ properties:
         title: "Enable Mixture of Experts"
         description: "Enable MoE (Mixture of Experts) in the feed-forward network layers. Replaces standard FFN with a router that selects top-k_experts from num_experts specialized sub-networks. Enables model capacity scaling without proportional compute increase (only top_k active per token). Requires num_experts and top_k_experts to be configured. Increases router complexity and may require load balancing. Effective for large models and diverse data. May not benefit small models or narrow domains. Adds routing overhead and expert scheduling complexity."
         examples: [true]
+      use_mixture_of_depths:
+        type: boolean
+        title: "Enable Mixture of Depths"
+        description: "Enable Mixture-of-Depths token routing inside each transformer block. Each layer scores tokens with a lightweight router and only the top capacity subset is updated; skipped tokens pass through unchanged. This approximates the Mixture-of-Depths paper by allocating more depth to salient tokens while reducing per-layer compute. Works best with dense attention and FFN blocks when you want adaptive depth without changing sequence length at the model boundary."
+        examples: [false]
+      mixture_of_depths_capacity_ratio:
+        type: number
+        title: "Mixture-of-Depths Capacity Ratio"
+        description: "Fraction of tokens each layer is allowed to update when use_mixture_of_depths=true. Effective capacity per layer is ceil(seq_len × ratio), clamped to at least one token. Lower values increase sparsity and compute savings but may reduce quality if too many tokens skip updates. Typical values: 0.125-0.5 for aggressive routing, 0.5-1.0 for conservative routing."
+        exclusiveMinimum: 0
+        maximum: 1
+        examples: [0.5]
+      mixture_of_depths_router_aux_loss_weight:
+        type: number
+        title: "Mixture-of-Depths Router Auxiliary Loss Weight"
+        description: "Weight applied to the auxiliary router regularizer used by Mixture-of-Depths. The current implementation encourages the average router activation probability to match mixture_of_depths_capacity_ratio, which helps stabilize token selection during training. Set to 0 to disable the auxiliary penalty."
+        minimum: 0
+        examples: [0.0]
       ffn_hidden_size:
         type: integer
         title: "FFN Hidden Dimension"

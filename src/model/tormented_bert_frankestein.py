@@ -15,6 +15,7 @@ Integrates:
 Hardware Target: Dual Xeon E5-2680v4 + Nvidia Tesla P40 (24GB)
 """
 
+import math
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -93,6 +94,9 @@ class UltraConfig:
     use_hope: bool = True
     positional_encoding: Optional[str] = None
     use_moe: bool = True
+    use_mixture_of_depths: bool = False
+    mixture_of_depths_capacity_ratio: float = 0.5
+    mixture_of_depths_router_aux_loss_weight: float = 0.0
     ffn_hidden_size: Optional[int] = None
     ffn_activation: str = "silu"
     embedding_conv_kernel: int = 3
@@ -121,6 +125,12 @@ class UltraConfig:
 
         if self.mode not in {"encoder", "decoder"}:
             raise ValueError("mode must be one of {'encoder', 'decoder'}")
+
+        if not 0.0 < float(self.mixture_of_depths_capacity_ratio) <= 1.0:
+            raise ValueError("mixture_of_depths_capacity_ratio must be in the range (0, 1]")
+
+        if float(self.mixture_of_depths_router_aux_loss_weight) < 0.0:
+            raise ValueError("mixture_of_depths_router_aux_loss_weight must be >= 0")
 
 
 class FactorizedEmbedding(nn.Module):
@@ -166,6 +176,16 @@ class HybridLayer(nn.Module):
         self.layer_type = layer_type
         self.norm1 = get_norm(config)
         self.use_moe = bool(config.use_moe)
+        self.use_mixture_of_depths = bool(getattr(config, "use_mixture_of_depths", False))
+        self.mixture_of_depths_capacity_ratio = float(
+            getattr(config, "mixture_of_depths_capacity_ratio", 1.0)
+        )
+        self.mixture_of_depths_router_aux_loss_weight = float(
+            getattr(config, "mixture_of_depths_router_aux_loss_weight", 0.0)
+        )
+        self.last_mixture_of_depths_aux_loss: Optional[torch.Tensor] = None
+        self.last_mixture_of_depths_selected_fraction: float = 1.0
+        self.last_mixture_of_depths_capacity: Optional[int] = None
 
         proj_cls = BitLinear if config.use_bitnet else nn.Linear
 
@@ -228,8 +248,16 @@ class HybridLayer(nn.Module):
                 activation,
                 proj_cls(config.ffn_hidden_size, config.hidden_size),
             )
+        self.depth_router = (
+            nn.Linear(config.hidden_size, 1, bias=False) if self.use_mixture_of_depths else None
+        )
 
-    def forward(self, x, logical_layer_idx: Optional[int] = None, input_ids: Optional[torch.Tensor] = None):
+    def _forward_dense(
+        self,
+        x,
+        logical_layer_idx: Optional[int] = None,
+        input_ids: Optional[torch.Tensor] = None,
+    ):
         residual = x
         x = self.norm1(x)
 
@@ -277,6 +305,56 @@ class HybridLayer(nn.Module):
         x = residual + self.ffn(x)
         return x
 
+    def _mixture_of_depths_capacity(self, seq_len: int) -> int:
+        return max(1, int(math.ceil(seq_len * self.mixture_of_depths_capacity_ratio)))
+
+    def forward(
+        self,
+        x,
+        logical_layer_idx: Optional[int] = None,
+        input_ids: Optional[torch.Tensor] = None,
+    ):
+        if not self.use_mixture_of_depths:
+            self.last_mixture_of_depths_aux_loss = None
+            self.last_mixture_of_depths_selected_fraction = 1.0
+            self.last_mixture_of_depths_capacity = x.size(1)
+            return self._forward_dense(
+                x,
+                logical_layer_idx=logical_layer_idx,
+                input_ids=input_ids,
+            )
+
+        batch_size, seq_len, hidden_size = x.shape
+        if seq_len == 0:
+            raise ValueError("Mixture-of-Depths requires a non-empty token sequence")
+        capacity = self._mixture_of_depths_capacity(seq_len)
+        self.last_mixture_of_depths_capacity = capacity
+        self.last_mixture_of_depths_selected_fraction = capacity / seq_len
+
+        router_logits = self.depth_router(x).squeeze(-1)
+        router_probs = torch.sigmoid(router_logits)
+        # Regularize average router activation to match the configured token budget.
+        self.last_mixture_of_depths_aux_loss = (
+            (router_probs.mean(dim=1) - self.mixture_of_depths_capacity_ratio).pow(2).mean()
+        )
+
+        if capacity >= seq_len:
+            return self._forward_dense(x, logical_layer_idx=logical_layer_idx)
+
+        selected_indices = torch.topk(router_logits, k=capacity, dim=1).indices
+        selected_indices, _ = torch.sort(selected_indices, dim=1)
+        gather_index = selected_indices.unsqueeze(-1).expand(batch_size, capacity, hidden_size)
+        selected_tokens = torch.gather(x, dim=1, index=gather_index)
+        selected_input_ids = None
+        if input_ids is not None:
+            selected_input_ids = torch.gather(input_ids, dim=1, index=selected_indices)
+        updated_tokens = self._forward_dense(
+            selected_tokens,
+            logical_layer_idx=logical_layer_idx,
+            input_ids=selected_input_ids,
+        )
+        return torch.scatter(x, dim=1, index=gather_index, src=updated_tokens)
+
 
 # ==================== MAIN MODEL ====================
 class TormentedBertFrankenstein(nn.Module):
@@ -285,6 +363,8 @@ class TormentedBertFrankenstein(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.last_auxiliary_losses = {}
+        self.last_mixture_of_depths_stats = {}
 
         if config.use_factorized_embedding:
             self.emb = FactorizedEmbedding(config)
@@ -308,12 +388,35 @@ class TormentedBertFrankenstein(nn.Module):
         x = self.dropout(x)
 
         logical_layer_idx = 0
+        mixture_of_depths_aux_losses = []
+        mixture_of_depths_selected_fractions = []
         for _ in range(self.config.num_loops):
             for layer in self.layers:
                 x = layer(x, logical_layer_idx=logical_layer_idx, input_ids=input_ids)
+                if layer.use_mixture_of_depths and layer.last_mixture_of_depths_aux_loss is not None:
+                    mixture_of_depths_aux_losses.append(layer.last_mixture_of_depths_aux_loss)
+                    mixture_of_depths_selected_fractions.append(
+                        layer.last_mixture_of_depths_selected_fraction
+                    )
                 logical_layer_idx += 1
 
         x = self.final_norm(x)
+        if mixture_of_depths_aux_losses:
+            raw_aux_loss = torch.stack(mixture_of_depths_aux_losses).mean()
+            weighted_aux_loss = (
+                raw_aux_loss * float(self.config.mixture_of_depths_router_aux_loss_weight)
+            )
+            self.last_auxiliary_losses = {
+                "mixture_of_depths_router_loss": weighted_aux_loss,
+            }
+            self.last_mixture_of_depths_stats = {
+                "average_selected_fraction": sum(mixture_of_depths_selected_fractions)
+                / len(mixture_of_depths_selected_fractions),
+                "raw_router_aux_loss": float(raw_aux_loss.detach().item()),
+            }
+        else:
+            self.last_auxiliary_losses = {}
+            self.last_mixture_of_depths_stats = {}
         return self.head(x)
 
 
@@ -353,6 +456,8 @@ class TormentedBertMini(nn.Module):
     def __init__(self, config: Optional[UltraConfig] = None):
         super().__init__()
         self.config = config or self.build_mini_config()
+        self.last_auxiliary_losses = {}
+        self.last_mixture_of_depths_stats = {}
 
         if self.config.use_factorized_embedding is False:
             self.config.use_factorized_embedding = True
@@ -360,7 +465,12 @@ class TormentedBertMini(nn.Module):
         self.backbone = TormentedBertFrankenstein(self.config)
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.backbone(input_ids)
+        output = self.backbone(input_ids)
+        self.last_auxiliary_losses = dict(getattr(self.backbone, "last_auxiliary_losses", {}))
+        self.last_mixture_of_depths_stats = dict(
+            getattr(self.backbone, "last_mixture_of_depths_stats", {})
+        )
+        return output
 
 
 class FrankensteinDecoder(nn.Module):
@@ -408,6 +518,8 @@ class FrankensteinDecoder(nn.Module):
     def __init__(self, config: Optional[UltraConfig] = None):
         super().__init__()
         self.config = config or self.build_decoder_config()
+        self.last_auxiliary_losses = {}
+        self.last_mixture_of_depths_stats = {}
 
         if self.config.mode != "decoder":
             self.config.mode = "decoder"
@@ -415,7 +527,12 @@ class FrankensteinDecoder(nn.Module):
         self.backbone = TormentedBertFrankenstein(self.config)
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.backbone(input_ids)
+        output = self.backbone(input_ids)
+        self.last_auxiliary_losses = dict(getattr(self.backbone, "last_auxiliary_losses", {}))
+        self.last_mixture_of_depths_stats = dict(
+            getattr(self.backbone, "last_mixture_of_depths_stats", {})
+        )
+        return output
 
     @torch.inference_mode()
     def generate(
