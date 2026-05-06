@@ -5,6 +5,7 @@ import torch
 from src.model.attention import (
     BigBirdAttention,
     DeltaNetAttention,
+    EngramLayer,
     FASAAttention,
     ForgettingAttention,
     GatedDeltaNetAttention,
@@ -60,6 +61,7 @@ class AttentionRefactorTests(unittest.TestCase):
     def test_import_smoke(self):
         self.assertTrue(callable(TormentedBertFrankenstein))
         self.assertTrue(callable(UltraConfig))
+        self.assertTrue(callable(EngramLayer))
         self.assertTrue(callable(TitanAttention))
         self.assertTrue(callable(StandardAttention))
         self.assertTrue(callable(SigmoidAttention))
@@ -127,6 +129,7 @@ class AttentionRefactorTests(unittest.TestCase):
             "hgrn2_attn",
             "fox_attn",
             "gated_softmax_attn",
+            "engram_attn",
         ]
         for layer_type in layer_types:
             config = self._build_config([layer_type])

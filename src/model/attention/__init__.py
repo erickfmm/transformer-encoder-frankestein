@@ -1,3 +1,4 @@
+from .engram import EngramLayer
 from .hope import HoPE
 from .ode import ODEAttentionBlock
 from .retnet import MultiScaleRetention
@@ -25,6 +26,7 @@ from .gated import (
 )
 
 __all__ = [
+    "EngramLayer",
     "TitanAttention",
     "StandardAttention",
     "SigmoidAttention",

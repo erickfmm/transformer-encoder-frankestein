@@ -35,6 +35,7 @@ class SchemaAttentionLayerTests(unittest.TestCase):
             "hgrn2_attn",
             "fox_attn",
             "gated_softmax_attn",
+            "engram_attn",
         }
 
         self.assertTrue(expected.issubset(set(enum_values)))
