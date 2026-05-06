@@ -127,7 +127,7 @@ properties:
       layer_pattern:
         type: array
         title: "Layer Pattern"
-        description: "Ordered sequence of layer types to stack in the model. Each element defines one physical layer. The pattern determines the architectural mix and enables hybrid models combining different attention mechanisms. Available types: retnet, retnet_attn, mamba, ode, titan_attn, standard_attn, sigmoid_attn, sparse_transformer_attn, longformer_attn, bigbird_attn, sparsek_attn, nsa_attn, sparge_attn, fasa_attn, gla_attn, deltanet_attn, gated_deltanet_attn, hgrn2_attn, fox_attn, gated_softmax_attn. Pattern length equals num_layers. Example: [standard_attn] × 12 for pure transformer, [retnet, mamba, ode] × 4 for 12-layer hybrid. Experiment with interleaved patterns for complementary mechanisms."
+        description: "Ordered sequence of layer types to stack in the model. Each element defines one physical layer. The pattern determines the architectural mix and enables hybrid models combining different attention mechanisms. Available types: retnet, retnet_attn, mamba, ode, titan_attn, standard_attn, sigmoid_attn, sparse_transformer_attn, longformer_attn, bigbird_attn, sparsek_attn, nsa_attn, sparge_attn, fasa_attn, gla_attn, deltanet_attn, gated_deltanet_attn, hgrn2_attn, fox_attn, gated_softmax_attn, engram_attn. Pattern length equals num_layers. Example: [standard_attn] × 12 for pure transformer, [retnet, mamba, ode] × 4 for 12-layer hybrid. Experiment with interleaved patterns for complementary mechanisms. 'engram_attn' inserts a conditional N-gram memory lookup layer (arXiv:2601.07372)."
         items:
           type: string
           enum:
@@ -151,6 +151,7 @@ properties:
             - hgrn2_attn
             - fox_attn
             - gated_softmax_attn
+            - engram_attn
         examples:
           - [retnet, titan_attn, retnet, mamba, titan_attn, ode]
           - [standard_attn]
@@ -249,6 +250,31 @@ properties:
         description: "Controls attention masking behavior. 'encoder' uses bidirectional attention. 'decoder' uses causal masking for autoregressive next-token prediction. When model_class=frankesteindecoder, runtime forces mode='decoder'."
         enum: [encoder, decoder]
         examples: [encoder, decoder]
+      engram_max_ngram_size:
+        type: integer
+        title: "Engram Max N-gram Size"
+        description: "Highest N-gram order for the Engram conditional memory module (arXiv:2601.07372). The module builds lookup tables for all N-gram sizes from 2 up to this value. Value of 3 covers bigrams and trigrams. Larger values provide richer context keys but increase the number of embedding tables quadratically. Only relevant when 'engram_attn' appears in layer_pattern."
+        examples: [3]
+      engram_n_heads_per_ngram:
+        type: integer
+        title: "Engram Hash Heads per N-gram"
+        description: "Number of independent hash functions (heads) used per N-gram order in the Engram module. Each head uses a different prime modulus so collisions across heads are statistically independent, improving coverage of the embedding space. More heads increase retrieval diversity at the cost of more embedding parameters. Only relevant when 'engram_attn' appears in layer_pattern."
+        examples: [4]
+      engram_embed_dim_per_head:
+        type: integer
+        title: "Engram Embedding Dim per Head"
+        description: "Dimensionality of each per-head N-gram embedding in the Engram module. The total Engram hidden size is (max_ngram_size-1) × n_heads_per_ngram × embed_dim_per_head. Smaller values save memory; larger values increase expressiveness. Typical values: 16-64 for small models, 128+ for large. Only relevant when 'engram_attn' appears in layer_pattern."
+        examples: [32]
+      engram_kernel_size:
+        type: integer
+        title: "Engram ShortConv Kernel Size"
+        description: "Kernel width of the causal depthwise convolution applied to the retrieved N-gram embeddings in the Engram module. Larger kernels capture a wider local context in the embedding space before gating. Typical values: 3-8. The convolution is dilated by max_ngram_size so the effective receptive field is kernel_size × max_ngram_size tokens. Only relevant when 'engram_attn' appears in layer_pattern."
+        examples: [4]
+      engram_seed:
+        type: integer
+        title: "Engram Hash Seed"
+        description: "Random seed used to generate the odd multipliers for N-gram hashing in the Engram module. Changing this seed produces a different but equally valid hash mapping. Use a fixed value for reproducibility. Only relevant when 'engram_attn' appears in layer_pattern."
+        examples: [42]
 
   training:
     type: object

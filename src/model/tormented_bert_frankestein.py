@@ -23,6 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .attention.common import BitLinear, get_norm
+from .attention.engram import EngramLayer
 from .attention.gated import (
     DeltaNetAttention,
     ForgettingAttention,
@@ -96,6 +97,13 @@ class UltraConfig:
     ffn_activation: str = "silu"
     embedding_conv_kernel: int = 3
     mode: str = "encoder"
+
+    # Engram: Conditional Memory via Scalable Lookup (arXiv:2601.07372)
+    engram_max_ngram_size: int = 3       # highest N-gram order (2..max)
+    engram_n_heads_per_ngram: int = 4    # hash heads per N-gram order
+    engram_embed_dim_per_head: int = 32  # embedding dim per head
+    engram_kernel_size: int = 4          # ShortConv kernel width
+    engram_seed: int = 42                # RNG seed for hash multipliers
 
     def __post_init__(self):
         if self.ffn_hidden_size is None:
@@ -181,6 +189,7 @@ class HybridLayer(nn.Module):
             "hgrn2_attn": HGRN2Attention,
             "fox_attn": ForgettingAttention,
             "gated_softmax_attn": GatedSoftmaxAttention,
+            "engram_attn": EngramLayer,
         }
 
         if layer_type == "mamba":
@@ -220,7 +229,7 @@ class HybridLayer(nn.Module):
                 proj_cls(config.ffn_hidden_size, config.hidden_size),
             )
 
-    def forward(self, x, logical_layer_idx: Optional[int] = None):
+    def forward(self, x, logical_layer_idx: Optional[int] = None, input_ids: Optional[torch.Tensor] = None):
         residual = x
         x = self.norm1(x)
 
@@ -233,6 +242,8 @@ class HybridLayer(nn.Module):
             x = x + self.mixer(x)
         elif self.layer_type in {"ode", "retnet"}:
             x = self.mixer(x)
+        elif self.layer_type == "engram_attn":
+            x = self.mixer(x, input_ids=input_ids, logical_layer_idx=logical_layer_idx)
         else:
             x = self.mixer(x, logical_layer_idx=logical_layer_idx)
 
@@ -299,7 +310,7 @@ class TormentedBertFrankenstein(nn.Module):
         logical_layer_idx = 0
         for _ in range(self.config.num_loops):
             for layer in self.layers:
-                x = layer(x, logical_layer_idx=logical_layer_idx)
+                x = layer(x, logical_layer_idx=logical_layer_idx, input_ids=input_ids)
                 logical_layer_idx += 1
 
         x = self.final_norm(x)

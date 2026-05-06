@@ -113,15 +113,17 @@ Model options include:
 
 - Core sizing: `vocab_size`, `hidden_size`, `num_layers`, `num_loops`, `num_heads`, `retention_heads`
 - Routing/FFN: `num_experts`, `top_k_experts`, `use_moe`, `ffn_hidden_size`, `ffn_activation`
-- Mixer selection: `layer_pattern` now supports legacy + sparse + gated families.
+- Mixer selection: `layer_pattern` now supports legacy + sparse + gated + memory families.
   - Legacy: `retnet | retnet_attn | mamba | ode | titan_attn | standard_attn | sigmoid_attn`
   - Sparse: `sparse_transformer_attn | longformer_attn | bigbird_attn | sparsek_attn | nsa_attn | sparge_attn | fasa_attn`
   - Gated: `gla_attn | deltanet_attn | gated_deltanet_attn | hgrn2_attn | fox_attn | gated_softmax_attn`
+  - Memory: `engram_attn` — Conditional Memory via Scalable Lookup (arXiv:2601.07372)
 - ODE controls: `ode_solver` (`rk4|euler`), `ode_steps`
 - Quantization/normalization: `use_bitnet`, `norm_type` (`layer_norm|dynamic_tanh|derf`)
 - Embedding options: `use_factorized_embedding`, `factorized_embedding_dim`, `use_embedding_conv`, `embedding_conv_kernel`
 - Positional controls: `use_hope`, `hope_base`, `hope_damping`
 - Execution mode: `mode` (`encoder|decoder`), with `frankesteindecoder` forcing causal decoder behavior
+- Engram controls: `engram_max_ngram_size`, `engram_n_heads_per_ngram`, `engram_embed_dim_per_head`, `engram_kernel_size`, `engram_seed`
 
 Training-free attention policy:
 
