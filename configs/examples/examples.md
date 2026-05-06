@@ -1,11 +1,12 @@
 # Spanish Adaptation Examples (P40-Oriented)
 
 ## Purpose and Scope
-This document provides a curated set of **24 schema-compliant YAML presets** for Spanish-focused adaptation workflows in this repository:
+This document provides a curated set of **31 schema-compliant YAML presets** for Spanish-focused adaptation workflows in this repository:
 
-- **19 MLM presets** for continual pretraining (`training.task: mlm`) with full optimizer coverage.
+- **25 MLM presets** for continual pretraining (`training.task: mlm`) with full optimizer coverage.
 - **5 SBERT presets** for sentence embedding finetuning (`training.task: sbert`).
-- Coverage includes Spanish-first checkpoints, multilingual fallback models, multiple optimizers, multiple attention block styles, and all supported norm types.
+- **4 decoder presets** (`model_class: frankesteindecoder`) for autoregressive causal language models.
+- Coverage includes Spanish-first checkpoints, multilingual fallback models, multiple optimizers, all supported norm types, and all attention block families (legacy, gated, sparse).
 
 All examples are tuned around practical stability on **NVIDIA Tesla P40 (24GB VRAM)**.
 
@@ -146,6 +147,12 @@ cli_main([
 | `es_arch_moe_titan_ademamix.yaml` | mlm | custom `frankenstein` MoE | `ademamix` | `layer_norm` | `[titan_attn, retnet]` | high | `p40_experimental` |
 | `es_arch_bitnet_factorized_mars_adamw.yaml` | mlm | custom `frankenstein` BitNet+factorized | `mars_adamw` | `derf` | `[retnet, standard_attn]` | medium | `p40_safe` |
 | `es_arch_mini_cautious_adamw.yaml` | mlm | custom `mini` | `cautious_adamw` | `layer_norm` | `[retnet, titan_attn, mamba, ode, standard_attn, sigmoid_attn]` | low-medium | `p40_safe` |
+| `es_arch_gla_deltanet_lion.yaml` | mlm | custom `frankenstein` gated | `lion` | `layer_norm` | `[gla_attn, deltanet_attn]` | medium | `p40_safe` |
+| `es_arch_hgrn2_fox_gated_softmax_adamw.yaml` | mlm | custom `frankenstein` gated | `adamw` | `dynamic_tanh` | `[hgrn2_attn, fox_attn, gated_softmax_attn]` | medium | `p40_safe` |
+| `es_arch_all_gated_muon.yaml` | mlm | custom `frankenstein` all-gated BitNet | `muon` | `derf` | all 6 gated types | high | `p40_experimental` |
+| `es_arch_sparse_longformer_adamw.yaml` | mlm | custom `frankenstein` sparse | `adamw` | `layer_norm` | `[sparse_transformer_attn, longformer_attn]` | medium-high | `p40_safe` |
+| `es_arch_bigbird_sparsek_lamb.yaml` | mlm | custom `frankenstein` sparse | `lamb` | `layer_norm` | `[bigbird_attn, sparsek_attn]` | medium-high | `p40_safe` |
+| `es_arch_nsa_retnet_radam.yaml` | mlm | custom `frankenstein` sparse+retnet | `radam` | `dynamic_tanh` | `[nsa_attn, retnet_attn]` | medium | `p40_safe` |
 | `es_sbert_beto_mean.yaml` | sbert | `dccuchile/bert-base-spanish-wwm-cased` | n/a (SBERT trainer) | n/a | sentence pooling `mean` | medium | `p40_safe` |
 | `es_sbert_bertin_cls.yaml` | sbert | `bertin-project/bertin-roberta-base-spanish` | n/a (SBERT trainer) | n/a | sentence pooling `cls` | medium | `p40_safe` |
 | `es_sbert_maria_max.yaml` | sbert | `PlanTL-GOB-ES/roberta-base-bne` | n/a (SBERT trainer) | n/a | sentence pooling `max` | medium | `p40_safe` |
@@ -157,6 +164,17 @@ cli_main([
 - `decoder_gpt_like.yaml`
 - `decoder_llama_like.yaml`
 - `decoder_retnet_mamba_like.yaml`
+- `decoder_gated_mixed_adamw.yaml`  ← GLA/DeltaNet/HGRN2 causal decoder
+
+### Gated attention presets
+- `es_arch_gla_deltanet_lion.yaml` — GLA + DeltaNet
+- `es_arch_hgrn2_fox_gated_softmax_adamw.yaml` — HGRN2, ForgettingAttn, GatedSoftmax
+- `es_arch_all_gated_muon.yaml` — all 6 gated types
+
+### Sparse attention presets
+- `es_arch_sparse_longformer_adamw.yaml` — SparseTransformer + Longformer
+- `es_arch_bigbird_sparsek_lamb.yaml` — BigBird + SparseK
+- `es_arch_nsa_retnet_radam.yaml` — NSA + RetNetAttention
 
 ### Best first run
 - `es_mlm_beto_adamw.yaml`
