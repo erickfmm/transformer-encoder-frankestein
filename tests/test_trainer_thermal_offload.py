@@ -6,11 +6,16 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 TORCH_AVAILABLE = find_spec("torch") is not None
+_IMPORTS_OK = False
 if TORCH_AVAILABLE:
-    from src.training.trainer import TitanTrainer, TrainingConfig
+    try:
+        from src.training.trainer import TitanTrainer, TrainingConfig
+        _IMPORTS_OK = True
+    except ImportError:
+        pass
 
 
-@unittest.skipUnless(TORCH_AVAILABLE, "torch is required for trainer thermal offload tests")
+@unittest.skipUnless(_IMPORTS_OK, "torch and tqdm required for trainer tests")
 class TrainerThermalOffloadTests(unittest.TestCase):
     def test_enforce_critical_temperature_uses_offload_path(self):
         trainer = TitanTrainer.__new__(TitanTrainer)

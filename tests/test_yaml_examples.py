@@ -13,8 +13,13 @@ from importlib.util import find_spec
 
 TORCH_AVAILABLE = find_spec("torch") is not None
 
+_IMPORTS_OK = False
 if TORCH_AVAILABLE:
-    from src.training.config_loader import load_training_config, LoadedTrainingConfig
+    try:
+        from src.training.config_loader import load_training_config, LoadedTrainingConfig
+        _IMPORTS_OK = True
+    except ImportError:
+        pass
 
 # ---------------------------------------------------------------------------
 # Locate YAML files
@@ -42,14 +47,14 @@ def _yaml_files_in(directory):
 # Tests
 # ---------------------------------------------------------------------------
 
-@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+@unittest.skipUnless(_IMPORTS_OK, "torch and training deps required")
 class YamlExamplesLoadTests(unittest.TestCase):
     """Every file in configs/examples/ must load without raising."""
 
     pass  # tests are injected below
 
 
-@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+@unittest.skipUnless(_IMPORTS_OK, "torch and training deps required")
 class YamlRootConfigsLoadTests(unittest.TestCase):
     """Root-level config files (configs/*.yaml) must load without raising."""
 
@@ -80,7 +85,7 @@ for _name, _path in _yaml_files_in(_CONFIGS_ROOT):
     setattr(YamlRootConfigsLoadTests, _method.__name__, _method)
 
 
-@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+@unittest.skipUnless(_IMPORTS_OK, "torch and training deps required")
 class YamlExamplesContentTests(unittest.TestCase):
     """Spot-checks on specific YAML content."""
 

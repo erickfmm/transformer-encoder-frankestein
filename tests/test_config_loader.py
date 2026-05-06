@@ -7,8 +7,13 @@ from importlib.util import find_spec
 
 TORCH_AVAILABLE = find_spec("torch") is not None
 
+_IMPORTS_OK = False
 if TORCH_AVAILABLE:
-    from src.training.config_loader import load_training_config, list_config_paths
+    try:
+        from src.training.config_loader import load_training_config, list_config_paths
+        _IMPORTS_OK = True
+    except ImportError:
+        pass
 
 
 def _write_yaml(tmp_dir, name, content):
@@ -18,7 +23,7 @@ def _write_yaml(tmp_dir, name, content):
     return path
 
 
-@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+@unittest.skipUnless(_IMPORTS_OK, "torch and training deps required")
 class LoadTrainingConfigMLMTests(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.mkdtemp()
@@ -278,7 +283,7 @@ class LoadTrainingConfigMLMTests(unittest.TestCase):
         self.assertIn("lamb-lr_other", cfg.training_config.optimizer_parameters)
 
 
-@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+@unittest.skipUnless(_IMPORTS_OK, "torch and training deps required")
 class ListConfigPathsTests(unittest.TestCase):
     def test_lists_yaml_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:

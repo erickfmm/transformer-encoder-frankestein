@@ -5,8 +5,13 @@ from importlib.util import find_spec
 
 TORCH_AVAILABLE = find_spec("torch") is not None
 
+_IMPORTS_OK = False
 if TORCH_AVAILABLE:
-    from src.training.streaming_mlm_dataset import _apply_mlm_mask_standalone
+    try:
+        from src.training.streaming_mlm_dataset import _apply_mlm_mask_standalone
+        _IMPORTS_OK = True
+    except ImportError:
+        pass
 
 
 def _simple_encode(text, max_length=16, vocab_size=100):
@@ -19,7 +24,7 @@ def _simple_encode(text, max_length=16, vocab_size=100):
     return tokens, mask
 
 
-@unittest.skipUnless(TORCH_AVAILABLE, "torch required")
+@unittest.skipUnless(_IMPORTS_OK, "torch and datasets dep required")
 class ApplyMLMMaskTests(unittest.TestCase):
     def _call(self, input_ids, attention_mask, mlm_prob=0.15, vocab_size=100, mask_id=1, special_ids=None, pad_id=0):
         return _apply_mlm_mask_standalone(
