@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import warnings
+
 import torch
 
 from .apollo import Apollo
+
+# Keep quantization meaningful (>=2 bits) and compatible with uint8 storage (<=8 bits).
+MIN_QUANT_BITS = 2
+MAX_QUANT_BITS = 8
+MIN_SCALE_EPSILON = 1e-8
 
 
 class QApollo(Apollo):
@@ -42,13 +49,21 @@ class QApollo(Apollo):
             scale_front=scale_front,
             disable_nl=disable_nl,
         )
-        self.quant_bits = max(2, min(int(quant_bits), 8))
+        try:
+            bits = int(quant_bits)
+        except (TypeError, ValueError):
+            warnings.warn(
+                f"Invalid quant_bits={quant_bits!r}; falling back to {MAX_QUANT_BITS}.",
+                RuntimeWarning,
+            )
+            bits = MAX_QUANT_BITS
+        self.quant_bits = max(MIN_QUANT_BITS, min(bits, MAX_QUANT_BITS))
 
     def _quantize(self, value):
         max_int = float((1 << self.quant_bits) - 1)
         v_min = value.min()
         v_max = value.max()
-        scale = (v_max - v_min).clamp(min=1e-8) / max_int
+        scale = (v_max - v_min).clamp(min=MIN_SCALE_EPSILON) / max_int
         q = torch.clamp(torch.round((value - v_min) / scale), 0, max_int).to(torch.uint8)
         return q, scale, v_min
 

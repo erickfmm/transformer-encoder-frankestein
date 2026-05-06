@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import math
-
 import torch
 from torch.optim import Optimizer
+
+# Simple LCG constants for deterministic projector seed advancement per-parameter.
+LCG_MULTIPLIER = 1103515245
+LCG_INCREMENT = 12345
+LCG_MODULUS = 2**31 - 1
+# Fira-style norm-growth limiter threshold.
+NORM_LIMITER_THRESHOLD = 1.01
+EPS = 1e-8
 
 
 class Apollo(Optimizer):
@@ -105,7 +112,9 @@ class Apollo(Optimizer):
                 seed=state["projector_seed"],
             )
             state["projector_side"] = side
-            state["projector_seed"] = int((state["projector_seed"] * 1103515245 + 12345) % (2**31 - 1))
+            state["projector_seed"] = int(
+                (state["projector_seed"] * LCG_MULTIPLIER + LCG_INCREMENT) % LCG_MODULUS
+            )
 
         proj = state["projector"]
         if side == "right":
@@ -181,7 +190,10 @@ class Apollo(Optimizer):
                         update_norm = torch.norm(update)
                         prev_norm = state.get("scaled_grad_norm")
                         if prev_norm is not None:
-                            limiter = max(float(update_norm / (prev_norm + 1e-8)), 1.01) / 1.01
+                            limiter = (
+                                max(float(update_norm / (prev_norm + EPS)), NORM_LIMITER_THRESHOLD)
+                                / NORM_LIMITER_THRESHOLD
+                            )
                             update = update / limiter
                             state["scaled_grad_norm"] = update_norm / limiter
                         else:

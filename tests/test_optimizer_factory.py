@@ -145,6 +145,29 @@ class BuildOptimizerApolloTests(unittest.TestCase):
         loss.backward()
         opt.step()
 
+    def test_integer_params_accept_string_and_invalid_fallback(self):
+        opt = build_optimizer(
+            "apollo",
+            _param_groups(),
+            {
+                "apollo-rank": "16",
+                "apollo-update_proj_gap": "50",
+            },
+        )
+        self.assertEqual(opt.defaults["rank"], 16)
+        self.assertEqual(opt.defaults["update_proj_gap"], 50)
+
+        opt_bad = build_optimizer(
+            "apollo",
+            _param_groups(),
+            {
+                "apollo-rank": "bad_rank",
+                "apollo-update_proj_gap": None,
+            },
+        )
+        self.assertEqual(opt_bad.defaults["rank"], 128)
+        self.assertEqual(opt_bad.defaults["update_proj_gap"], 200)
+
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
 class BuildOptimizerApolloMiniTests(unittest.TestCase):
@@ -174,6 +197,13 @@ class BuildOptimizerQApolloTests(unittest.TestCase):
         loss = p.square().mean()
         loss.backward()
         opt.step()
+
+    def test_quant_bits_accepts_string_and_invalid_fallback(self):
+        opt = build_optimizer("q_apollo", _param_groups(), {"q_apollo-quant_bits": "6"})
+        self.assertEqual(opt.quant_bits, 6)
+
+        opt_bad = build_optimizer("q_apollo", _param_groups(), {"q_apollo-quant_bits": "bad"})
+        self.assertEqual(opt_bad.quant_bits, 8)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch required")
