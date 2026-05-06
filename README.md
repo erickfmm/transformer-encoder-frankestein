@@ -28,6 +28,13 @@ The project is organized around:
 - `src/sbert/*`: sentence-embedding fine-tuning and inference tools
 - Unified support for encoder and decoder architectures with shared infrastructure
 
+Recent capability highlights include:
+
+- `engram_attn`: conditional memory lookups with configurable n-gram hashing controls
+- Mixture-of-Depths routing: adaptive per-layer token compute with configurable router capacity
+- APOLLO optimizer family: `apollo`, `apollo_mini`, and `q_apollo` integrated into schema and factory routing
+- Expanded quality harness: comprehensive unit tests, CI test workflow, and YAML example validation coverage
+
 ## Installation
 
 ### With `uv` (recommended)
