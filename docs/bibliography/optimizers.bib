@@ -43,12 +43,11 @@
 }
 
 @misc{taniguchi_adopt_2024,
-	title = {{ADOPT}: Modified Adam Can Converge with Any \$β\_2\$ with the Optimal Rate},
+	title = {{ADOPT}: Modified Adam Can Converge with Any $\beta_2$ with the Optimal Rate},
 	rights = {{arXiv}.org perpetual, non-exclusive license},
 	url = {https://arxiv.org/abs/2411.02853},
 	doi = {10.48550/ARXIV.2411.02853},
 	shorttitle = {{ADOPT}},
-	abstract = {Adam is one of the most popular optimization algorithms in deep learning. However, it is known that Adam does not converge in theory unless choosing a hyperparameter, i.e., \$β\_2\$, in a problem-dependent manner. There have been many attempts to fix the non-convergence (e.g., {AMSGrad}), but they require an impractical assumption that the gradient noise is uniformly bounded. In this paper, we propose a new adaptive gradient method named {ADOPT}, which achieves the optimal convergence rate of \${\textbackslash}mathcal\{O\} ( 1 / {\textbackslash}sqrt\{T\} )\$ with any choice of \$β\_2\$ without depending on the bounded noise assumption. {ADOPT} addresses the non-convergence issue of Adam by removing the current gradient from the second moment estimate and changing the order of the momentum update and the normalization by the second moment estimate. We also conduct intensive numerical experiments, and verify that our {ADOPT} achieves superior results compared to Adam and its variants across a wide range of tasks, including image classification, generative modeling, natural language processing, and deep reinforcement learning. The implementation is available at https://github.com/{iShohei}220/adopt.},
 	publisher = {{arXiv}},
 	author = {Taniguchi, Shohei and Harada, Keno and Minegishi, Gouki and Oshima, Yuta and Jeong, Seong Cheol and Nagahara, Go and Iiyama, Tomoshi and Suzuki, Masahiro and Iwasawa, Yusuke and Matsuo, Yutaka},
 	urldate = {2026-02-24},
@@ -100,6 +99,20 @@
 	date = {2024},
 	note = {Version Number: 4},
 	keywords = {Artificial Intelligence (cs.{AI}), Computation and Language (cs.{CL}), Computer Vision and Pattern Recognition (cs.{CV}), Discrete Mathematics (cs.{DM}), {FOS}: Computer and information sciences, Machine Learning (cs.{LG})},
+}
+
+@misc{you_largebatch_2020,
+	title = {Large Batch Optimization for Deep Learning: Training {BERT} in 76 minutes},
+	rights = {{arXiv}.org perpetual, non-exclusive license},
+	url = {https://arxiv.org/abs/1904.00962},
+	doi = {10.48550/ARXIV.1904.00962},
+	shorttitle = {Large Batch Optimization for Deep Learning},
+	publisher = {{arXiv}},
+	author = {You, Yang and Li, Jing and Reddi, Sashank and Hseu, Jonathan and Kumar, Sanjiv and Bhojanapalli, Srinadh and Song, Xiaodan and Demmel, James and Hsieh, Cho-Jui},
+	urldate = {2026-05-07},
+	date = {2020},
+	note = {Version Number: 3},
+	keywords = {{FOS}: Computer and information sciences, Machine Learning (cs.{LG}), Optimization and Control (math.{OC})},
 }
 
 @misc{defazio_road_2024,
@@ -248,4 +261,14 @@
 	date = {2025},
 	note = {Version Number: 1},
 	keywords = {Artificial Intelligence (cs.{AI}), {FOS}: Computer and information sciences},
+}
+
+@misc{zhu2025apollosgdlikememoryadamwlevel,
+      title={APOLLO: SGD-like Memory, AdamW-level Performance}, 
+      author={Hanqing Zhu and Zhenyu Zhang and Wenyan Cong and Xi Liu and Sem Park and Vikas Chandra and Bo Long and David Z. Pan and Zhangyang Wang and Jinwon Lee},
+      year={2025},
+      eprint={2412.05270},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2412.05270}, 
 }

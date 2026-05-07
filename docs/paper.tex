@@ -44,7 +44,7 @@ This work is not affiliated \\
 \maketitle
 
 \begin{abstract}
-Frankestein Transformer presents a unified configuration-driven toolkit for systematic experimentation with modern transformer architectures, spanning seventeen sequence mixer variants and twenty optimizer families. The system supports both encoder-style masked language modeling (MLM) and decoder-style autoregressive (AR) next-token prediction through flexible model class and mode configuration, with specialized fine-tuning workflows for both architectures. The research contributions are threefold: (i) a strict schema-based configuration contract that enables reproducible experimentation across diverse attention mechanisms, including standard softmax attention, sigmoid attention, retentive networks, selective state-space models, continuous-depth transformers, adaptive depth routing (Mixture-of-Depths), conditional memory augmentation (Engram), sparse attention patterns, and gated mechanisms; (ii) a comprehensive optimizer routing framework supporting variance-reduction methods (MARS, Adan, AdEMAMix), memory-efficient variants (Adafactor, GaLore, Lion), schedule-free approaches, second-order preconditioners (Shampoo, SOAP, Sophia), and low-rank APOLLO-family optimizers (Apollo, Apollo-Mini, Q-Apollo); and (iii) end-to-end workflows spanning quantized deployment via ternary weight packing and sentence-embedding training inspired by SBERT, backed by an expanded quality-assurance stack with broad unit test coverage, YAML example validation, and continuous integration execution. The toolkit implements a web-based configuration interface that provides schema-driven form rendering with inline documentation and real-time validation. This technical reference document includes architectural diagrams, execution-flow visualizations, decision tables, and comprehensive appendices synthesizing literature on transformer architectures, sparse attention mechanisms, gated attention variants, and optimization algorithms. The system enables rapid iteration while maintaining reproducible experimental conditions through its schema-first design philosophy.
+Frankestein Transformer presents a unified configuration-driven toolkit for systematic experimentation with modern transformer architectures, spanning seventeen sequence mixer variants and twenty-two optimizer families. The system supports both encoder-style masked language modeling (MLM) and decoder-style autoregressive (AR) next-token prediction through flexible model class and mode configuration, with specialized fine-tuning workflows for both architectures. The research contributions are threefold: (i) a strict schema-based configuration contract that enables reproducible experimentation across diverse attention mechanisms, including standard softmax attention, sigmoid attention, retentive networks, selective state-space models, continuous-depth transformers, adaptive depth routing (Mixture-of-Depths) \citep{zhu2026mixtureofdepthsattention}, conditional memory augmentation (Engram) \citep{cheng2026conditionalmemoryscalablelookup}, sparse attention patterns, and gated mechanisms; (ii) a comprehensive optimizer routing framework supporting variance-reduction methods (MARS, Adan, AdEMAMix), memory-efficient variants (Adafactor, GaLore, Lion), schedule-free approaches, second-order preconditioners (Shampoo, SOAP, Sophia), and low-rank APOLLO-family optimizers (Apollo, Apollo-Mini, Q-Apollo) \citep{zhu2025apollosgdlikememoryadamwlevel}; and (iii) end-to-end workflows spanning quantized deployment via ternary weight packing and sentence-embedding training inspired by SBERT, backed by an expanded quality-assurance stack with broad unit test coverage, YAML example validation, and continuous integration execution. The toolkit implements a web-based configuration interface that provides schema-driven form rendering with inline documentation and real-time validation. This technical reference document includes architectural diagrams, execution-flow visualizations, decision tables, and comprehensive appendices synthesizing literature on transformer architectures, sparse attention mechanisms, gated attention variants, and optimization algorithms. The system enables rapid iteration while maintaining reproducible experimental conditions through its schema-first design philosophy.
 \end{abstract}
 
 \tableofcontents
@@ -62,9 +62,9 @@ The practical consequence is a fragmented research ecosystem where experimental 
 
 This work addresses these challenges through a unified, configuration-driven experimentation toolkit available at \url{https://github.com/erickfmm/frankestein-transformer} that provides:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Schema-First Design}: A strict, validated configuration contract that enforces reproducibility while supporting seventeen distinct sequence mixer architectures and twenty optimizer families.
-    \item \textbf{Architecture Agnostic Training}: Common training infrastructure supporting dense attention baselines (standard, sigmoid), recurrent alternatives (RetNet, Mamba, ODE-style blocks), adaptive depth routing (Mixture-of-Depths), conditional memory blocks (Engram), sparse attention patterns (Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA), and gated mechanisms (GLA, DeltaNet, Gated DeltaNet, HGRN2, FoX, Gated Softmax).
-    \item \textbf{Optimizer Routing Framework}: Prefixed hyperparameter groups enabling fine-grained control over embeddings, normalization layers, recurrent blocks, attention blocks, and other parameter subsets across diverse optimizers, including the APOLLO family (Apollo, Apollo-Mini, Q-Apollo).
+    \item \textbf{Schema-First Design}: A strict, validated configuration contract that enforces reproducibility while supporting seventeen distinct sequence mixer architectures and twenty-two optimizer families.
+    \item \textbf{Architecture Agnostic Training}: Common training infrastructure supporting dense attention baselines (standard, sigmoid), recurrent alternatives (RetNet, Mamba, ODE-style blocks), adaptive depth routing (Mixture-of-Depths) \citep{zhu2026mixtureofdepthsattention}, conditional memory blocks (Engram) \citep{cheng2026conditionalmemoryscalablelookup}, sparse attention patterns (Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA), and gated mechanisms (GLA, DeltaNet, Gated DeltaNet, HGRN2, FoX, Gated Softmax).
+    \item \textbf{Optimizer Routing Framework}: Prefixed hyperparameter groups enabling fine-grained control over embeddings, normalization layers, recurrent blocks, attention blocks, and other parameter subsets across diverse optimizers, including the APOLLO family (Apollo, Apollo-Mini, Q-Apollo) \citep{zhu2025apollosgdlikememoryadamwlevel}.
     \item \textbf{End-to-End Workflows}: Integrated deployment via quantization (ternary weight packing, INT8 activations) and sentence-embedding capabilities inspired by SBERT \citep{reimers_sentence-bert_2019}.
     \item \textbf{Interactive Configuration}: Web-based interface providing schema-driven form rendering, real-time validation, and CLI command generation.
     \item \textbf{Reliability Tooling}: Comprehensive automated testing with unit-test suites, YAML preset validation, and CI automation across supported Python versions.
@@ -92,8 +92,8 @@ This interactive interface serves as an alternative to manual YAML editing, impr
 This work makes the following primary contributions:
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Unified Configuration Schema}: A YAML-based schema contract with strict validation that supports seventeen distinct sequence mixer architectures across four categories (dense baselines, recurrent/retentive blocks, sparse attention patterns, and gated mechanisms), alongside adaptive depth and conditional memory controls, while enforcing reproducibility through \texttt{additionalProperties: false} constraints.
-    \item \textbf{Comprehensive Architecture Support}: Implementation of modern transformer variants including standard softmax attention \citep{vaswani_attention_2017}, sigmoid attention \citep{ramapuram_theory_2024}, RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, ODE-style continuous transformers \citep{zhang_continuous_2021}, Titans memory-augmented attention \citep{behrouz_titans_2025}, Engram conditional memory layers, Mixture-of-Depths token routing, sparse attention mechanisms \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}, and gated attention architectures \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}. System supports both encoder-mode training with bidirectional attention for masked language modeling (MLM) and decoder-mode training with causal masking for autoregressive next-token prediction.
-    \item \textbf{Optimizer Routing Framework}: Prefixed hyperparameter system enabling per-parameter-group control across twenty optimizers, including variance-reduction methods (MARS, Adan, AdEMAMix, Cautious AdamW), memory-efficient variants (Adafactor, GaLore, Lion), schedule-free approaches (Schedule-Free AdamW), curvature-aware methods (Sophia), second-order preconditioners (Shampoo, SOAP), orthogonality-oriented optimizers (Muon, Turbo-Muon), and the APOLLO family (Apollo, Apollo-Mini, Q-Apollo).
+    \item \textbf{Comprehensive Architecture Support}: Implementation of modern transformer variants including standard softmax attention \citep{vaswani_attention_2017}, sigmoid attention \citep{ramapuram_theory_2024}, RetNet \citep{sun_retentive_2023}, Mamba \citep{gu_mamba_2023}, ODE-style continuous transformers \citep{zhang_continuous_2021}, Titans memory-augmented attention \citep{behrouz_titans_2025}, Engram conditional memory layers \citep{cheng2026conditionalmemoryscalablelookup}, Mixture-of-Depths token routing \citep{zhu2026mixtureofdepthsattention}, sparse attention mechanisms \citep{child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026}, and gated attention architectures \citep{yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}. System supports both encoder-mode training with bidirectional attention for masked language modeling (MLM) and decoder-mode training with causal masking for autoregressive next-token prediction.
+    \item \textbf{Optimizer Routing Framework}: Prefixed hyperparameter system enabling per-parameter-group control across twenty-two optimizers, including variance-reduction methods (MARS, Adan, AdEMAMix, Cautious AdamW), memory-efficient variants (Adafactor, GaLore, Lion), schedule-free approaches (Schedule-Free AdamW), curvature-aware methods (Sophia), second-order preconditioners (Shampoo, SOAP), orthogonality-oriented optimizers (Muon, Turbo-Muon), large-batch scaling (LAMB), and the APOLLO family (Apollo, Apollo-Mini, Q-Apollo) \citep{zhu2025apollosgdlikememoryadamwlevel}.
     \item \textbf{Quantization and Deployment}: Integrated deployment pipeline supporting ternary weight packing and INT8 activation quantization with size estimates following $1.58$-bit storage approximation.
     \item \textbf{Sentence-Embedding Workflows}: SBERT-inspired training and inference pipelines supporting similarity scoring, retrieval, clustering, and persistent embedding export.
     \item \textbf{Interactive Configuration Interface}: Streamlit-based web server providing schema-driven form generation, real-time validation, inline documentation, and CLI command generation.
@@ -104,6 +104,7 @@ This work makes the following primary contributions:
 
 This document is organized as a technical reference addressing four operational concerns:
 \begin{enumerate}[leftmargin=*]
+    \item \textbf{Prerequisites}: Appendix~\ref{sec:annex-tutorial} provides an accessible introduction to transformers and attention mechanisms for readers new to the field.
     \item \textbf{Configuration Contract}: Section~\ref{sec:config-centric-architecture} describes the YAML schema that enforces valid experiments and Section~\ref{sec:schema-validation} explains validation rules.
     \item \textbf{Architecture Selection}: Section~\ref{sec:normalization} covers normalization options; Section~\ref{sec:attention-families} provides comprehensive comparison of sequence mixer families; Appendices~\ref{sec:annex-transformer}, \ref{sec:annex-sparse}, and \ref{sec:annex-gated} synthesize supporting literature.
     \item \textbf{Optimization Dynamics}: Section~\ref{sec:optimizer-families} details optimizer routing and training dynamics; Appendix~\ref{sec:annex-optimizers} provides comprehensive optimizer family analysis.
@@ -150,373 +151,37 @@ Schema metadata (title and description fields) are extracted and rendered system
     \item SBERT-specific training and inference parameters
 \end{itemize}
 
-\section{Conceptual Introduction: Transformers and Attention Mechanism for Beginners}
-
-This section explains the fundamental concepts of transformers and the attention mechanism in an accessible manner, without requiring deep prior knowledge in deep learning. Transformers are the engine behind modern artificial intelligence systems like ChatGPT, but their operation can be understood through real-world analogies.
-
-\subsection{What is a Transformer?}
-
-A transformer is a neural architecture that processes text or data sequences by interpreting the meaning of each word while considering all other words in context. Imagine you read a sentence:
-
-\begin{center}
-\textit{``The bank was full of people waiting. Mary went to the bank.''}
-\end{center}
-
-What does ``bank'' mean in each case? In the first sentence, it refers to a financial institution (or a bench). In the second, it is less clear without context. A transformer solves this automatically by looking at all surrounding words. In the second sentence, seeing ``Mary went'', the model better understands that it probably is a riverbank (where she goes to swim) or a financial institution (where she goes to conduct a transaction).
-
-This ability to understand the complete meaning of a word by considering the entire sentence is called \emph{contextualization}, and it is the heart of how modern transformers work.
-
-\subsection{The Attention Mechanism: An Analogy}
-
-The attention mechanism is the ``magic trick'' that allows transformers to understand context. Think of it as participating in an important conversation in a noisy room:
-
-\begin{enumerate}[leftmargin=*]
-    \item \textbf{Lots of noise}: Someone is speaking and being very important to you.
-    \item \textbf{You ignore the rest}: Your brain automatically focuses attention on that person, ignoring other sounds.
-    \item \textbf{You understand better}: By concentrating, you catch every word clearly.
-\end{enumerate}
-
-The neural attention mechanism works the same way: each word ``asks'' how important every other word is to understanding its meaning, then ``focuses'' its attention on the most relevant ones.
-
-\subsection{Practical Example Step-by-Step}
-
-Let's see how a transformer understands the word ``eats'' in two different contexts:
-
-\subsubsection{Context 1: ``The cat eats fish''}
-
-The transformer, when processing ``eats'', internally asks:
-\begin{itemize}[leftmargin=*]
-    \item How relevant is ``The''? Little (it's just an article). \textbf{Low attention}.
-    \item How relevant is ``cat''? Very relevant (it's the subject, who eats). \textbf{High attention}.
-    \item How relevant is ``fish''? Very relevant (it's what is eaten). \textbf{High attention}.
-\end{itemize}
-
-Thus, the mental representation of ``eats'' focuses primarily on ``cat'' and ``fish''.
-
-\subsubsection{Context 2: ``The restaurant eats into profit margins''}
-
-Here the transformer asks in a different context:
-\begin{itemize}[leftmargin=*]
-    \item How relevant is ``restaurant''? Very relevant (it's the subject). \textbf{High attention}.
-    \item How relevant is ``profit''? Very relevant (it's affected). \textbf{High attention}.
-    \item How relevant is ``margins''? Very relevant (it's what's being consumed). \textbf{High attention}.
-\end{itemize}
-
-The word ``eats'' gets a completely different representation because it ``attends'' to different words in different contexts.
-
-\subsection{How Attention Works Mathematically (Simple Version)}
-
-Behind the attention shift is mathematics. Here is the simplified version without too much technical detail:
-
-\subsubsection{Step 1: Queries, Keys, and Values}
-
-Each word in the sentence is transformed into three versions:
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Query}: ``What information do I need to know?''
-    \item \textbf{Key}: ``What information do I have?''
-    \item \textbf{Value}: ``Here is my important information.''
-\end{itemize}
-
-Imagine in a library, each visitor is a ``query'', each book is a ``key'', and the content is the ``value''. The librarian (attention) matches queries with the most relevant keys to access the correct value.
-
-\subsubsection{Step 2: Compatibility}
-
-The system examines how \emph{compatible} each query is with each key. Queries similar to keys get a \emph{high} compatibility score. This is calculated by multiplying the query by the key (mathematically, the dot product).
-
-\subsubsection{Step 3: Focus}
-
-The compatibility scores are converted into ``focus weights''. High compatibilities mean ``focus attention here'', and low ones mean ``ignore this''. Mathematically, a function called \texttt{softmax} converts scores into percentages (like: 40\% attention here, 35\% here, 25\% there).
-
-\subsubsection{Step 4: Combine}
-
-Finally, the system combines all values, weighted by the focus weights. If a word has 80\% attention on the subject, 80\% of the subject's information gets blended into that word's representation.
-
-\subsection{Multiple Attention Heads: Multiple Perspectives}
-
-A key feature is that transformers do not use a single attention but \emph{multiple attention heads} in parallel. It's as if you had 8 people analyzing the sentence \emph{simultaneously}, each paying attention to different aspects:
-
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Person 1}: ``I focus on subject-verb relationships.''
-    \item \textbf{Person 2}: ``I search for the direct object.''
-    \item \textbf{Person 3}: ``I track information about verb tense.''
-    \item \textbf{Person 4}: ``I search for modifiers and adjectives.''
-\end{itemize}
-
-Each ``head'' learns to focus on different language patterns. Together, they capture much richer understanding than a single head.
-
-\subsection{Stacking Layers}
-
-Transformers process information in \emph{multiple layers} (usually 12 to 48 for practical models). Imagine editing an essay:
-\begin{enumerate}[leftmargin=*]
-    \item \textbf{First pass}: You fix spelling and basic grammar.
-    \item \textbf{Second pass}: You improve clarity and sentence structure.
-    \item \textbf{Third pass}: You ensure consistency and narrative flow.
-\end{enumerate}
-
-Transformers work the same way: each layer refines text understanding. The first layer captures basic features (simple words, genders), while later layers understand complex concepts (word relationships, abstract meanings).
-
-\subsection{Why Does It Matter?}
-
-The attention mechanism was revolutionary because:
-\begin{enumerate}[leftmargin=*]
-    \item \textbf{Parallelism}: It finds context for \emph{any word with any other word}, without processing them sequentially (unlike earlier systems). This makes it very fast.
-    \item \textbf{Flexibility}: It learns what patterns to look for automatically from data, without you needing to program rules manually.
-    \item \textbf{Scalability}: It works from small texts to contexts with millions of words.
-    \item \textbf{General Capabilities}: The same mechanism works for translation, summarization, question-answering, text generation, computer vision, and more.
-\end{enumerate}
-
-\subsection{Practical Challenges}
-
-Despite the extraordinary success of transformers, they present challenges:
-
-\subsubsection{Computational Complexity}
-
-If a sentence has 1,000 words, the standard attention mechanism must compare each word with all other 1,000 words. That's $1,000 \times 1,000 = 1,000,000$ comparisons. For long documents with millions of words, this becomes prohibitively expensive in time and memory.
-
-\subsubsection{Memory Requirements}
-
-Especially during inference (when using trained models), storing the entire attention matrix can consume enormous amounts of RAM or GPU memory, limiting the sequence lengths you can process.
-
-\subsubsection{Device Efficiency}
-
-Transformers were designed for powerful TPUs and GPUs. Running them on phones or embedded devices is challenging.
-
-\subsection{Modern Solutions}
-
-To solve these challenges, research has proposed many variants:
-
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Sparse Attention}: Instead of comparing each word with ALL others, it compares only with a strategic subset (nearby neighbors, periodic patterns). Reduces complexity from $\mathcal{O}(n^2)$ to $\mathcal{O}(n \log n)$ or $\mathcal{O}(n)$.
-    \item \textbf{Recurrent Models}: Like Mamba, they incorporate aspects of old recurrent neural networks but with better modern efficiency.
-    \item \textbf{Gated Attention}: Mechanisms that selectively learn what information to pass forward, reducing storage needs.
-    \item \textbf{Quantization}: Use smaller numbers (integers instead of decimals) to reduce memory without losing too much precision.
-\end{itemize}
-
-These innovations are what this toolkit (Frankenstein) allows you to experiment with easily.
-
-\subsection{Key Takeaways}
-
-\begin{itemize}[leftmargin=*]
-    \item A \textbf{transformer} is a neural network that understands language context very well.
-    \item The \textbf{attention mechanism} allows each word to ``focus'' on which other words are relevant to understanding its meaning.
-    \item Attention works by computing \textbf{compatibility} between each word (query) and all others (keys), then combining information based on that compatibility (values).
-    \item \textbf{Multiple heads} of attention explore different patterns in parallel.
-    \item \textbf{Multiple layers} progressively refine understanding.
-    \item The main challenge is that standard attention has quadratic complexity, which is expensive for long texts.
-    \item Many \textbf{modern solutions} (sparse attention, recurrent models, quantization) address these challenges, and this toolkit lets you explore all of them.
-\end{itemize}
-
-With this intuitive understanding, you are ready to explore the technical details that follow. Welcome to the frontier of language processing!
-
 \section{Related Work}
 
-This work sits at intersection of three active research areas: alternative attention architectures, sparse attention mechanisms, and advanced optimization algorithms. This section synthesizes relevant literature across these domains to contextualize contributions.
+This work sits at the intersection of three active research areas: alternative attention architectures, sparse attention mechanisms, and advanced optimization algorithms. This section provides a concise survey; detailed mathematical formulations and algorithmic descriptions are deferred to the appendices.
 
 \subsection{Sequence Mixer Architectures}
 
-The trajectory of sequence modeling in artificial intelligence has been shaped by continuous tension between computational expressivity and resource efficiency. The advent of standard transformer attention mechanism fundamentally transformed natural language processing, computer vision, and computational biology by prioritizing global contextualization over sequential recurrence. However, as ambition of foundation models scales toward multimillion-token context windows, the quadratic computational complexity $\mathcal{O}(n^2)$ of traditional self-attention has emerged as severe bottleneck \citep{vaswani_attention_2017}.
-
 \subsubsection{Dense Attention Baselines}
-
-\paragraph{Standard Softmax Attention.}
-The standard multi-head self-attention mechanism established paradigm shift by entirely dispensing with sequential recurrence and localized convolutions. By permitting every token in a sequence to directly attend to every other token, standard transformer achieved unparalleled success in capturing long-range dependencies. The formulation computes a weighted sum of value vectors:
-
-$$
-\text{Attention}(Q,K,V) = \text{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
-$$
-
-For autoregressive decoding, this mechanism requires Key-Value (KV) caching to circumvent $\mathcal{O}(n^2)$ recomputation. However, this theoretical efficiency comes at cost of linearly growing memory footprint requiring $\mathcal{O}(n \cdot d)$ space, which can consume hundreds of gigabytes of High Bandwidth Memory (HBM) for large models \citep{vaswani_attention_2017}.
-
-\paragraph{Sigmoid Attention.}
-Sigmoid attention replaces row-wise softmax normalization with element-wise sigmoid activation:
-
-$$
-\text{SigmoidAttn}(Q,K,V) = \sigma\left(\frac{QK^\top}{\sqrt{d_k}}+b\right)V
-$$
-
-Theoretical analyses leveraging mixture-of-experts perspective reveal critical advantages in sample complexity. For models utilizing ReLU experts, softmax gating converges at $\mathcal{O}(n^{-0.24})$, while sigmoid version achieves significantly faster $\mathcal{O}(n^{-0.51})$ convergence. Element-wise nature circumvents cross-thread synchronization overhead, enabling 17\% inference kernel speedup via FlashSigmoid on NVIDIA H100 GPUs \citep{ramapuram_theory_2024}. However, empirical scaling revealed training instabilities requiring ``hybrid-norm'' stabilization layer for large-scale models.
+Standard softmax attention \citep{vaswani_attention_2017} achieves full global context through $n^2$ pairwise interactions but incurs prohibitive memory and compute costs for long sequences. Sigmoid attention \citep{ramapuram_theory_2024} replaces row-wise softmax with element-wise sigmoid, yielding faster convergence and up to 17\% kernel speedup, though requiring hybrid-norm stabilization at scale. Both serve as dense baselines in this toolkit.
 
 \subsubsection{Recurrent and Retentive Architectures}
-
-\paragraph{RetNet (Retentive Network).}
-RetNet was explicitly engineered to resolve ``impossible triangle'' of sequence modeling: achieving parallelizable training, low-cost $\mathcal{O}(1)$ inference, and high performance simultaneously. The retention mechanism introduces fixed causal exponential decay matrix $D$:
-
-$$
-\text{Retention}(X) = (QK^\top \odot D)V
-$$
-
-with recurrent form:
-$$
-S_n = \gamma S_{n-1} + k_n^\top v_n,\quad o_n = q_n S_n
-$$
-
-This dual representation enables parallel training with $\mathcal{O}(n^2 \cdot d)$ complexity and recurrent inference with $\mathcal{O}(1)$ time per step, eliminating KV cache entirely \citep{sun_retentive_2023}.
-
-\paragraph{Mamba (Selective State Space Model).}
-Mamba addresses limitations of Linear Time-Invariant (LTI) state-space models by introducing selectivity to fundamental parameters. The continuous-time system:
-
-$$
-h'(t) = A h(t) + B x(t),\quad y(t) = C h(t)
-$$
-
-is discretized with input-dependent parameters:
-$$
-\bar{A}_t = \exp(\Delta_t A),\quad \bar{B}_t = \Delta_t B_t,\quad \Delta_t = \text{softplus}(\text{Linear}(x_t))
-$$
-
-The hardware-aware scan algorithm enables linear $\mathcal{O}(n \cdot d)$ complexity with efficient GPU utilization, making linear recurrence practical on accelerators \citep{gu_mamba_2023}.
-
-\paragraph{ODE-style Continuous Transformers.}
-The ODE transformer treats depth as numerical integration over continuous dynamical system:
-
-$$
-\frac{dh(t)}{dt} = f_\theta(h(t),t)
-$$
-
-with Runge-Kutta refinement reducing truncation error and improving sequence generation quality. This provides more expressive intra-block trajectory with weight sharing, though at higher computational cost \citep{zhang_continuous_2021}.
-
-\paragraph{Titans Memory-Augmented Attention.}
-Titans introduces test-time neural memorization: instead of storing only activations, model updates internal memory using surprise-driven learning signals during inference. This addresses context beyond what fixed-state recurrent models typically support, enabling extremely long contexts and associative recall. The systems cost is higher implementation complexity because inference now includes memory adaptation logic \citep{behrouz_titans_2025}.
+RetNet \citep{sun_retentive_2023} resolves the ``impossible triangle'' of parallel training, $\mathcal{O}(1)$ inference, and strong performance via a dual attention--retention formulation. Mamba \citep{gu_mamba_2023} introduces input-dependent selectivity into state-space models, achieving linear complexity with hardware-aware scan algorithms. ODE-style transformers \citep{zhang_continuous_2021} treat depth as numerical integration over a continuous dynamical system. Titans \citep{behrouz_titans_2025} augments inference with test-time neural memorization for extremely long contexts. Detailed formulations are provided in Appendix~\ref{sec:annex-transformer}.
 
 \subsubsection{Sparse Attention Mechanisms}
-
-Standard attention's quadratic complexity becomes prohibitive for sequences exceeding hundreds of thousands of tokens. Sparse attention mechanisms address this by restricting set of token interactions, exploiting observation that most learned attention weights are near zero.
-
-\paragraph{Sparse Transformer.}
-Introduces factorized sparse attention reducing $\mathcal{O}(n^2)$ complexity to $\mathcal{O}(n\sqrt{n})$. Uses two complementary sparse patterns: strided attention and fixed attention, each attending to $\mathcal{O}(\sqrt{n})$ positions \citep{child_sparse_transformer_2019}.
-
-\paragraph{Longformer.}
-Introduces sliding window attention with optional global tokens, achieving linear $\mathcal{O}(n \cdot w)$ scaling where $w$ is fixed window size. Combines sliding windows, dilated patterns, and global tokens to maintain long-range connectivity with sparse computation \citep{beltagy_longformer_2020}.
-
-\paragraph{BigBird.}
-Combines local windows, random links, and global tokens to preserve strong long-context connectivity with sparse computation. Randomized sparse mask plus local/global paths maintains theoretical approximation properties \citep{zaheer_bigbird_2020}.
-
-\paragraph{SparseK.}
-Uses differentiable top-$k$ style projection over importance scores before attention, so only selected KV pairs participate in expensive dot-product path \citep{lou_sparsek_2024}.
-
-\paragraph{NSA (Native Sparse Attention).}
-Implements three-branch sparse design: compressed branch, selected branch, and local window branch, then combines them with learned gates \citep{yuan_nsa_2025}.
-
-\paragraph{SpargeAttn.}
-Two-stage training-free block filtering: first predicts negligible block interactions, then applies softmax-aware pruning to remove low-contribution blocks \citep{zhang_spargeattn_2025}.
-
-\paragraph{FASA (Frequency-Aware Sparse Attention).}
-Uses dominant RoPE frequency chunks for token importance prediction, then applies full attention only on selected tokens. Eval-only in this repository due to training-free nature \citep{wang_fasa_2026}.
+Sparse attention methods reduce the quadratic bottleneck by restricting token interactions: Sparse Transformer \citep{child_sparse_transformer_2019} uses factorized strided and fixed patterns ($\mathcal{O}(n\sqrt{n})$); Longformer \citep{beltagy_longformer_2020} employs sliding windows with global tokens ($\mathcal{O}(n \cdot w)$); BigBird \citep{zaheer_bigbird_2020} combines local, random, and global paths; SparseK \citep{lou_sparsek_2024} applies differentiable top-$k$ selection; NSA \citep{yuan_nsa_2025} uses a three-branch hierarchical design; SpargeAttn \citep{zhang_spargeattn_2025} performs two-stage block-level pruning; and FASA \citep{wang_fasa_2026} leverages RoPE frequency features for token selection. Complete descriptions are in Appendix~\ref{sec:annex-sparse}.
 
 \subsubsection{Gated Attention Mechanisms}
-
-The unifying idea across gated architectures is that gating controls \textit{what information survives}. Gates act on recurrent state updates (GLA, DeltaNet variants, HGRN2) or modify full attention path (FoX, Gated Softmax), making them especially useful when model must trade off recall, recency, and bounded memory.
-
-\paragraph{Gated Linear Attention (GLA).}
-Augments vanilla linear attention with data-dependent gating mechanism. Linear attention formulates recurrence with matrix-valued hidden state $S_t = S_{t-1} + v_t k_t^\top$, but this purely additive accumulation leads to ``memory overload''. GLA introduces diagonal gating matrix $G_t$:
-
-$$
-S_t = G_t \odot S_{t-1} + v_t k_t^\top,\quad o_t = S_t q_t
-$$
-
-with $G_t$ parameterized via outer-product structure $G_t = \mathbf{1}\boldsymbol{\alpha}_t^\top$ \citep{yang_gla_2023}.
-
-\paragraph{DeltaNet.}
-Applies classical delta learning rule to linear attention. State update performs difference between predicted value and target value:
-
-$$
-S_t = S_{t-1}(I - \beta_t k_t k_t^\top) + \beta_t v_t k_t^\top
-$$
-
-This is mathematically equivalent to single step of stochastic gradient descent on online MSE loss at each timestep, connecting DeltaNet to test-time training paradigm \citep{yang_deltanet_2024}.
-
-\paragraph{Gated DeltaNet.}
-Synthesizes gating mechanism from Mamba2/GLA and delta rule from DeltaNet. Gated delta rule state update:
-
-$$
-S_t = S_{t-1}\left(\alpha_t(I - \beta_t k_t k_t^\top)\right) + \beta_t v_t k_t^\top
-$$
-
-where $\alpha_t \in (0,1)$ is decay gate and $\beta_t \in (0,1)$ is writing strength. These mechanisms are complementary: gating enables rapid memory erasure, while delta rule enables targeted updates \citep{yang_gated_deltanet_2024}.
-
-\paragraph{HGRN2.}
-Introduces outer-product-based state expansion mechanism with hierarchical forget gates. State update:
-
-$$
-S_t = \text{diag}(g_t) \cdot S_{t-1} + v_t k_t^\top,\quad o_t = S_t q_t
-$$
-
-where $g_t$ has hierarchically lower-bounded values increasing monotonically in upper layers, enforcing multi-scale temporal modeling \citep{qin_hgrn2_2024}.
-
-\paragraph{FoX (Forgetting Transformer).}
-Embeds forget gate directly into softmax attention by adding data-dependent logit bias to attention scores. Preserves full expressiveness and quadratic-time computation of softmax attention while gaining benefits of recency control \citep{lin_forgetting_transformer_2025}.
-
-\paragraph{Gated Softmax Attention.}
-Applies post-SDPA sigmoid gate:
-
-$$
-Y' = \text{SDPA}(Q,K,V) \odot \sigma(XW_g)
-$$
-
-which adds multiplicative channel gating without replacing softmax attention \citep{qiu_gated_attention_2025}.
+Gated architectures control information flow through learnable gates: GLA \citep{yang_gla_2023} adds data-dependent diagonal gating to linear attention; DeltaNet \citep{yang_deltanet_2024} applies the delta learning rule to recurrent state updates; Gated DeltaNet \citep{yang_gated_deltanet_2024} synthesizes both mechanisms; HGRN2 \citep{qin_hgrn2_2024} introduces hierarchical forget gates with outer-product state expansion; FoX \citep{lin_forgetting_transformer_2025} embeds forget gates directly into softmax attention; and Gated Softmax \citep{qiu_gated_attention_2025} applies post-SDPA channel gating. Full mathematical derivations appear in Appendix~\ref{sec:annex-gated}.
 
 \subsection{Optimization Algorithms}
 
-Optimization of deep neural networks, particularly highly parameterized transformer architectures, represents one of most mathematically complex challenges in modern computational learning theory. Loss landscapes of large language models are characterized by severe non-convexity, saddle points, and block heterogeneity, where Hessian spectrum varies dramatically across different parameter blocks.
+Optimization of highly parameterized transformer architectures requires navigating non-convex loss landscapes with heterogeneous Hessian spectra. The literature has diversified into several families beyond the classical AdamW baseline \citep{loshchilov_decoupled_2017}:
 
-\subsubsection{Classical Baselines}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Variance reduction and momentum}: RAdam \citep{liu_variance_2019}, Adan \citep{xie_adan_2022}, ADOPT \citep{taniguchi_adopt_2024}, AdEMAMix \citep{pagliardini_ademamix_2024}, MARS \citep{yuan_mars_2024}, and Cautious optimizers \citep{liang_cautious_2024} address early-step instability, convergence guarantees, and dual-EMA history mixing.
+    \item \textbf{Memory-efficient}: Adafactor \citep{shazeer_adafactor_2018}, GaLore \citep{zhao_galore_2024}, Lion \citep{chen_symbolic_2023}, and APOLLO \citep{zhu2025apollosgdlikememoryadamwlevel} reduce optimizer-state memory through factorization, low-rank projection, or sign-based updates.
+    \item \textbf{Schedule-free and parameter-free}: Schedule-Free AdamW \citep{defazio_road_2024} and Prodigy \citep{mishchenko_prodigy_2023} absorb scheduler or learning-rate tuning into the optimizer dynamics.
+    \item \textbf{Second-order and curvature-aware}: Shampoo \citep{gupta_shampoo_2018}, SOAP \citep{vyas_soap_2024}, and Sophia \citep{liu_sophia_2023} incorporate approximate second-order information.
+    \item \textbf{Geometry-oriented}: Muon \citep{shen_convergence_2025} and Turbo-Muon \citep{boissin_turbo-muon_2025} reshape update geometry through orthogonalization.
+\end{itemize}
 
-\paragraph{SGD with Momentum.}
-The classical update accumulates momentum buffer and applies fixed learning rate. Strengths are low memory overhead and strong generalization when tuned carefully. Main weakness in transformer workloads is poor robustness to heterogeneous curvature and high dependence on learning-rate schedules \citep{polyak_1964}.
-
-\paragraph{Adam and AdamW.}
-Adam tracks first and second moments of gradient; AdamW decouples weight decay from adaptive step. AdamW is treated as practical baseline for transformer fine-tuning because it converges quickly and is relatively forgiving. Tradeoff is state cost, since both moment tensors must be stored for every parameter \citep{kingma_adam_2014,loshchilov_decoupled_2017}.
-
-\paragraph{RAdam.}
-Introduces variance rectification in early training, motivated by observation that Adam's adaptive denominator is unreliable during initial steps. This reduces warmup sensitivity without abandoning Adam family \citep{liu_variance_2019}.
-
-\subsubsection{Advanced Momentum and Variance Reduction (2024--2025)}
-
-\paragraph{Adan (Adaptive Nesterov Momentum).}
-Reformulates Nesterov-style momentum to avoid extra gradient computation at extrapolation point. Uses Nesterov Momentum Estimation (NME) for both first- and second-order moment estimates, achieving fast convergence across CNNs, Transformers, and GANs. Requires three momentum buffers \citep{xie_adan_2022}.
-
-\paragraph{ADOPT.}
-Fixes Adam's theoretical non-convergence by: (1) removing current gradient from second-moment estimate and (2) reordering momentum update and normalization. Achieves optimal $\mathcal{O}(1/\sqrt{T})$ rate with any choice of $\beta_2$, without bounded noise assumptions \citep{taniguchi_adopt_2024}.
-
-\paragraph{AdEMAMix.}
-Replaces Adam's single EMA of gradients with mixture of two EMAs---one fast-decaying and one slow-decaying. Demonstrates that gradients remain relevant for tens of thousands of steps, significantly slowing model forgetting during training \citep{pagliardini_ademamix_2024}.
-
-\paragraph{MARS (Make Variance Reduction Shine).}
-Unified framework reconciling preconditioned gradient methods with variance reduction via scaled stochastic recursive momentum. Offers instances based on AdamW, Lion, and Shampoo, consistently outperforming AdamW by large margin on GPT-2 \citep{yuan_mars_2024}.
-
-\paragraph{Cautious Optimizers.}
-One-line modification to any momentum-based optimizer: update is masked so that only components where momentum and gradient agree in sign are applied. Preserves convergence guarantees while significantly speeding up training \citep{liang_cautious_2024}.
-
-\subsubsection{Memory-Efficient and Schedule-Free Optimizers}
-
-\paragraph{Adafactor.}
-Factorizes second-moment statistics for matrix-shaped parameters, dramatically reducing optimizer-state memory. Most attractive when memory is bottleneck and some loss in optimizer simplicity is acceptable \citep{shazeer_adafactor_2018}.
-
-\paragraph{GaLore.}
-Projects gradients into low-rank subspace before optimization. Complementary memory-saving path especially relevant when model is too large for full-rank optimizer state \citep{zhao_galore_2024}.
-
-\paragraph{Prodigy.}
-Parameter-free or distance-adaptive method estimating effective step sizes from optimization geometry, reducing need for explicit learning-rate tuning \citep{mishchenko_prodigy_2023}.
-
-\paragraph{Schedule-Free AdamW.}
-Removes explicit scheduler design from optimization recipe. Emphasizes operational simplicity: instead of investing effort in warmup and decay design, one can use optimizer whose update dynamics absorb part of that responsibility \citep{defazio_road_2024}.
-
-\paragraph{Lion.}
-Uses sign momentum updates carrying much smaller state than Adam-like methods. Positioned as low-memory, high-throughput alternative rather than universally superior optimizer \citep{chen_symbolic_2023}.
-
-\subsubsection{Second-Order and Curvature-Aware Optimizers}
-
-\paragraph{Shampoo.}
-Computes matrix preconditioners from Kronecker-structured statistics. One of most explicit second-order methods, motivated by conditioning improvements rather than minimal implementation complexity \citep{gupta_shampoo_2018}.
-
-\paragraph{SOAP.}
-Keeps Adam-style tracking in eigenbasis of Shampoo-like preconditioner. Hybrid between full matrix preconditioning and adaptive first-order behavior \citep{vyas_soap_2024}.
-
-\paragraph{Sophia.}
-Uses approximate second-order information through diagonal Hessian estimates and clipped updates. Belongs to family of curvature-aware methods seeking better conditioning without paying full cost of dense second-order optimization \citep{liu_sophia_2023}.
-
-\paragraph{Muon and Turbo-Muon.}
-Orthogonality-oriented optimizers explicitly reshaping update geometry. Turbo-Muon adds faster Newton--Schulz-style orthogonalization, making same basic idea more practical at scale \citep{shen_convergence_2025,boissin_turbo-muon_2025}.
+Detailed algorithmic descriptions, pseudocode, and a comprehensive complexity comparison are provided in Appendix~\ref{sec:annex-optimizers}.
 
 \section{System Design and Architecture}
 \label{sec:system-design}
@@ -576,7 +241,7 @@ The \texttt{model.layer\_pattern} supports legacy, sparse, and gated blocks:
 which corresponds to current attention and sequence-mixer literature \citep{sun_retentive_2023,gu_mamba_2023,zhang_continuous_2021,behrouz_titans_2025,ramapuram_theory_2024,vaswani_attention_2017,child_sparse_transformer_2019,beltagy_longformer_2020,zaheer_bigbird_2020,lou_sparsek_2024,yuan_nsa_2025,zhang_spargeattn_2025,wang_fasa_2026,yang_gla_2023,yang_deltanet_2024,yang_gated_deltanet_2024,qin_hgrn2_2024,lin_forgetting_transformer_2025,qiu_gated_attention_2025}
 
 The \texttt{training.optimizer.optimizer\_class} supports a broad optimizer family:
-\texttt{adamw}, \texttt{adafactor}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{schedulefree\_adamw}, \texttt{lion}, \texttt{sophia}, \texttt{prodigy}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{shampoo}, \texttt{soap}, and others.
+\texttt{sgd\_momentum}, \texttt{adamw}, \texttt{adafactor}, \texttt{galore\_adamw}, \texttt{prodigy}, \texttt{lion}, \texttt{sophia}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{lamb}, \texttt{schedulefree\_adamw}, \texttt{shampoo}, \texttt{soap}, \texttt{apollo}, \texttt{apollo\_mini}, and \texttt{q\_apollo}.
 
 \begin{figure}[t]
 \centering
@@ -592,7 +257,7 @@ box/.append style={inner sep=4pt, minimum height=0.62cm}
 % Main blocks
 \node[box, fill=orange!12, minimum width=1.9cm] (model) at (-2.6,-4.3) {\textbf{Model}\\17 mixers};
 \node[box, fill=yellow!15, minimum width=2.0cm] (train) at (0,-4.3) {\textbf{Training}\\AMP + scheduler};
-\node[box, fill=red!12, minimum width=1.9cm] (opt) at (2.6,-4.3) {\textbf{Optimizer}\\20 families};
+\node[box, fill=red!12, minimum width=1.9cm] (opt) at (2.6,-4.3) {\textbf{Optimizer}\\22 families};
 % Outcomes
 \node[box, fill=purple!12, minimum width=2.0cm] (modelout) at (-2.6,-5.95) {\textbf{Model Build}\\pattern + loops};
 \node[box, fill=purple!10, minimum width=2.0cm] (trainout) at (0,-5.95) {\textbf{Train Loop}\\checks + logs};
@@ -749,7 +414,7 @@ This dual task support enables unified experimentation across both encoder-style
 \subsection{Optimizer Prefix Contract (Full)}
 
 Supported \texttt{optimizer\_class} values are:
-\texttt{sgd\_momentum}, \texttt{adamw}, \texttt{adafactor}, \texttt{galore\_adamw}, \texttt{prodigy}, \texttt{lion}, \texttt{sophia}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{lamb}, \texttt{schedulefree\_adamw}, \texttt{shampoo}, \texttt{soap}.
+\texttt{sgd\_momentum}, \texttt{adamw}, \texttt{adafactor}, \texttt{galore\_adamw}, \texttt{prodigy}, \texttt{lion}, \texttt{sophia}, \texttt{muon}, \texttt{turbo\_muon}, \texttt{radam}, \texttt{adan}, \texttt{adopt}, \texttt{ademamix}, \texttt{mars\_adamw}, \texttt{cautious\_adamw}, \texttt{lamb}, \texttt{schedulefree\_adamw}, \texttt{shampoo}, \texttt{soap}, \texttt{apollo}, \texttt{apollo\_mini}, \texttt{q\_apollo}.
 
 Shared per-group suffix families (all prefixed by optimizer name) are:
 \begin{itemize}[leftmargin=*]
@@ -768,6 +433,9 @@ Optimizer-specific global suffixes:
     \item \texttt{sophia}: \texttt{rho}, \texttt{update\_k}
     \item \texttt{muon} / \texttt{turbo\_muon}: \texttt{momentum}, \texttt{nesterov}, \texttt{ns\_steps}, \texttt{ns\_eps}
     \item \texttt{cautious\_adamw}: \texttt{cautious\_clip}
+    \item \texttt{apollo}: \texttt{rank}, \texttt{update\_proj\_gap}, \texttt{scale}, \texttt{scale\_type}, \texttt{proj\_type}, \texttt{scale\_front}, \texttt{disable\_nl}
+    \item \texttt{apollo\_mini}: \texttt{update\_proj\_gap}, \texttt{scale}, \texttt{proj\_type}, \texttt{scale\_front}, \texttt{disable\_nl}
+    \item \texttt{q\_apollo}: \texttt{rank}, \texttt{update\_proj\_gap}, \texttt{scale}, \texttt{scale\_type}, \texttt{proj\_type}, \texttt{scale\_front}, \texttt{disable\_nl}, \texttt{quant\_bits}
 \end{itemize}
 All other classes in the list above accept only prefixed shared groups.
 
@@ -1208,54 +876,7 @@ Gated Softmax & full attention matrix & post-attention sigmoid gate & Yes & Sigm
 \section{Optimizer Families and Training Dynamics}
 \label{sec:optimizer-families}
 
-Optimization of highly parameterized transformer architectures presents significant challenges due to non-convex loss landscapes, saddle points, and block heterogeneity across parameter groups. The Hessian spectrum varies dramatically between embeddings, attention weights, normalization layers, and feed-forward networks, creating optimization pathways where certain dimensions are exponentially sharper or flatter than others. This system addresses these challenges through a unified framework supporting twenty optimizer families spanning multiple algorithmic trajectories.
-
-\subsection{Taxonomic Organization of Supported Optimizers}
-
-The optimizer support is organized into six algorithmic categories reflecting modern research directions in deep learning optimization:
-
-\begin{enumerate}[leftmargin=*]
-    \item \textbf{Classical Baselines}: SGD with momentum, Adam, and AdamW define the comparison floor against which newer methods are evaluated. These methods are well-understood but exhibit limitations including sensitivity to learning-rate schedules, poor robustness to heterogeneous curvature (SGD), and high memory overhead for large models (Adam-family).
-    \item \textbf{Advanced Momentum and Variance Reduction}: Adan, ADOPT, AdEMAMix, MARS, and Cautious AdamW (2024--2025) address specific limitations of classical methods. Adan reformulates Nesterov acceleration, ADOPT fixes Adam's theoretical non-convergence, AdEMAMix introduces dual-EMA history mixing, MARS brings variance reduction to large-scale training, and Cautious variants mask updates to sign-consistent directions.
-    \item \textbf{Memory-Efficient Optimizers}: Adafactor, GaLore, and Lion reduce optimizer-state memory through factorization, low-rank projection, or sign-based updates. These methods are critical when VRAM is dominated by optimizer state rather than activations.
-    \item \textbf{Schedule-Free and Parameter-Free}: Schedule-Free AdamW and Prodigy remove explicit scheduler design or learning-rate tuning by making update dynamics absorb these responsibilities, reducing hyperparameter search complexity.
-    \item \textbf{Curvature-Aware and Second-Order}: Sophia, Shampoo, and SOAP incorporate approximate second-order information through diagonal Hessian estimates, Kronecker-structured statistics, or eigenbasis tracking, improving conditioning at cost of implementation complexity.
-    \item \textbf{Geometry-Oriented}: Muon and Turbo-Muon explicitly reshape update geometry through orthogonalization, useful when matrix structure matters for representation shaping.
-\end{enumerate}
-
-\subsection{Core Adaptive Formulation}
-
-Many supported optimizers share fundamental moment-tracking formulation. Adam-family optimizers track first and second moments of gradients:
-
-\[
-m_t = \beta_1 m_{t-1} + (1-\beta_1)g_t,\quad
-v_t = \beta_2 v_{t-1} + (1-\beta_2)g_t^2
-\]
-
-followed by preconditioned updates with bias correction:
-
-\[
-\hat{m}_t = \frac{m_t}{1 - \beta_1^t},\quad
-\hat{v}_t = \frac{v_t}{1 - \beta_2^t},\quad
-\theta_{t+1} = \theta_t - \eta_t\left(\frac{\hat{m}_t}{\sqrt{\hat{v}_t}+\epsilon} + \lambda\theta_t\right)
-\]
-
-where $\eta_t$ is the learning rate schedule, $\epsilon$ is numerical stability constant, and $\lambda$ is weight decay coefficient \citep{loshchilov_decoupled_2017}.
-
-\subsection{Detailed Optimizer Descriptions}
-\begin{itemize}[leftmargin=*]
-    \item \textbf{RAdam}: variance rectification for early-step instability \citep{liu_variance_2019}.
-    \item \textbf{Adan}: adaptive Nesterov momentum for faster convergence \citep{xie_adan_2022}.
-    \item \textbf{ADOPT}: modified Adam order yielding stronger convergence guarantees \citep{taniguchi_adopt_2024}.
-    \item \textbf{AdEMAMix}: dual-EMA history mixing \citep{pagliardini_ademamix_2024}.
-    \item \textbf{MARS}: variance reduction in preconditioned optimization \citep{yuan_mars_2024}.
-    \item \textbf{Cautious optimizers}: sign-consistent masking of momentum updates \citep{liang_cautious_2024}.
-    \item \textbf{Schedule-free}: remove explicit scheduler dependence \citep{defazio_road_2024}.
-    \item \textbf{Shampoo/SOAP}: matrix preconditioning families \citep{gupta_shampoo_2018,vyas_soap_2024}.
-    \item \textbf{Adafactor/GaLore}: memory reduction via factorization or low-rank projection \citep{shazeer_adafactor_2018,zhao_galore_2024}.
-    \item \textbf{Prodigy/Lion/Sophia}: parameter-free adaptation, sign momentum, and clipped second-order scaling \citep{mishchenko_prodigy_2023,chen_symbolic_2023,liu_sophia_2023}.
-    \item \textbf{Muon/Turbo-Muon}: orthogonality-oriented updates with acceleration \citep{shen_convergence_2025,boissin_turbo-muon_2025}.
-\end{itemize}
+Optimization of highly parameterized transformer architectures presents significant challenges due to non-convex loss landscapes, saddle points, and block heterogeneity across parameter groups. This system addresses these challenges through a unified framework supporting twenty-two optimizer families spanning six algorithmic categories: (1) classical baselines (SGD, AdamW), (2) advanced momentum and variance reduction (Adan, ADOPT, AdEMAMix, MARS, Cautious), (3) memory-efficient variants (Adafactor, GaLore, Lion, APOLLO, APOLLO-Mini, Q-APOLLO), (4) schedule-free and parameter-free methods (Schedule-Free AdamW, Prodigy) plus large-batch scaling through LAMB, (5) curvature-aware and second-order (Sophia, Shampoo, SOAP), and (6) geometry-oriented (Muon, Turbo-Muon). Detailed algorithmic descriptions, pseudocode, and a memory/complexity comparison table for all optimizers are provided in Appendix~\ref{sec:annex-optimizers}.
 
 \begin{figure}[t]
 \centering
@@ -1275,22 +896,6 @@ where $\eta_t$ is the learning rate schedule, $\epsilon$ is numerical stability 
 \caption{Optimizer selection in practice: the class determines the update rule, while the schema controls how hyperparameters are applied across embeddings, norms, recurrent blocks, attention blocks, and other parameters.}
 \label{fig:optimizer-routing}
 \end{figure}
-
-\begin{algorithm}[t]
-\caption{Schema-Routed Optimizer Step (Conceptual)}
-\begin{algorithmic}[1]
-\Require Parameters $\theta$, gradients $g$, optimizer class $c$, parameter map $\Pi$
-\State Read optimizer-specific hyperparameters from prefixed keys in $\Pi$
-\If{$c=\texttt{adamw}$} \State apply AdamW step \citep{loshchilov_decoupled_2017}
-\ElsIf{$c=\texttt{radam}$} \State apply rectified adaptive step \citep{liu_variance_2019}
-\ElsIf{$c=\texttt{adan}$} \State apply Adan three-moment step \citep{xie_adan_2022}
-\ElsIf{$c=\texttt{adopt}$} \State apply ADOPT update ordering \citep{taniguchi_adopt_2024}
-\ElsIf{$c=\texttt{galore\_adamw}$} \State project gradients to low-rank subspace then step \citep{zhao_galore_2024}
-\Else \State dispatch to selected optimizer implementation
-\EndIf
-\State \Return updated $\theta$
-\end{algorithmic}
-\end{algorithm}
 
 \section{Quantization and Deployment}
 \label{sec:quantization}
@@ -1413,6 +1018,7 @@ Titans memory & $M_t=(1-\alpha_t)M_{t-1}+S_t$ & approx.\ $\mathcal{O}(nd)$ & ret
 \textbf{Optimizer} & \textbf{Family} & \textbf{State Cost} & \textbf{Key Idea} & \textbf{Ref} \\
 \midrule
 \endhead
+SGD+Momentum & Classical first-order & Low & Momentum-accelerated baseline with minimal state & \citep{polyak_1964} \\
 AdamW & Adaptive first/second moment & High & Decoupled weight decay baseline & \citep{loshchilov_decoupled_2017} \\
 RAdam & Adaptive variance-corrected & High & Rectifies early adaptive variance & \citep{liu_variance_2019} \\
 Adan & Momentum + variance reduction & High & Nesterov-style adaptive update & \citep{xie_adan_2022} \\
@@ -1420,9 +1026,13 @@ ADOPT & Adam variant & High & Reordered updates with improved convergence guaran
 AdEMAMix & Multi-EMA adaptive & High & Mixes short and long horizon EMAs & \citep{pagliardini_ademamix_2024} \\
 MARS & Variance-reduced preconditioned & High & Recursive momentum correction & \citep{yuan_mars_2024} \\
 Cautious AdamW & Masked momentum & High & Apply updates only on sign-consistent directions & \citep{liang_cautious_2024} \\
+LAMB & Layer-wise adaptive moments & High & Trust-ratio scaling for very large-batch training & \citep{you_largebatch_2020} \\
 Schedule-free AdamW & Scheduler-free adaptive & High & Remove explicit LR schedule dependence & \citep{defazio_road_2024} \\
 Adafactor & Memory-efficient adaptive & Medium & Factorized second moments for matrix tensors & \citep{shazeer_adafactor_2018} \\
 GaLore AdamW & Low-rank gradient projection & Medium & Optimize in projected low-rank gradient space & \citep{zhao_galore_2024} \\
+APOLLO & Low-rank adaptive projection & Medium & Structured scaling from projected Adam-style moments & \citep{zhu2025apollosgdlikememoryadamwlevel} \\
+APOLLO-Mini & Rank-1 adaptive projection & Low & Tensor-wise scaled APOLLO variant for extreme memory savings & \citep{zhu2025apollosgdlikememoryadamwlevel} \\
+Q-APOLLO & Quantized low-rank projection & Low & Quantized APOLLO state for ultra-low-memory training & \citep{zhu2025apollosgdlikememoryadamwlevel} \\
 Prodigy & Parameter-free adaptation & Medium & Distance-adaptive step calibration & \citep{mishchenko_prodigy_2023} \\
 Lion & Sign momentum & Low & Momentum sign update, reduced state & \citep{chen_symbolic_2023} \\
 Sophia & Approx.\ second-order & Medium & Diagonal Hessian preconditioning with clipping & \citep{liu_sophia_2023} \\
@@ -1455,7 +1065,7 @@ The gated mechanism coverage is strong across major categories (GLA, DeltaNet, G
 
 \subsection{Optimizer Landscape Fragmentation}
 
-The support for twenty optimizer families across six algorithmic categories demonstrates comprehensiveness but also highlights the fragmented state of optimization research. Users face significant decision complexity when choosing among variance-reduction methods (Adan, MARS), memory-efficient variants (GaLore, Adafactor), and curvature-aware approaches (Sophia, Shampoo). The prefixed hyperparameter system, while powerful, requires understanding of which parameters are relevant for each optimizer class.
+The support for twenty-two optimizer families across six algorithmic categories demonstrates comprehensiveness but also highlights the fragmented state of optimization research. Users face significant decision complexity when choosing among variance-reduction methods (Adan, MARS), memory-efficient variants (GaLore, Adafactor, APOLLO), and curvature-aware approaches (Sophia, Shampoo). The prefixed hyperparameter system, while powerful, requires understanding of which parameters are relevant for each optimizer class.
 
 The implementation quality varies across optimizers: classical methods (AdamW, SGD with momentum) are highly optimized in PyTorch, while newer methods (Muon, Turbo-Muon, SOAP) may require custom implementations that affect numerical stability and performance characteristics.
 
@@ -1478,9 +1088,9 @@ Transformer Encoder Frankenstein presents a unified, configuration-driven experi
 
 The system's primary contributions are:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Schema-First Design}: A strict YAML-based configuration contract with validation and prefixed hyperparameter routing enabling reproducible experiments across seventeen mixer architectures and twenty optimizer families.
+    \item \textbf{Schema-First Design}: A strict YAML-based configuration contract with validation and prefixed hyperparameter routing enabling reproducible experiments across seventeen mixer architectures and twenty-two optimizer families.
     \item \textbf{Comprehensive Architecture Support}: Implementation spanning major research categories including dense baselines (standard, sigmoid attention), recurrent alternatives (RetNet, Mamba, ODE-style, Titans), sparse attention (Sparse Transformer, Longformer, BigBird, SparseK, NSA, SpargeAttn, FASA), and gated mechanisms (GLA, DeltaNet, Gated DeltaNet, HGRN2, FoX, Gated Softmax).
-    \item \textbf{Unified Optimizer Framework}: Prefixed hyperparameter groups enabling fine-grained control over embeddings, normalization layers, recurrent blocks, attention weights, and FFN parameters across variance-reduction (Adan, ADOPT, AdEMAMix, MARS, Cautious), memory-efficient (Adafactor, GaLore, Lion), schedule-free (Schedule-Free AdamW, Prodigy), curvature-aware (Sophia), second-order (Shampoo, SOAP), and geometry-oriented (Muon, Turbo-Muon) optimizers.
+    \item \textbf{Unified Optimizer Framework}: Prefixed hyperparameter groups enabling fine-grained control over embeddings, normalization layers, recurrent blocks, attention weights, and FFN parameters across classical baselines (SGD+Momentum, AdamW), variance-reduction (Adan, ADOPT, AdEMAMix, MARS, Cautious), memory-efficient (Adafactor, GaLore, Lion, APOLLO, APOLLO-Mini, Q-APOLLO), large-batch and schedule simplification (LAMB, Schedule-Free AdamW, Prodigy), curvature-aware (Sophia), second-order (Shampoo, SOAP), and geometry-oriented (Muon, Turbo-Muon) optimizers.
     \item \textbf{End-to-End Workflows}: Integrated deployment pipeline supporting ternary weight packing and INT8 activation quantization; SBERT-inspired training and inference for semantic similarity, retrieval, and clustering tasks.
     \item \textbf{Interactive Configuration}: Streamlit-based web interface providing schema-driven form generation, real-time validation, inline documentation, and CLI command synthesis.
 \end{enumerate}
@@ -1518,6 +1128,50 @@ The research trajectory of sequence modeling continues toward hybrid approaches 
 
 \section{Annex A: Optimizer Families}
 \label{sec:annex-optimizers}
+
+\subsection{Memory and Complexity Comparison}
+
+Table~\ref{tab:optimizer-complexity} summarizes the memory overhead (number of state buffers per parameter), per-step computational complexity, and key hyperparameters for all supported optimizers. Memory overhead is expressed in terms of the number of state tensors maintained per model parameter, where each tensor has the same shape as the parameter.
+
+\begin{longtable}{llcl}
+\toprule
+\textbf{Optimizer} & \textbf{State Buffers} & \textbf{Per-Step Cost} & \textbf{Key Hyperparams} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Optimizer} & \textbf{State Buffers} & \textbf{Per-Step Cost} & \textbf{Key Hyperparams} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{\textit{continued on next page}} \\
+\endfoot
+\bottomrule
+\caption{Memory and complexity comparison of all supported optimizers. $n$ = number of parameters, $d$ = tensor dimensionality, $r$ = low-rank dimension, $k$ = Newton--Schulz iteration count. State buffers lists the number of optimizer state tensors maintained per parameter group. Per-step cost focuses on the dominant additional cost beyond the gradient computation itself.}
+\label{tab:optimizer-complexity}
+\endlastfoot
+SGD+Momentum & 1 ($m$) & $\mathcal{O}(n)$ & lr, momentum, wd \\
+AdamW & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd \\
+RAdam & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd \\
+Adan & 3 ($m$, $v$, $s$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, $\beta_3$, eps, wd \\
+ADOPT & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd \\
+AdEMAMix & 3 ($m_1$, $m_2$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, $\beta_3$, eps, wd \\
+MARS & 3 ($m$, $v$, $z$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd, $\gamma$ \\
+Cautious AdamW & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd \\
+LAMB & 2 ($m$, $v$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd \\
+Schedule-Free & 3 ($z$, $x$, $n$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, wd \\
+Adafactor & 1--2 (row/col) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd, factored \\
+GaLore & 2 ($m$, $v$) + SVD/proj & $\mathcal{O}(nr)$ & lr, rank $r$, $\beta_1$, $\beta_2$, eps, wd \\
+Prodigy & 3 ($m$, $v$, $d$) & $\mathcal{O}(n)$ & $\beta_1$, $\beta_2$, eps, wd, $d_0$ \\
+Lion & 1 ($m$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, wd \\
+Shampoo & $2d$ ($L_i$, $R_i$) & $\mathcal{O}(n^{1+2/d})$ & lr, eps, wd, matrix eps \\
+SOAP & $2d$ + 2 ($m$, $v$) & $\mathcal{O}(n^{1+1/d})$ & lr, $\beta_1$, $\beta_2$, eps, wd, shampoo eps \\
+Sophia & 3 ($m$, $v$, $h$) & $\mathcal{O}(n)$ & lr, $\beta_1$, $\beta_2$, eps, wd, $k$ \\
+Muon & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, NS steps $k$ \\
+Turbo-Muon & 2 ($m$, $v$) & $\mathcal{O}(n \cdot k)$ & lr, momentum, wd, NS steps $k$ \\
+APOLLO & 2 low-rank ($m_R$, $v_R$) + proj & $\mathcal{O}(nr)$ & lr, rank $r$, update gap, scale, betas, eps, wd \\
+APOLLO-Mini & 2 rank-1 ($m_R$, $v_R$) + proj & $\mathcal{O}(n)$ & lr, update gap, scale, betas, eps, wd \\
+Q-APOLLO & 2 quantized low-rank + proj & $\mathcal{O}(nr)$ & lr, rank $r$, update gap, scale, quant bits, betas, eps, wd \\
+\end{longtable}
 
 \subsection{The Evolution of Optimization in Neural Networks}
 The optimizer survey frames transformer optimization as a response to three structural pressures: non-convex loss landscapes, severe curvature heterogeneity across parameter blocks, and the memory cost of storing optimizer state for very large models. The report argues that the field has diverged into several trajectories: adaptive first-order baselines, variance-reduction methods, memory-efficient methods, structured second-order preconditioners, schedule-free methods, and orthogonality-oriented updates.
@@ -1907,6 +1561,54 @@ By projecting into a rank-$r$ subspace (typically $r \ll \min(m,n)$), optimizer 
 \end{algorithmic}
 \end{algorithm}
 
+\paragraph{APOLLO, APOLLO-Mini, and Q-APOLLO.}
+The APOLLO family \citep{zhu2025apollosgdlikememoryadamwlevel} begins from the observation that AdamW's element-wise denominator can be \textbf{coarsened into a structured learning-rate update}. Rather than storing dense moments for every parameter entry, APOLLO projects a matrix gradient $G_t \in \mathbb{R}^{m \times n}$ into a compact random subspace and tracks Adam-style moments there:
+\begin{align}
+R_t &= P_t G_t \quad\text{or}\quad R_t = G_t P_t^\top \\
+M_t^R &= \beta_1 M_{t-1}^R + (1-\beta_1)R_t \\
+V_t^R &= \beta_2 V_{t-1}^R + (1-\beta_2)R_t^2 \\
+\widetilde{R}_t &= \frac{M_t^R}{\sqrt{V_t^R}+\epsilon}
+\end{align}
+The projected state is \emph{not} expanded back into a dense low-rank update as in SVD-based methods. Instead, APOLLO estimates a structured scaling tensor $S_t$ in the original space. In the standard APOLLO variant, that scaling is \textbf{channel-wise}: each row or channel receives its own norm ratio. In APOLLO-Mini, the scaling is reduced to a single \textbf{tensor-wise} scalar, corresponding to the rank-1 extreme described in the paper. The resulting parameter update is therefore Adam-like in adaptation but much closer to SGD in state cost:
+\[
+W_t \gets (1-\eta\lambda)W_{t-1} - \eta\,\alpha\,(G_t \odot S_t)
+\]
+where $\alpha$ is the extra scale factor used to stabilize highly compressed variants.
+
+The paper's practical contribution is twofold. First, APOLLO replaces expensive repeated SVD with periodically refreshed \textbf{Gaussian random projection}, so the systems burden is ordinary matrix multiplication rather than spectral decomposition. Second, the optimizer is unusually tolerant to extreme compression: even \textbf{APOLLO-Mini}, which keeps only rank-1 auxiliary state, remains competitive with or better than AdamW in the reported pre-training experiments while approaching SGD-level memory cost.
+
+\begin{algorithm}[H]
+\caption{APOLLO / APOLLO-Mini Structured Gradient Scaling}
+\label{alg:apollo-family}
+\begin{algorithmic}[1]
+\Require Weight matrix $W \in \mathbb{R}^{m \times n}$ with $m \le n$, learning rate $\eta$, scale factor $\alpha$, decay rates $(\beta_1, \beta_2)$, weight decay $\lambda$, rank $r$, projection refresh interval $T$
+\Ensure Updated parameters $W_T$
+\State Initialize projected moments: $M^R \gets 0$, $V^R \gets 0$, step $t \gets 0$
+\Repeat
+    \State Compute gradient: $G_t \gets \nabla_W \phi(W_t)$
+    \If{$t \bmod T = 0$}
+        \State Sample Gaussian projector $P_t \sim \mathcal{N}(0, 1/r)$ with a fresh seed
+    \EndIf
+    \State Project gradient: $R_t \gets P_t G_t$ \Comment{or $G_t P_t^\top$ depending on layout}
+    \State Update projected AdamW moments: $M_t^R, V_t^R \gets \text{AdamWState}(R_t; \beta_1, \beta_2)$
+    \State Normalize projected state: $\widetilde{R}_t \gets M_t^R / (\sqrt{V_t^R}+\epsilon)$
+    \If{APOLLO}
+        \State $S_t \gets \operatorname{diag}(s_1^R, \ldots, s_m^R)$, where $s_i^R = \|\widetilde{R}_t[i,:]\|_2 / \|R_t[i,:]\|_2$
+    \Else
+        \State $S_t \gets s_t^R$, where $s_t^R = \|\widetilde{R}_t\|_2 / \|R_t\|_2$
+    \EndIf
+    \State Update weights: $W_t \gets (1-\eta\lambda)W_{t-1} - \eta\,\alpha\,(G_t \odot S_t)$
+    \State $t \gets t+1$
+\Until{convergence}
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{APOLLO-Mini.}
+APOLLO-Mini is the family member optimized for \textbf{extreme memory efficiency}. The paper motivates it by arguing that, in a rank-1 compact space, channel-wise scaling becomes too noisy, so the update is coarsened further to a single tensor-wise scale. The loss of granularity is partially offset by the explicit scaling factor $\alpha$ (the paper discusses values such as $128$ in this regime), giving a useful point on the optimization Pareto frontier: very small state, no SVD overhead, and still strong pre-training behavior.
+
+\paragraph{Q-APOLLO.}
+The APOLLO paper also stresses that the family combines naturally with \textbf{quantization} for ultra-low-memory training. This repository turns that systems observation into a concrete optimizer variant, \texttt{q\_apollo}. In the implementation, APOLLO's low-rank first and second moments are stored in quantized form together with per-tensor scales and offsets, and are dequantized only when needed for the next step. Q-APOLLO therefore preserves APOLLO's projected-gradient logic while reducing the precision of the remaining optimizer state, making it the most aggressive memory-saving member of the local optimizer stack.
+
 \paragraph{Prodigy (Approximating the Distance Estimate).}
 Prodigy adapts the effective step scale through a running distance-like statistic, eliminating the need for explicit learning-rate tuning. The algorithm maintains a cumulative distance estimate:
 \begin{align}
@@ -2127,7 +1829,7 @@ Muon performs 5 Newton-Schulz iterations to produce an approximately orthogonal 
 Classical baseline & SGD, AdamW, RAdam & stability and reference baselines & These define the comparison floor for newer optimizer claims. \\
 Momentum redesign & Adan, AdEMAMix, MARS, Cautious AdamW & faster or safer first-order adaptation & Best when convergence speed or noisy-gradient stability is the main concern. \\
 Large-batch and schedule simplification & LAMB, Schedule-Free AdamW & operational robustness at scale & Reduce brittleness from batch-size growth or schedule engineering. \\
-Memory-efficient & Adafactor, GaLore, Lion & optimizer-state reduction & Most useful when VRAM is dominated by optimizer state rather than activations. \\
+Memory-efficient & Adafactor, GaLore, APOLLO, APOLLO-Mini, Q-APOLLO, Lion & optimizer-state reduction & Most useful when VRAM is dominated by optimizer state rather than activations; APOLLO-family methods replace dense AdamW moments with projected or quantized structured scaling. \\
 Curvature-aware & Shampoo, SOAP, Sophia & better conditioning & Prefer when richer geometry is worth implementation and compute overhead. \\
 Geometry-oriented & Muon, Turbo-Muon & orthogonalized update structure & Specialized options for matrix geometry and representation shaping. \\
 \bottomrule
@@ -3278,5 +2980,162 @@ Mobile/Edge & RetNet, lightweight Gated Softmax & Constant-memory inference crit
 \bottomrule
 \end{tabularx}
 \end{table}
+
+\section{Annex E: Conceptual Introduction---Transformers and Attention for Beginners}
+\label{sec:annex-tutorial}
+
+This appendix provides an accessible introduction to the fundamental concepts of transformers and the attention mechanism, aimed at readers without deep prior knowledge in deep learning. Transformers are the engine behind modern artificial intelligence systems like ChatGPT, but their operation can be understood through real-world analogies.
+
+\subsection{What is a Transformer?}
+
+A transformer is a neural architecture that processes text or data sequences by interpreting the meaning of each word while considering all other words in context. Imagine you read a sentence:
+
+\begin{center}
+\textit{``The bank was full of people waiting. Mary went to the bank.''}
+\end{center}
+
+What does ``bank'' mean in each case? In the first sentence, it refers to a financial institution (or a bench). In the second, it is less clear without context. A transformer solves this automatically by looking at all surrounding words. In the second sentence, seeing ``Mary went'', the model better understands that it probably is a riverbank (where she goes to swim) or a financial institution (where she goes to conduct a transaction).
+
+This ability to understand the complete meaning of a word by considering the entire sentence is called \emph{contextualization}, and it is the heart of how modern transformers work.
+
+\subsection{The Attention Mechanism: An Analogy}
+
+The attention mechanism is the ``magic trick'' that allows transformers to understand context. Think of it as participating in an important conversation in a noisy room:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Lots of noise}: Someone is speaking and being very important to you.
+    \item \textbf{You ignore the rest}: Your brain automatically focuses attention on that person, ignoring other sounds.
+    \item \textbf{You understand better}: By concentrating, you catch every word clearly.
+\end{enumerate}
+
+The neural attention mechanism works the same way: each word ``asks'' how important every other word is to understanding its meaning, then ``focuses'' its attention on the most relevant ones.
+
+\subsection{Practical Example Step-by-Step}
+
+Let's see how a transformer understands the word ``eats'' in two different contexts:
+
+\subsubsection{Context 1: ``The cat eats fish''}
+
+The transformer, when processing ``eats'', internally asks:
+\begin{itemize}[leftmargin=*]
+    \item How relevant is ``The''? Little (it's just an article). \textbf{Low attention}.
+    \item How relevant is ``cat''? Very relevant (it's the subject, who eats). \textbf{High attention}.
+    \item How relevant is ``fish''? Very relevant (it's what is eaten). \textbf{High attention}.
+\end{itemize}
+
+Thus, the mental representation of ``eats'' focuses primarily on ``cat'' and ``fish''.
+
+\subsubsection{Context 2: ``The restaurant eats into profit margins''}
+
+Here the transformer asks in a different context:
+\begin{itemize}[leftmargin=*]
+    \item How relevant is ``restaurant''? Very relevant (it's the subject). \textbf{High attention}.
+    \item How relevant is ``profit''? Very relevant (it's affected). \textbf{High attention}.
+    \item How relevant is ``margins''? Very relevant (it's what's being consumed). \textbf{High attention}.
+\end{itemize}
+
+The word ``eats'' gets a completely different representation because it ``attends'' to different words in different contexts.
+
+\subsection{How Attention Works Mathematically (Simple Version)}
+
+Behind the attention shift is mathematics. Here is the simplified version without too much technical detail:
+
+\subsubsection{Step 1: Queries, Keys, and Values}
+
+Each word in the sentence is transformed into three versions:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Query}: ``What information do I need to know?''
+    \item \textbf{Key}: ``What information do I have?''
+    \item \textbf{Value}: ``Here is my important information.''
+\end{itemize}
+
+Imagine in a library, each visitor is a ``query'', each book is a ``key'', and the content is the ``value''. The librarian (attention) matches queries with the most relevant keys to access the correct value.
+
+\subsubsection{Step 2: Compatibility}
+
+The system examines how \emph{compatible} each query is with each key. Queries similar to keys get a \emph{high} compatibility score. This is calculated by multiplying the query by the key (mathematically, the dot product).
+
+\subsubsection{Step 3: Focus}
+
+The compatibility scores are converted into ``focus weights''. High compatibilities mean ``focus attention here'', and low ones mean ``ignore this''. Mathematically, a function called \texttt{softmax} converts scores into percentages (like: 40\% attention here, 35\% here, 25\% there).
+
+\subsubsection{Step 4: Combine}
+
+Finally, the system combines all values, weighted by the focus weights. If a word has 80\% attention on the subject, 80\% of the subject's information gets blended into that word's representation.
+
+\subsection{Multiple Attention Heads: Multiple Perspectives}
+
+A key feature is that transformers do not use a single attention but \emph{multiple attention heads} in parallel. It's as if you had 8 people analyzing the sentence \emph{simultaneously}, each paying attention to different aspects:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Person 1}: ``I focus on subject-verb relationships.''
+    \item \textbf{Person 2}: ``I search for the direct object.''
+    \item \textbf{Person 3}: ``I track information about verb tense.''
+    \item \textbf{Person 4}: ``I search for modifiers and adjectives.''
+\end{itemize}
+
+Each ``head'' learns to focus on different language patterns. Together, they capture much richer understanding than a single head.
+
+\subsection{Stacking Layers}
+
+Transformers process information in \emph{multiple layers} (usually 12 to 48 for practical models). Imagine editing an essay:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{First pass}: You fix spelling and basic grammar.
+    \item \textbf{Second pass}: You improve clarity and sentence structure.
+    \item \textbf{Third pass}: You ensure consistency and narrative flow.
+\end{enumerate}
+
+Transformers work the same way: each layer refines text understanding. The first layer captures basic features (simple words, genders), while later layers understand complex concepts (word relationships, abstract meanings).
+
+\subsection{Why Does It Matter?}
+
+The attention mechanism was revolutionary because:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Parallelism}: It finds context for \emph{any word with any other word}, without processing them sequentially (unlike earlier systems). This makes it very fast.
+    \item \textbf{Flexibility}: It learns what patterns to look for automatically from data, without you needing to program rules manually.
+    \item \textbf{Scalability}: It works from small texts to contexts with millions of words.
+    \item \textbf{General Capabilities}: The same mechanism works for translation, summarization, question-answering, text generation, computer vision, and more.
+\end{enumerate}
+
+\subsection{Practical Challenges}
+
+Despite the extraordinary success of transformers, they present challenges:
+
+\subsubsection{Computational Complexity}
+
+If a sentence has 1,000 words, the standard attention mechanism must compare each word with all other 1,000 words. That's $1,000 \times 1,000 = 1,000,000$ comparisons. For long documents with millions of words, this becomes prohibitively expensive in time and memory.
+
+\subsubsection{Memory Requirements}
+
+Especially during inference (when using trained models), storing the entire attention matrix can consume enormous amounts of RAM or GPU memory, limiting the sequence lengths you can process.
+
+\subsubsection{Device Efficiency}
+
+Transformers were designed for powerful TPUs and GPUs. Running them on phones or embedded devices is challenging.
+
+\subsection{Modern Solutions}
+
+To solve these challenges, research has proposed many variants:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Sparse Attention}: Instead of comparing each word with ALL others, it compares only with a strategic subset (nearby neighbors, periodic patterns). Reduces complexity from $\mathcal{O}(n^2)$ to $\mathcal{O}(n \log n)$ or $\mathcal{O}(n)$.
+    \item \textbf{Recurrent Models}: Like Mamba, they incorporate aspects of old recurrent neural networks but with better modern efficiency.
+    \item \textbf{Gated Attention}: Mechanisms that selectively learn what information to pass forward, reducing storage needs.
+    \item \textbf{Quantization}: Use smaller numbers (integers instead of decimals) to reduce memory without losing too much precision.
+\end{itemize}
+
+These innovations are what this toolkit (Frankenstein) allows you to experiment with easily.
+
+\subsection{Key Takeaways}
+
+\begin{itemize}[leftmargin=*]
+    \item A \textbf{transformer} is a neural network that understands language context very well.
+    \item The \textbf{attention mechanism} allows each word to ``focus'' on which other words are relevant to understanding its meaning.
+    \item Attention works by computing \textbf{compatibility} between each word (query) and all others (keys), then combining information based on that compatibility (values).
+    \item \textbf{Multiple heads} of attention explore different patterns in parallel.
+    \item \textbf{Multiple layers} progressively refine understanding.
+    \item The main challenge is that standard attention has quadratic complexity, which is expensive for long texts.
+    \item Many \textbf{modern solutions} (sparse attention, recurrent models, quantization) address these challenges, and this toolkit lets you explore all of them.
+\end{itemize}
 
 \end{document}
